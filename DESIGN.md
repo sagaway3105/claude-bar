@@ -28,12 +28,26 @@
 
 | 状態 | ウィンドウ | 遷移 |
 |---|---|---|
-| `attached` | メニューバー直下、外側クリックで閉じる、level=.popUpMenu | グリップドラッグ30pt超 or 🫧ボタン → `bubble` |
-| `bubble` | 76pt円形、常時最前面(.floating)、全Space表示、30fpsで正弦波の揺れ | クリック → `floating` / 右クリックメニュー → attached復帰 / 100% → 割れてattachedへ |
-| `floating` | 展開パネル、背景ドラッグで移動可 | ×ボタン → `attached`（閉じる） / 🫧 → `bubble` |
+| `attached` | メニューバー直下、外側クリックで閉じる、level=.popUpMenu | グリップドラッグ30pt超 → `floating`（ぷるんっ）/ 🫧ボタン → `bubble` |
+| `floating` | 引き剥がしたパネル。背景ドラッグで移動可、常時最前面 | ×ボタン → 閉じて`attached`へ / 🫧 → `bubble` |
+| `bubble` | **画面サイズの透明ウィンドウを固定**し、中のアセンブリ（ガラス+内容76pt）だけが浮遊。バブル上以外はクリック透過 | クリック → `floating`に展開 / メニューバー付近へドラッグ → 吸着して戻る / 100% → 破裂 → リセット後に復活 |
 
-1つの `NSPanel` を使い回し、フレームと `NSGlassEffectView.cornerRadius` をアニメーションで変形させる。
+1つの `NSPanel` を使い回し、フレームと `NSGlassEffectView.cornerRadius` を変形させる。
 SwiftUI側は `state.mode` で `UsagePanelView` / `BubbleView` を切り替え。
+
+### バブルのアニメーション（60fps保証の要）
+
+- 毎フレームのウィンドウ移動はmacOS 14+でvsync同期のウィンドウサーバ往復となりカクつくため、**ウィンドウは動かさない**
+- 浮遊は周期の異なる正弦波4本（easeInEaseOut・autoreverse・無限リピート・加算合成）を**レンダーサーバに常駐**させる方式。アプリのメインスレッドが詰まっても滑らか、繋ぎ目も存在しない
+- 現在位置の取得は `layer.presentation()`（macOSのlayer-backed viewはanchorPoint(0,0)なのでposition=frame.origin）
+- クリック透過はカーソル位置の80msポーリングで `ignoresMouseEvents` を切り替え。クリック=展開/ドラッグ=移動はAppKitローカルモニタで判定（SwiftUIのDragGestureは非アクティブ化パネルで不安定）
+- App Nap対策として浮遊中は `ProcessInfo.beginActivity` を保持
+
+### ファイル分割
+
+- `PanelController.swift` — コア（ウィンドウ生成・attached・tear-off・表示/非表示・監視）
+- `PanelController+Bubble.swift` — バブル固有（クローム・浮遊・マウス操作・破裂・復活・吸着）
+- `Services/LoginHelper.swift` — `claude /login` 誘導（自前ログインは規約上禁止のため）
 
 ## モジュール構成
 
