@@ -41,15 +41,13 @@ final class PanelController: NSObject, NSWindowDelegate {
     private var lastBubbleCenter: NSPoint?
     private var revivalTask: Task<Void, Never>?
 
-    // ドリフト状態（シミュレーションの現在地。表示はレンダーサーバ側で補間）
-    private var driftPos = NSPoint.zero            // アセンブリ原点（ウィンドウ座標・微揺れ除く）
-    private var driftVel = CGVector(dx: 12, dy: 8) // pt/秒
-    private var driftPhase: TimeInterval = 0
-    private var driftBounds = NSRect.zero          // 移動可能範囲（ウィンドウ座標）
-    private var driftChunkTimer: Timer?
-    private var chunkEndsAt: CFTimeInterval = 0
-    private var dragStartDrift: NSPoint?
+    // 浮遊状態（アンカー周辺を、無限リピートの加算アニメーションで漂う）
+    private var floatAnchor = NSPoint.zero  // アセンブリ原点（ウィンドウ座標）
+    private var driftBounds = NSRect.zero   // ドラッグ可能範囲（ウィンドウ座標）
+    private var dragStartAnchor: NSPoint?
     private var isDraggingBubble = false
+    private var wasHoveringBubble = false
+    private var lastHoverBounceAt = Date.distantPast
     private var mouseTrackTimer: Timer?
     private var napActivity: NSObjectProtocol?
 
@@ -58,7 +56,6 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let panelCornerRadius: CGFloat = 24
     private let detachThreshold: CGFloat = 30
     private let snapMargin: CGFloat = 60
-    private let driftChunkDuration: TimeInterval = 10
 
     var debugPanelFrame: NSRect? {
         if isBubbleChrome { return assemblyScreenFrame }
@@ -128,7 +125,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         let container = PassthroughContainerView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: 380))
         container.wantsLayer = true
 
-        // ガラスとコンテンツを分離して重ねる（ガラスの透過度を独立して上げるため）
+        // 「アセンブリ」= 動かす単位。ガラスのcontentViewに内容を入れる
+        // （alphaを下げたりコンテンツを外に出すとLiquid Glassのブラー/屈折が無効化されるため、
+        //   透明感は style = .clear に任せる）
         let assembly = NSView(frame: container.bounds)
         assembly.wantsLayer = true
         assembly.autoresizingMask = [.width, .height]
@@ -136,17 +135,14 @@ final class PanelController: NSObject, NSWindowDelegate {
         let glass = NSGlassEffectView(frame: assembly.bounds)
         glass.cornerRadius = panelCornerRadius
         glass.style = .clear // 透明で背後を屈折させるLiquid Glass
-        glass.alphaValue = 0.8 // さらに透過を上げる（コンテンツはこの上に別レイヤーで乗る）
         glass.autoresizingMask = [.width, .height]
 
         let hosting = NSHostingView(
             rootView: PanelRootView(state: state, settings: settings, actions: uiActions)
         )
-        hosting.frame = assembly.bounds
-        hosting.autoresizingMask = [.width, .height]
+        glass.contentView = hosting
 
         assembly.addSubview(glass)
-        assembly.addSubview(hosting, positioned: .above, relativeTo: glass)
         container.addSubview(assembly)
         p.contentView = container
 
@@ -178,10 +174,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             pop: { [weak self] in self?.popBubble() },
             settings: { [weak self] in self?.onOpenSettings?() },
             login: { [weak self] in self?.openLoginHelper() },
-            contentHeightChanged: { [weak self] height in self?.contentHeightChanged(height) },
-            bubbleDragged: { [weak self] translation, ended in
-                self?.bubbleDragged(translation: translation, ended: ended)
-            }
+            contentHeightChanged: { [weak self] height in self?.contentHeightChanged(height) }
         )
     }
 
@@ -217,12 +210,12 @@ final class PanelController: NSObject, NSWindowDelegate {
         p.hasShadow = false // アセンブリ移動のたびに影を再計算させない
 
         assembly.autoresizingMask = []
-        driftPos = NSPoint(
+        floatAnchor = NSPoint(
             x: center.x - screenFrame.origin.x - bubbleDiameter / 2,
             y: center.y - screenFrame.origin.y - bubbleDiameter / 2
         )
-        driftPhase = 0
-        assembly.frame = NSRect(origin: driftPos, size: NSSize(width: bubbleDiameter, height: bubbleDiameter))
+        wasHoveringBubble = false
+        assembly.frame = NSRect(origin: floatAnchor, size: NSSize(width: bubbleDiameter, height: bubbleDiameter))
         glass.cornerRadius = bubbleDiameter / 2
 
         // 移動可能範囲: メニューバーとDockを避けた可視領域
@@ -234,6 +227,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             height: vf.height - bubbleDiameter - 8
         )
         startMouseTracking()
+        installBubbleMouseMonitor()
         // アクセサリアプリはApp Napでタイマーが間引かれるため、バブル表示中は抑止する
         if napActivity == nil {
             napActivity = ProcessInfo.processInfo.beginActivity(
@@ -248,6 +242,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         stopDrifting()
         isBubbleChrome = false
         stopMouseTracking()
+        removeBubbleMouseMonitor()
         p.ignoresMouseEvents = false
         let assemblyOnScreen = p.convertToScreen(assembly.frame)
         isProgrammaticMove = true
@@ -264,6 +259,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         stopDrifting()
         isBubbleChrome = false
         stopMouseTracking()
+        removeBubbleMouseMonitor()
         p.ignoresMouseEvents = false
         isProgrammaticMove = true
         p.setFrame(NSRect(origin: p.frame.origin, size: lastPanelSize), display: false)
@@ -288,10 +284,17 @@ final class PanelController: NSObject, NSWindowDelegate {
     private func trackMouse() {
         guard isBubbleChrome, let p = panel else { return }
         guard let bubbleOnScreen = assemblyScreenFrame?.insetBy(dx: -6, dy: -6) else { return }
-        let shouldIgnore = !bubbleOnScreen.contains(NSEvent.mouseLocation)
-        if p.ignoresMouseEvents != shouldIgnore {
-            p.ignoresMouseEvents = shouldIgnore
+        let inside = bubbleOnScreen.contains(NSEvent.mouseLocation)
+        if p.ignoresMouseEvents != !inside {
+            p.ignoresMouseEvents = !inside
         }
+        // ホバーで「ポヨン」
+        if inside, !wasHoveringBubble, !dragActive,
+           Date().timeIntervalSince(lastHoverBounceAt) > 0.6 {
+            lastHoverBounceAt = Date()
+            state.hoverBounce += 1
+        }
+        wasHoveringBubble = inside
     }
 
     private func stopMouseTracking() {
@@ -471,158 +474,123 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// バブルのドラッグ移動（SwiftUIのDragGestureから）
-    private func bubbleDragged(translation: CGSize, ended: Bool) {
-        guard isBubbleChrome, let assembly = assemblyView else { return }
-        if dragStartDrift == nil {
-            // ドラッグ開始: 進行中のドリフトを現在位置で凍結
-            freezeAssemblyAtPresentation()
-            dragStartDrift = driftPos
-        }
-        isDraggingBubble = !ended
-        guard let start = dragStartDrift else { return }
-        // SwiftUIはy下向き、AppKitはy上向き
-        var pos = NSPoint(x: start.x + translation.width, y: start.y - translation.height)
-        pos.x = min(max(pos.x, driftBounds.minX), driftBounds.maxX)
-        pos.y = min(max(pos.y, driftBounds.minY), driftBounds.maxY)
-        driftPos = pos
-        assembly.setFrameOrigin(pos)
+    // MARK: - 浮遊（アンカー周辺・無限リピートの加算アニメーション）
 
-        if ended {
-            dragStartDrift = nil
-            // メニューバー付近で放したら吸着して戻る
-            if let buttonFrame = statusButtonFrame?(), let onScreen = assemblyScreenFrame {
-                let zone = buttonFrame.insetBy(dx: -snapMargin, dy: -snapMargin)
-                let center = NSPoint(x: onScreen.midX, y: onScreen.midY)
-                if zone.contains(center) {
-                    snapBackToMenuBar(buttonFrame: buttonFrame)
-                    return
-                }
-            }
-            startDrifting()
-        }
-    }
-
-    // MARK: - ドリフト（レンダーサーバ側アニメーション）
-
+    /// 周期の異なる正弦波（easeInEaseOutのautoreverse）を加算合成してその場でゆったり漂わせる。
+    /// レンダーサーバ側で無限に補間されるため、繋ぎ目もフレーム落ちも存在しない。
     private func startDrifting() {
-        guard state.mode == .bubble, isBubbleChrome, !isPopping, !isDraggingBubble else { return }
-        applyDriftChunk()
-    }
-
-    /// 今後driftChunkDuration秒分の軌道をシミュレーションし、CAKeyframeAnimationとして適用する
-    private func applyDriftChunk() {
-        guard state.mode == .bubble, isBubbleChrome, !isPopping, !isDraggingBubble,
+        guard state.mode == .bubble, isBubbleChrome, !isPopping,
               let assembly = assemblyView, let layer = assembly.layer else { return }
+        guard layer.animation(forKey: "float-x1") == nil else { return }
 
-        let simHz = 120.0
-        let sampleEvery = 4 // キーフレームは30個/秒（間はレンダーサーバがcubic補間）
-        let dt = 1.0 / simHz
-        var pos = driftPos
-        var vel = driftVel
-        var t = driftPhase
-
-        var points: [CGPoint] = []
-        let firstBob = bobOffset(t)
-        points.append(CGPoint(x: pos.x + firstBob.x, y: pos.y + firstBob.y))
-
-        let steps = Int(driftChunkDuration * simHz)
-        for i in 1...steps {
-            t += dt
-            // ゆっくり蛇行する速度ベクトル
-            let omega = sin(t * 0.15) * 0.35 + sin(t * 0.06) * 0.2 // 旋回角速度 rad/s
-            let angle = CGFloat(omega * dt)
-            let cosA = cos(angle), sinA = sin(angle)
-            vel = CGVector(
-                dx: vel.dx * cosA - vel.dy * sinA,
-                dy: vel.dx * sinA + vel.dy * cosA
-            )
-            // 速度の脈動（8〜18 pt/s）
-            let speed = hypot(vel.dx, vel.dy)
-            if speed > 0.01 {
-                let targetSpeed = 13 + sin(t * 0.21) * 5
-                let scale = targetSpeed / speed
-                vel = CGVector(dx: vel.dx * scale, dy: vel.dy * scale)
-            }
-            pos.x += vel.dx * dt
-            pos.y += vel.dy * dt
-            // 壁でやわらかく反射
-            if pos.x < driftBounds.minX { pos.x = driftBounds.minX; vel.dx = abs(vel.dx) }
-            if pos.x > driftBounds.maxX { pos.x = driftBounds.maxX; vel.dx = -abs(vel.dx) }
-            if pos.y < driftBounds.minY { pos.y = driftBounds.minY; vel.dy = abs(vel.dy) }
-            if pos.y > driftBounds.maxY { pos.y = driftBounds.maxY; vel.dy = -abs(vel.dy) }
-
-            if i % sampleEvery == 0 {
-                let bob = bobOffset(t)
-                points.append(CGPoint(x: pos.x + bob.x, y: pos.y + bob.y))
-            }
+        func floatAnimation(_ keyPath: String, amplitude: CGFloat, duration: CFTimeInterval, phase: CFTimeInterval) -> CABasicAnimation {
+            let animation = CABasicAnimation(keyPath: keyPath)
+            animation.fromValue = -amplitude
+            animation.toValue = amplitude
+            animation.duration = duration
+            animation.autoreverses = true
+            animation.repeatCount = .infinity
+            animation.isAdditive = true
+            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            // 中間点（オフセット0）から始めて出現時のジャンプを防ぐ + 位相をずらして有機的に
+            animation.timeOffset = duration / 2 + phase
+            return animation
         }
-        driftPos = pos
-        driftVel = vel
-        driftPhase = t
-
-        let animation = CAKeyframeAnimation(keyPath: "position")
-        animation.values = points.map { NSValue(point: $0) }
-        animation.duration = driftChunkDuration
-        animation.calculationMode = .cubic
-
-        // 進行中チャンクの終了時刻に接続してレンダーサーバ側でシームレスに繋ぐ
-        let layerNow = layer.convertTime(CACurrentMediaTime(), from: nil)
-        let startDelay = max(0, chunkEndsAt - layerNow)
-        if startDelay > 0.01 {
-            animation.beginTime = layerNow + startDelay
-            animation.fillMode = .backwards
-        }
-        chunkEndsAt = layerNow + startDelay + driftChunkDuration
-
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        // モデル値を終端に置き、そこまでの経路をレンダーサーバに任せる
-        assembly.setFrameOrigin(NSPoint(x: points[points.count - 1].x, y: points[points.count - 1].y))
-        layer.add(animation, forKey: startDelay > 0.01 ? "drift-next" : "drift")
+        layer.add(floatAnimation("position.x", amplitude: 6, duration: 3.7, phase: 0), forKey: "float-x1")
+        layer.add(floatAnimation("position.x", amplitude: 2.5, duration: 6.1, phase: 1.7), forKey: "float-x2")
+        layer.add(floatAnimation("position.y", amplitude: 7, duration: 4.4, phase: 1.1), forKey: "float-y1")
+        layer.add(floatAnimation("position.y", amplitude: 2.5, duration: 7.9, phase: 3.0), forKey: "float-y2")
         CATransaction.commit()
-
-        // 次のチャンクは現チャンク終了の1秒前に事前キュー（メインスレッドの詰まりで途切れないように）
-        driftChunkTimer?.invalidate()
-        let timer = Timer(timeInterval: max(0.5, startDelay + driftChunkDuration - 1.0), repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.applyDriftChunk() }
-        }
-        timer.tolerance = 0.1
-        RunLoop.main.add(timer, forMode: .common)
-        driftChunkTimer = timer
     }
 
-    private func bobOffset(_ t: TimeInterval) -> CGPoint {
-        CGPoint(
-            x: sin(t * 0.9) * 4 + sin(t * 0.43) * 2,
-            y: sin(t * 0.7) * 5 + sin(t * 0.31) * 2
-        )
-    }
-
-    /// 進行中のドリフトアニメーションを現在の表示位置で止め、モデル値を同期する
-    private func freezeAssemblyAtPresentation() {
-        driftChunkTimer?.invalidate()
-        driftChunkTimer = nil
-        chunkEndsAt = 0
+    private func stopDrifting() {
+        dragStartAnchor = nil
+        isDraggingBubble = false
         guard let assembly = assemblyView, let layer = assembly.layer else { return }
-        if let presentation = layer.presentation() {
+        if isBubbleChrome, let presentation = layer.presentation() {
+            // 現在の表示位置で静止させる
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             assembly.setFrameOrigin(NSPoint(x: presentation.position.x, y: presentation.position.y))
             CATransaction.commit()
         }
-        layer.removeAnimation(forKey: "drift")
-        layer.removeAnimation(forKey: "drift-next")
-        driftPos = assembly.frame.origin
+        for key in ["float-x1", "float-x2", "float-y1", "float-y2"] {
+            layer.removeAnimation(forKey: key)
+        }
+        if isBubbleChrome {
+            floatAnchor = assembly.frame.origin
+        }
     }
 
-    private func stopDrifting() {
-        driftChunkTimer?.invalidate()
-        driftChunkTimer = nil
-        dragStartDrift = nil
-        isDraggingBubble = false
-        if isBubbleChrome {
-            freezeAssemblyAtPresentation()
+    // MARK: - バブルの操作（AppKitレベルのマウス処理: クリック=展開 / ドラッグ=移動）
+
+    private var bubbleMouseMonitor: Any?
+    private var dragActive = false
+    private var dragMoved = false
+    private var dragStartMouse = NSPoint.zero
+
+    private func installBubbleMouseMonitor() {
+        removeBubbleMouseMonitor()
+        bubbleMouseMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
+        ) { [weak self] event in
+            let consumed = MainActor.assumeIsolated { self?.handleBubbleMouse(event) ?? false }
+            return consumed ? nil : event
+        }
+    }
+
+    private func removeBubbleMouseMonitor() {
+        if let monitor = bubbleMouseMonitor {
+            NSEvent.removeMonitor(monitor)
+            bubbleMouseMonitor = nil
+        }
+        dragActive = false
+    }
+
+    private func handleBubbleMouse(_ event: NSEvent) -> Bool {
+        guard isBubbleChrome, let p = panel, event.window === p else { return false }
+        switch event.type {
+        case .leftMouseDown:
+            guard let frame = assemblyScreenFrame,
+                  frame.insetBy(dx: -4, dy: -4).contains(NSEvent.mouseLocation) else { return false }
+            dragActive = true
+            dragMoved = false
+            isDraggingBubble = true
+            dragStartMouse = NSEvent.mouseLocation
+            dragStartAnchor = floatAnchor
+            return true
+        case .leftMouseDragged:
+            guard dragActive, let start = dragStartAnchor else { return false }
+            let mouse = NSEvent.mouseLocation
+            let dx = mouse.x - dragStartMouse.x
+            let dy = mouse.y - dragStartMouse.y
+            if hypot(dx, dy) > 3 { dragMoved = true }
+            var pos = NSPoint(x: start.x + dx, y: start.y + dy)
+            pos.x = min(max(pos.x, driftBounds.minX), driftBounds.maxX)
+            pos.y = min(max(pos.y, driftBounds.minY), driftBounds.maxY)
+            floatAnchor = pos
+            // 加算アニメーションはこの上に乗り続けるので、ドラッグ中もゆらゆらしたまま
+            assemblyView?.setFrameOrigin(pos)
+            return true
+        case .leftMouseUp:
+            guard dragActive else { return false }
+            dragActive = false
+            isDraggingBubble = false
+            dragStartAnchor = nil
+            if !dragMoved {
+                expandFromBubble() // 動かさず放した = クリック → パネルに展開
+            } else if let buttonFrame = statusButtonFrame?(), let onScreen = assemblyScreenFrame {
+                // メニューバー付近で放したら吸着して戻る
+                let zone = buttonFrame.insetBy(dx: -snapMargin, dy: -snapMargin)
+                if zone.contains(NSPoint(x: onScreen.midX, y: onScreen.midY)) {
+                    snapBackToMenuBar(buttonFrame: buttonFrame)
+                }
+            }
+            return true
+        default:
+            return false
         }
     }
 

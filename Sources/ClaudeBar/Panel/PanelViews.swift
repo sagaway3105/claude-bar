@@ -10,8 +10,6 @@ struct PanelActions {
     var settings: () -> Void = {}
     var login: () -> Void = {}
     var contentHeightChanged: (CGFloat) -> Void = { _ in }
-    /// バブルのドラッグ移動（translation, 終了フラグ）
-    var bubbleDragged: (CGSize, Bool) -> Void = { _, _ in }
 }
 
 // MARK: - ルート（モード切り替え + ぷるんっ）
@@ -346,13 +344,22 @@ struct BubbleView: View {
         }
         .frame(width: 76, height: 76)
         .overlay(IridescentRim(shape: Circle()))
+        // ホバー時の「ポヨン」
+        .keyframeAnimator(initialValue: JellyValue(), trigger: state.hoverBounce) { content, value in
+            content.scaleEffect(x: value.sx, y: value.sy)
+        } keyframes: { _ in
+            KeyframeTrack(\.sx) {
+                CubicKeyframe(1.13, duration: 0.1)
+                SpringKeyframe(0.94, duration: 0.12, spring: .bouncy)
+                SpringKeyframe(1.0, duration: 0.26, spring: .bouncy)
+            }
+            KeyframeTrack(\.sy) {
+                CubicKeyframe(0.88, duration: 0.1)
+                SpringKeyframe(1.08, duration: 0.12, spring: .bouncy)
+                SpringKeyframe(1.0, duration: 0.26, spring: .bouncy)
+            }
+        }
         .contentShape(Circle())
-        .gesture(TapGesture().onEnded { actions.expand() })
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 3, coordinateSpace: .global)
-                .onChanged { actions.bubbleDragged($0.translation, false) }
-                .onEnded { actions.bubbleDragged($0.translation, true) }
-        )
         .contextMenu {
             Button("パネルに展開") { actions.expand() }
             Button("メニューバーへ戻す") { actions.backToMenuBar() }
