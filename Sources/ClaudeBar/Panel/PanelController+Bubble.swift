@@ -125,6 +125,11 @@ extension PanelController {
     /// 🫧ボタン経由（パネル表示中からの変形）
     func becomeBubble(at point: NSPoint) {
         guard state.mode != .bubble, let p = panel else { return }
+        // 直前の外側クリック等でパネルが閉じ（かけ）ていたら、出現アニメーション経路へ
+        guard p.isVisible else {
+            showBubble(at: point, poppingIn: true)
+            return
+        }
         cancelPendingHide()
         revivalTask?.cancel()
         state.mode = .bubble
@@ -133,6 +138,12 @@ extension PanelController {
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
 
         glassView?.cornerRadius = bubbleDiameter / 2
+        // hideのフェードが進行中でも確実に見える状態へ戻す（進行中のalphaアニメーションを上書き）
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.08
+            p.animator().alphaValue = 1
+        }
+        p.orderFrontRegardless()
         p.level = .floating
         p.isMovableByWindowBackground = false
 

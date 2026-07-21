@@ -58,6 +58,8 @@ final class DebugBridge {
             statusController.performClick()
         case "bubble":
             panelController.showBubbleNearStatusItem()
+        case "tobubble":
+            panelController.uiActions.toBubble()
         case "expand":
             panelController.expandFromBubble()
         case "pop":
