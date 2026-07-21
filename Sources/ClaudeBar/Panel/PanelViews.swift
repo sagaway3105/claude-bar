@@ -12,12 +12,9 @@ struct PanelActions {
     var contentHeightChanged: (CGFloat) -> Void = { _ in }
 }
 
-// MARK: - ルート（モード切り替え + ぷるんっ）
-
-struct JellyValue {
-    var sx: CGFloat = 1
-    var sy: CGFloat = 1
-}
+// MARK: - ルート（モード切り替え）
+// ※「ぷるんっ/ポヨン」はSwiftUIで行うとガラスの円形マスクで切れるため、
+//   PanelController.bounceAssembly()（レイヤー変形）で行う
 
 struct PanelRootView: View {
     var state: AppState
@@ -36,23 +33,6 @@ struct PanelRootView: View {
                     } action: { height in
                         actions.contentHeightChanged(height)
                     }
-            }
-        }
-        // 引き剥がした瞬間の「ぷるんっ」（非対称スケールのジェリー変形）
-        .keyframeAnimator(initialValue: JellyValue(), trigger: state.detachBounce) { content, value in
-            content.scaleEffect(x: value.sx, y: value.sy)
-        } keyframes: { _ in
-            KeyframeTrack(\.sx) {
-                CubicKeyframe(1.16, duration: 0.09)
-                SpringKeyframe(0.9, duration: 0.13, spring: .bouncy)
-                SpringKeyframe(1.06, duration: 0.12, spring: .bouncy)
-                SpringKeyframe(1.0, duration: 0.2, spring: .smooth)
-            }
-            KeyframeTrack(\.sy) {
-                CubicKeyframe(0.84, duration: 0.09)
-                SpringKeyframe(1.1, duration: 0.13, spring: .bouncy)
-                SpringKeyframe(0.95, duration: 0.12, spring: .bouncy)
-                SpringKeyframe(1.0, duration: 0.2, spring: .smooth)
             }
         }
     }
@@ -344,21 +324,6 @@ struct BubbleView: View {
         }
         .frame(width: 76, height: 76)
         .overlay(IridescentRim(shape: Circle()))
-        // ホバー時の「ポヨン」
-        .keyframeAnimator(initialValue: JellyValue(), trigger: state.hoverBounce) { content, value in
-            content.scaleEffect(x: value.sx, y: value.sy)
-        } keyframes: { _ in
-            KeyframeTrack(\.sx) {
-                CubicKeyframe(1.13, duration: 0.1)
-                SpringKeyframe(0.94, duration: 0.12, spring: .bouncy)
-                SpringKeyframe(1.0, duration: 0.26, spring: .bouncy)
-            }
-            KeyframeTrack(\.sy) {
-                CubicKeyframe(0.88, duration: 0.1)
-                SpringKeyframe(1.08, duration: 0.12, spring: .bouncy)
-                SpringKeyframe(1.0, duration: 0.26, spring: .bouncy)
-            }
-        }
         .contentShape(Circle())
         .contextMenu {
             Button("パネルに展開") { actions.expand() }

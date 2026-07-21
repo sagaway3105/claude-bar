@@ -100,7 +100,7 @@ extension PanelController {
         if inside, !wasHoveringBubble, !dragActive,
            Date().timeIntervalSince(lastHoverBounceAt) > 0.6 {
             lastHoverBounceAt = Date()
-            state.hoverBounce += 1
+            bounceAssembly() // ポヨン
         }
         wasHoveringBubble = inside
     }
@@ -127,7 +127,6 @@ extension PanelController {
         cancelPendingHide()
         revivalTask?.cancel()
         state.mode = .bubble
-        state.detachBounce += 1
         removeDismissMonitors()
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
 
@@ -150,6 +149,7 @@ extension PanelController {
             guard let self, self.state.mode == .bubble, let p = self.panel else { return }
             self.enterBubbleChrome(centeredAt: NSPoint(x: p.frame.midX, y: p.frame.midY))
             self.startFloating()
+            self.bounceAssembly() // ぷるんっ
         }
     }
 
@@ -177,7 +177,6 @@ extension PanelController {
             assembly.frame = NSRect(x: target.midX - 4, y: target.midY - 4, width: 8, height: 8)
             assembly.alphaValue = 0
             p.orderFrontRegardless()
-            state.detachBounce += 1
             NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.34
@@ -217,11 +216,7 @@ extension PanelController {
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let p = self.panel else { return }
-            self.contentHosting?.layoutSubtreeIfNeeded()
-            var size = self.contentHosting?.fittingSize ?? self.lastPanelSize
-            size.width = self.panelWidth
-            if size.height < 200 { size.height = self.lastPanelSize.height }
-            self.lastPanelSize = size
+            let size = self.lastPanelSize
 
             let bubbleFrame = p.frame
             var origin = NSPoint(

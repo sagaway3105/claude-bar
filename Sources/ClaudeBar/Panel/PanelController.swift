@@ -57,7 +57,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     // レイアウト定数
     let panelWidth: CGFloat = 240
     let bubbleDiameter: CGFloat = 76
-    let bubbleWindowSize: CGFloat = 100 // バブル本体+浮遊マージン(±12pt)
+    let bubbleWindowSize: CGFloat = 120 // バブル本体+浮遊・伸縮マージン(±22pt)
     let panelCornerRadius: CGFloat = 24
     let detachThreshold: CGFloat = 30
     let snapMargin: CGFloat = 60
@@ -141,6 +141,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         let hosting = NSHostingView(
             rootView: PanelRootView(state: state, settings: settings, actions: uiActions)
         )
+        // SwiftUI側の固定サイズ(バブル76pt等)が必須制約としてAuto Layoutに伝わると
+        // ウィンドウごと内容サイズへ強制収縮されるため、サイズ要求を無効化する。
+        // 実サイズはPanelRootViewのonGeometryChange→contentHeightChangedで追従する。
+        hosting.sizingOptions = []
         glass.contentView = hosting
 
         assembly.addSubview(glass)
@@ -191,14 +195,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         glassView?.cornerRadius = panelCornerRadius
         assemblyView?.alphaValue = 1
 
-        // @Observableの反映を待ってからサイズを測る
+        // @Observableの反映を待ってから配置（高さはonGeometryChange→contentHeightChangedで追従）
         DispatchQueue.main.async { [weak self] in
             guard let self, let p = self.panel else { return }
-            self.contentHosting?.layoutSubtreeIfNeeded()
-            var size = self.contentHosting?.fittingSize ?? self.lastPanelSize
-            size.width = self.panelWidth
-            if size.height < 200 { size.height = self.lastPanelSize.height }
-            self.lastPanelSize = size
+            let size = self.lastPanelSize
 
             guard let buttonWindow = button.window else { return }
             let screen = buttonWindow.screen ?? NSScreen.main
@@ -259,7 +259,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     private func detachToFloating() {
         guard state.mode == .attached, let p = panel else { return }
         state.mode = .floating
-        state.detachBounce += 1
+        bounceAssembly() // ぷるんっ
         removeDismissMonitors()
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
         p.level = .floating
@@ -295,6 +295,34 @@ final class PanelController: NSObject, NSWindowDelegate {
                 self.resetChromeAfterHide()
             }
         })
+    }
+
+    /// 「ぷるんっ/ポヨン」— アセンブリ（ガラスごと）を中心基準でスクワッシュ&ストレッチ。
+    /// SwiftUI側でコンテンツを拡大するとガラスの円形マスクで切れるため、レイヤー変形で行う。
+    func bounceAssembly() {
+        guard let assembly = assemblyView, let layer = assembly.layer else { return }
+        let w = assembly.bounds.width
+        let h = assembly.bounds.height
+        // 中心(cx,cy)基準のスケール: x' = sx*x + cx*(1-sx)
+        func scaled(_ sx: CGFloat, _ sy: CGFloat) -> CATransform3D {
+            var m = CATransform3DMakeTranslation(w / 2 * (1 - sx), h / 2 * (1 - sy), 0)
+            m = CATransform3DScale(m, sx, sy, 1)
+            return m
+        }
+        let animation = CAKeyframeAnimation(keyPath: "transform")
+        animation.values = [
+            CATransform3DIdentity,
+            scaled(1.12, 0.88),
+            scaled(0.94, 1.06),
+            scaled(1.03, 0.98),
+            CATransform3DIdentity,
+        ].map { NSValue(caTransform3D: $0) }
+        animation.keyTimes = [0, 0.22, 0.5, 0.75, 1]
+        animation.duration = 0.45
+        animation.timingFunctions = Array(
+            repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: 4
+        )
+        layer.add(animation, forKey: "poyon")
     }
 
     func animateFrame(to rect: NSRect, completion: (() -> Void)? = nil) {

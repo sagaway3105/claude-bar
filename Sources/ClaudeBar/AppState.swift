@@ -58,11 +58,7 @@ final class AppState {
 
     var mode: PanelMode = .attached
 
-    /// インクリメントすると「ぷるんっ」アニメーションが再生される
-    var detachBounce = 0
-
-    /// インクリメントするとバブルの「ポヨン」（ホバー時）が再生される
-    var hoverBounce = 0
+    // 「ぷるんっ/ポヨン」はPanelController.bounceAssembly()（レイヤー変形）で行う
 
     /// limits[] の scope.model.display_name から動的に決まる（"Fable" / "Opus"）
     var fableLabel = "Fable"

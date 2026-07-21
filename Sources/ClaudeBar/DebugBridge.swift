@@ -41,6 +41,16 @@ final class DebugBridge {
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+
+        // ウィンドウリサイズの犯人特定用: 全リサイズをスタック付きでstderrへ
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification, object: nil, queue: .main
+        ) { note in
+            guard let window = note.object as? NSWindow, window is NSPanel else { return }
+            let stack = Thread.callStackSymbols.prefix(10).joined(separator: "\n")
+            let line = "RESIZE -> \(window.frame)\n\(stack)\n\n"
+            FileHandle.standardError.write(line.data(using: .utf8)!)
+        }
     }
 
     private func poll() {
@@ -103,6 +113,18 @@ final class DebugBridge {
         if let frame = panelController.debugPanelFrame {
             info["panel"] = [frame.origin.x, frame.origin.y, frame.width, frame.height]
             info["visible"] = panelController.debugPanelVisible
+        }
+        if let w = panelController.panel {
+            info["window"] = [w.frame.origin.x, w.frame.origin.y, w.frame.width, w.frame.height]
+        }
+        if let a = panelController.assemblyView {
+            info["assemblyModel"] = [a.frame.origin.x, a.frame.origin.y, a.frame.width, a.frame.height]
+            if let pres = a.layer?.presentation() {
+                info["assemblyPresentation"] = [pres.position.x, pres.position.y]
+            }
+        }
+        if let g = panelController.glassView {
+            info["glass"] = [g.frame.origin.x, g.frame.origin.y, g.frame.width, g.frame.height]
         }
         if let screen = NSScreen.main {
             info["screen"] = [screen.frame.width, screen.frame.height]
