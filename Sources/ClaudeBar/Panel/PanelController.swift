@@ -57,6 +57,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     // レイアウト定数
     let panelWidth: CGFloat = 240
     let bubbleDiameter: CGFloat = 76
+    let bubbleWindowSize: CGFloat = 100 // バブル本体+浮遊マージン(±12pt)
     let panelCornerRadius: CGFloat = 24
     let detachThreshold: CGFloat = 30
     let snapMargin: CGFloat = 60

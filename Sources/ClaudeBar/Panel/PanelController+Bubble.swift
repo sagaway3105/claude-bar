@@ -4,47 +4,48 @@ import SwiftUI
 
 /// バブル（浮遊モード）固有の挙動。
 ///
-/// バブルモードではウィンドウを画面サイズの透明レイヤーとして固定し、
-/// アセンブリ（ガラス+コンテンツ）だけをレンダーサーバ側の無限アニメーションで漂わせる。
-/// （毎フレームのウィンドウ移動はvsync同期のウィンドウサーバ往復になりカクつくため）
-/// カーソルがバブル上にある時だけクリックを受け付け、それ以外はクリック透過。
+/// バブルは100ptの小さな透明ウィンドウで、その中のアセンブリ（ガラス+内容76pt）だけを
+/// レンダーサーバ側の無限アニメーションで漂わせる（ウィンドウ自体は動かさないので滑らか）。
+/// 操作はAppKitのローカルモニタで判定: クリック=展開 / ドラッグ=ウィンドウ移動 /
+/// メニューバー付近で放す=吸着して戻る。ホバーで「ポヨン」。
 extension PanelController {
 
-    // MARK: - バブル用クローム（画面サイズの固定ウィンドウ + 中のアセンブリ）
+    // MARK: - バブル用クローム（小さな固定ウィンドウ + 中で漂うアセンブリ）
 
     func enterBubbleChrome(centeredAt center: NSPoint) {
         guard let p = panel, let assembly = assemblyView, let glass = glassView else { return }
         isBubbleChrome = true
-        let screen = NSScreen.screens.first { $0.frame.contains(center) } ?? NSScreen.main
-        let screenFrame = screen?.frame ?? NSRect(x: 0, y: 0, width: 1600, height: 1000)
+        let size = bubbleWindowSize
         isProgrammaticMove = true
-        p.setFrame(screenFrame, display: true)
+        p.setFrame(
+            NSRect(x: center.x - size / 2, y: center.y - size / 2, width: size, height: size),
+            display: true
+        )
         isProgrammaticMove = false
         p.hasShadow = false // アセンブリ移動のたびに影を再計算させない
+        p.ignoresMouseEvents = false
 
         assembly.autoresizingMask = []
-        floatAnchor = NSPoint(
-            x: center.x - screenFrame.origin.x - bubbleDiameter / 2,
-            y: center.y - screenFrame.origin.y - bubbleDiameter / 2
-        )
+        let margin = (size - bubbleDiameter) / 2
+        floatAnchor = NSPoint(x: margin, y: margin)
         wasHoveringBubble = false
         assembly.frame = NSRect(origin: floatAnchor, size: NSSize(width: bubbleDiameter, height: bubbleDiameter))
         glass.cornerRadius = bubbleDiameter / 2
 
-        // ドラッグ可能範囲: メニューバーとDockを避けた可視領域
-        let vf = screen?.visibleFrame ?? screenFrame
-        floatBounds = NSRect(
-            x: vf.minX - screenFrame.minX + 4,
-            y: vf.minY - screenFrame.minY + 4,
-            width: vf.width - bubbleDiameter - 8,
-            height: vf.height - bubbleDiameter - 8
-        )
+        // ドラッグ時のウィンドウ原点の可動域（メニューバーとDockを避けた可視領域）
+        let screen = NSScreen.screens.first { $0.frame.contains(center) } ?? p.screen ?? NSScreen.main
+        if let vf = screen?.visibleFrame {
+            floatBounds = NSRect(
+                x: vf.minX, y: vf.minY,
+                width: max(0, vf.width - size), height: max(0, vf.height - size)
+            )
+        }
         startMouseTracking()
         installBubbleMouseMonitor()
         // アクセサリアプリはApp Napでタイマーが間引かれるため、バブル表示中は抑止する
         if napActivity == nil {
             napActivity = ProcessInfo.processInfo.beginActivity(
-                options: [.userInitiated], reason: "Bubble drift animation"
+                options: [.userInitiated], reason: "Bubble float animation"
             )
         }
     }
@@ -56,7 +57,6 @@ extension PanelController {
         isBubbleChrome = false
         stopMouseTracking()
         removeBubbleMouseMonitor()
-        p.ignoresMouseEvents = false
         let assemblyOnScreen = p.convertToScreen(assembly.frame)
         isProgrammaticMove = true
         p.setFrame(assemblyOnScreen, display: false)
@@ -73,7 +73,6 @@ extension PanelController {
         isBubbleChrome = false
         stopMouseTracking()
         removeBubbleMouseMonitor()
-        p.ignoresMouseEvents = false
         isProgrammaticMove = true
         p.setFrame(NSRect(origin: p.frame.origin, size: lastPanelSize), display: false)
         isProgrammaticMove = false
@@ -83,7 +82,7 @@ extension PanelController {
         assembly.alphaValue = 1
     }
 
-    // MARK: - カーソル追跡（クリック透過の切り替え + ホバーのポヨン）
+    // MARK: - カーソル追跡（ホバーのポヨン）
 
     func startMouseTracking() {
         stopMouseTracking()
@@ -92,17 +91,12 @@ extension PanelController {
         }
         RunLoop.main.add(timer, forMode: .common)
         mouseTrackTimer = timer
-        trackMouse()
     }
 
     private func trackMouse() {
-        guard isBubbleChrome, let p = panel else { return }
+        guard isBubbleChrome else { return }
         guard let bubbleOnScreen = assemblyScreenFrame?.insetBy(dx: -6, dy: -6) else { return }
         let inside = bubbleOnScreen.contains(NSEvent.mouseLocation)
-        if p.ignoresMouseEvents != !inside {
-            p.ignoresMouseEvents = !inside
-        }
-        // ホバーで「ポヨン」
         if inside, !wasHoveringBubble, !dragActive,
            Date().timeIntervalSince(lastHoverBounceAt) > 0.6 {
             lastHoverBounceAt = Date()
@@ -147,7 +141,7 @@ extension PanelController {
         p.level = .floating
         p.isMovableByWindowBackground = false
 
-        // まずウィンドウごとバブルサイズへ縮め、完了後に画面サイズの固定ウィンドウ構成へ差し替える（見た目は不変）
+        // まずウィンドウごとバブルサイズへ縮め、完了後にバブル用クロームへ差し替える（見た目は不変）
         let tight = NSRect(
             x: point.x - bubbleDiameter / 2, y: point.y - bubbleDiameter / 2,
             width: bubbleDiameter, height: bubbleDiameter
@@ -167,7 +161,11 @@ extension PanelController {
         removeDismissMonitors()
         state.mode = .bubble
         assemblyView?.alphaValue = 1
-        p.alphaValue = 1
+        // 進行中のalphaフェードがあっても確実に見える状態へ
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.08
+            p.animator().alphaValue = 1
+        }
         p.level = .floating
         p.isMovableByWindowBackground = false
         enterBubbleChrome(centeredAt: point)
@@ -284,12 +282,9 @@ extension PanelController {
         for key in ["float-x1", "float-x2", "float-y1", "float-y2"] {
             layer.removeAnimation(forKey: key)
         }
-        if isBubbleChrome {
-            floatAnchor = assembly.frame.origin
-        }
     }
 
-    // MARK: - バブルの操作（AppKitレベルのマウス処理: クリック=展開 / ドラッグ=移動）
+    // MARK: - バブルの操作（AppKitレベルのマウス処理: クリック=展開 / ドラッグ=ウィンドウ移動）
 
     func installBubbleMouseMonitor() {
         removeBubbleMouseMonitor()
@@ -319,7 +314,7 @@ extension PanelController {
             dragMoved = false
             isDraggingBubble = true
             dragStartMouse = NSEvent.mouseLocation
-            dragStartAnchor = floatAnchor
+            dragStartAnchor = p.frame.origin // バブルではウィンドウ自体を動かす
             return true
         case .leftMouseDragged:
             guard dragActive, let start = dragStartAnchor else { return false }
@@ -327,12 +322,12 @@ extension PanelController {
             let dx = mouse.x - dragStartMouse.x
             let dy = mouse.y - dragStartMouse.y
             if hypot(dx, dy) > 3 { dragMoved = true }
-            var pos = NSPoint(x: start.x + dx, y: start.y + dy)
-            pos.x = min(max(pos.x, floatBounds.minX), floatBounds.maxX)
-            pos.y = min(max(pos.y, floatBounds.minY), floatBounds.maxY)
-            floatAnchor = pos
-            // 加算アニメーションはこの上に乗り続けるので、ドラッグ中もゆらゆらしたまま
-            assemblyView?.setFrameOrigin(pos)
+            var origin = NSPoint(x: start.x + dx, y: start.y + dy)
+            origin.x = min(max(origin.x, floatBounds.minX), floatBounds.maxX)
+            origin.y = min(max(origin.y, floatBounds.minY), floatBounds.maxY)
+            isProgrammaticMove = true
+            p.setFrameOrigin(origin)
+            isProgrammaticMove = false
             return true
         case .leftMouseUp:
             guard dragActive else { return false }
@@ -427,29 +422,24 @@ extension PanelController {
 
     /// バブルをメニューバーのステータスアイテム付近へドラッグしたら吸い込まれて戻る
     private func snapBackToMenuBar(buttonFrame: NSRect) {
-        guard state.mode == .bubble, isBubbleChrome,
-              let p = panel, let assembly = assemblyView else { return }
+        guard state.mode == .bubble, isBubbleChrome, let p = panel else { return }
         state.mode = .attached
-        stopFloating()
-        stopMouseTracking()
-        removeBubbleMouseMonitor()
-        p.ignoresMouseEvents = false
+        exitBubbleChrome() // ウィンドウがバブルにぴったり合った状態になる
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
 
-        // ボタン位置へ吸い込まれる（ウィンドウは固定、アセンブリを縮小+フェード）
-        let targetOnScreen = NSRect(x: buttonFrame.midX - 6, y: buttonFrame.minY - 10, width: 12, height: 12)
-        let targetInWindow = p.convertFromScreen(targetOnScreen)
+        let target = NSRect(x: buttonFrame.midX - 6, y: buttonFrame.minY - 10, width: 12, height: 12)
+        isProgrammaticMove = true
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.22
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            assembly.animator().frame = targetInWindow
-            assembly.animator().alphaValue = 0
+            p.animator().setFrame(target, display: true)
+            p.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, let p = self.panel else { return }
+                self.isProgrammaticMove = false
                 p.orderOut(nil)
-                self.assemblyView?.alphaValue = 1
-                self.resetChromeAfterHide()
+                p.alphaValue = 1
             }
         })
     }
