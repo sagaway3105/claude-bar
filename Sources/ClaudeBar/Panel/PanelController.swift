@@ -718,14 +718,25 @@ final class PanelController: NSObject, NSWindowDelegate {
         guard let p = panel, p.isVisible, !isProgrammaticMove else { return }
         switch state.mode {
         case .attached:
+            // 引き剥がしたらフローティングパネルになる（バブルは🫧ボタンからのみ）
             let o = p.frame.origin
             if hypot(o.x - attachedOrigin.x, o.y - attachedOrigin.y) > detachThreshold {
-                let mouse = NSEvent.mouseLocation
-                becomeBubble(at: NSPoint(x: mouse.x, y: mouse.y - 8))
+                detachToFloating()
             }
         case .bubble, .floating:
             break
         }
+    }
+
+    /// tear-off: メニューバーから引き剥がしてフローティングパネルにする（ぷるんっ付き）
+    private func detachToFloating() {
+        guard state.mode == .attached, let p = panel else { return }
+        state.mode = .floating
+        state.detachBounce += 1
+        removeDismissMonitors()
+        NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+        p.level = .floating
+        p.isMovableByWindowBackground = true
     }
 
     /// バブルをメニューバーのステータスアイテム付近へドラッグしたら吸い込まれて戻る
