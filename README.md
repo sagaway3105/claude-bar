@@ -79,3 +79,13 @@ echo "usage:100,41,12" >> /tmp/cbcmd  # → 割れる
 - API課金（`ANTHROPIC_API_KEY`）のみの利用では使えません（サブスクリプション専用エンドポイントのため）
 - `/api/oauth/usage` は非公開APIのため、仕様変更で動かなくなる可能性があります
 - トークンに `user:profile` スコープが必要です（通常の `claude /login` なら付与されます）
+
+## 認証と規約について（配布に関する重要事項）
+
+本アプリはAnthropic非公式のツールです。設計上、次の方針を採っています:
+
+- **自前のログイン画面は持ちません。** Anthropicの公式ポリシー（2026-02更新の Legal and compliance）は、第三者アプリが「Claude.aiログインを提供する」こと、およびFree/Pro/Maxプランの認証情報を経由してリクエストを代行することを禁止しています。ClaudeBarはユーザー自身がClaude Codeでログインした認証情報を**読み取り専用**で参照するだけです
+- **トークンのrefresh（更新）は行いません。** refresh tokenのローテーションはClaude Code本体に任せます（二重refreshによる認証破壊と、規約上のリスクの両方を避けるため）
+- **推論APIは一切呼びません。** トークン消費を伴わない使用量照会のみです
+- それでも `/api/oauth/usage` は非公開エンドポイントであり、Anthropicは予告なくアクセス制御を変更できます。その場合このアプリの使用量表示は動作しなくなります（同種のOSSツール — CodexBar、Raycast拡張など — と同じ立ち位置です）
+- 一般配布する場合は **Developer ID署名 + Apple公証（notarization）** が必要です（macOS 26のGatekeeper、Homebrew caskの要件）
