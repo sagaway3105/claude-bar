@@ -315,9 +315,13 @@ final class PanelController: NSObject, NSWindowDelegate {
         guard let assembly = assemblyView, let layer = assembly.layer else { return }
         let w = assembly.bounds.width
         let h = assembly.bounds.height
+        // 弾む中心 = 見えているコンテンツの中心
+        // （パネルモードは上詰めで下が透明領域のため、単純な矩形中心だとズレる）
+        let cx = w / 2
+        let cy = isBubbleChrome ? h / 2 : h - lastPanelSize.height / 2
         // 中心(cx,cy)基準のスケール: x' = sx*x + cx*(1-sx)
         func scaled(_ sx: CGFloat, _ sy: CGFloat) -> CATransform3D {
-            var m = CATransform3DMakeTranslation(w / 2 * (1 - sx), h / 2 * (1 - sy), 0)
+            var m = CATransform3DMakeTranslation(cx * (1 - sx), cy * (1 - sy), 0)
             m = CATransform3DScale(m, sx, sy, 1)
             return m
         }
