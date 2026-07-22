@@ -362,13 +362,13 @@ struct BubbleView: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             ZStack {
-                // 周辺だけ曇らせるヘイズ（中心はクリアなまま）
-                // — .clearガラスの透明感とCC風の曇りの両立
+                // ヘイズ: 中心にも薄い乳白を敷いて文字の下地を安定させる
+                // （どんな背景でも%が読める。縁に向かってCC風の曇りへ繋がる）
                 Circle()
                     .fill(EllipticalGradient(
                         gradient: Gradient(stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .clear, location: 0.5),
+                            .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.25), location: 0),
+                            .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.25), location: 0.45),
                             .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.4), location: 0.85),
                             .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.5), location: 1),
                         ]),
