@@ -17,21 +17,8 @@ extension PanelController {
         if let bubblePanel { return bubblePanel }
 
         let size = bubbleWindowSize
-        let p = UnconstrainedPanel(
-            contentRect: NSRect(x: 0, y: 0, width: size, height: size),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered, defer: false
-        )
-        p.isFloatingPanel = true
-        p.level = .floating
-        p.backgroundColor = .clear
-        p.isOpaque = false
-        p.hasShadow = false // アセンブリ移動のたびに影を再計算させない
-        p.hidesOnDeactivate = false
-        p.isReleasedWhenClosed = false
-        p.becomesKeyOnlyIfNeeded = true
-        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        p.animationBehavior = .none
+        // 影なし: アセンブリ移動のたびに影を再計算させない
+        let p = makeOverlayPanel(size: NSSize(width: size, height: size), level: .floating, hasShadow: false)
 
         let container = PassthroughContainerView(frame: NSRect(x: 0, y: 0, width: size, height: size))
         container.wantsLayer = true
@@ -96,9 +83,8 @@ extension PanelController {
         assembly.layer?.removeAllAnimations()
         let diameter = currentBubbleDiameter
         let margin = (size - diameter) / 2
-        floatAnchor = NSPoint(x: margin, y: margin)
         wasHoveringBubble = false
-        assembly.frame = NSRect(origin: floatAnchor, size: NSSize(width: diameter, height: diameter))
+        assembly.frame = NSRect(x: margin, y: margin, width: diameter, height: diameter)
         assembly.alphaValue = 1
         bubbleHosting?.frame = assembly.bounds
 
@@ -258,7 +244,6 @@ extension PanelController {
             x: center.x - desired / 2, y: center.y - desired / 2,
             width: desired, height: desired
         )
-        floatAnchor = target.origin
         hosting.frame = NSRect(origin: .zero, size: target.size)
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.4
@@ -313,7 +298,6 @@ extension PanelController {
 
     func stopFloating() {
         dragStartAnchor = nil
-        isDraggingBubble = false
         guard let assembly = bubbleAssembly, let layer = assembly.layer else { return }
         if let presentation = layer.presentation() {
             // 現在の表示位置で静止させる
@@ -355,7 +339,6 @@ extension PanelController {
                   frame.insetBy(dx: -4, dy: -4).contains(NSEvent.mouseLocation) else { return false }
             dragActive = true
             dragMoved = false
-            isDraggingBubble = true
             dragStartMouse = NSEvent.mouseLocation
             dragStartAnchor = p.frame.origin // バブルではウィンドウ自体を動かす
             return true
@@ -373,7 +356,6 @@ extension PanelController {
         case .leftMouseUp:
             guard dragActive else { return false }
             dragActive = false
-            isDraggingBubble = false
             dragStartAnchor = nil
             if !dragMoved {
                 registerBubbleTap() // クリック = ポヨン、連打で破裂!

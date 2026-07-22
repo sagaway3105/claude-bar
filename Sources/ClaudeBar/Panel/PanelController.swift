@@ -45,10 +45,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     private var clickMonitors: [Any] = []
 
     // 浮遊状態（アンカー周辺を、無限リピートの加算アニメーションで漂う）
-    var floatAnchor = NSPoint.zero  // アセンブリ原点（ウィンドウ座標）
     var floatBounds = NSRect.zero   // ドラッグ可能範囲（ウィンドウ座標）
     var dragStartAnchor: NSPoint?
-    var isDraggingBubble = false
     var wasHoveringBubble = false
     var lastHoverBounceAt = Date.distantPast
     var mouseTrackTimer: Timer?
@@ -130,24 +128,33 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    func ensurePanel() -> NSPanel {
-        if let panel { return panel }
-
+    /// 透明ボーダーレスパネルの共通設定（パネル/バブルの2枚で共有）
+    func makeOverlayPanel(size: NSSize, level: NSWindow.Level, hasShadow: Bool) -> NSPanel {
         let p = UnconstrainedPanel(
-            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelWindowHeight),
+            contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
         p.isFloatingPanel = true
-        p.level = .popUpMenu
+        p.level = level
         p.backgroundColor = .clear
         p.isOpaque = false
-        p.hasShadow = true
+        p.hasShadow = hasShadow
         p.hidesOnDeactivate = false
         p.isReleasedWhenClosed = false
         p.becomesKeyOnlyIfNeeded = true
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.animationBehavior = .none
+        return p
+    }
+
+    func ensurePanel() -> NSPanel {
+        if let panel { return panel }
+
+        let p = makeOverlayPanel(
+            size: NSSize(width: panelWidth, height: panelWindowHeight),
+            level: .popUpMenu, hasShadow: true
+        )
         p.delegate = self
 
         let container = PassthroughContainerView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelWindowHeight))
@@ -407,7 +414,6 @@ final class PanelController: NSObject, NSWindowDelegate {
         let w = assembly.bounds.width
         let h = assembly.bounds.height
         let k = intensity
-        let animation = CAKeyframeAnimation(keyPath: "transform")
         // パネル: コンテンツは横幅ぴったり・上端いっぱいのため、拡大方向は
         // ウィンドウ境界でクリップされる（上下欠けの原因）。
         // 縦は上端アンカーで「下の透明帯ぶんだけ」伸ばし、横は1.0以下に留める
@@ -420,19 +426,13 @@ final class PanelController: NSObject, NSWindowDelegate {
             m = CATransform3DScale(m, sx, sy, 1)
             return m
         }
-        animation.values = [
+        runPoyon(on: layer, values: [
             CATransform3DIdentity,
             scaled(1 - 0.05 * k, stretch), // 引き剥がされて下へぷるん
             scaled(1, 1 - 0.045 * k), // 反動で縮む
             scaled(1 - 0.015 * k, 1 + min(0.012 * k, slackRatio)),
             CATransform3DIdentity,
-        ].map { NSValue(caTransform3D: $0) }
-        animation.keyTimes = [0, 0.22, 0.5, 0.75, 1]
-        animation.duration = 0.45
-        animation.timingFunctions = Array(
-            repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: 4
-        )
-        layer.add(animation, forKey: "poyon")
+        ])
     }
 
     /// バブルのポヨン: ウィンドウに余白があるため中心基準で素直に膨らめる
@@ -446,36 +446,25 @@ final class PanelController: NSObject, NSWindowDelegate {
             return m
         }
         let k = intensity
-        let animation = CAKeyframeAnimation(keyPath: "transform")
-        animation.values = [
+        runPoyon(on: layer, values: [
             CATransform3DIdentity,
             scaled(1 + 0.12 * k, 1 - 0.12 * k),
             scaled(1 - 0.06 * k, 1 + 0.06 * k),
             scaled(1 + 0.03 * k, 1 - 0.02 * k),
             CATransform3DIdentity,
-        ].map { NSValue(caTransform3D: $0) }
+        ])
+    }
+
+    /// スクワッシュ&ストレッチの共通再生（0.45s・4フェーズ）
+    private func runPoyon(on layer: CALayer, values: [CATransform3D]) {
+        let animation = CAKeyframeAnimation(keyPath: "transform")
+        animation.values = values.map { NSValue(caTransform3D: $0) }
         animation.keyTimes = [0, 0.22, 0.5, 0.75, 1]
         animation.duration = 0.45
         animation.timingFunctions = Array(
             repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: 4
         )
         layer.add(animation, forKey: "poyon")
-    }
-
-    func animateFrame(to rect: NSRect, completion: (() -> Void)? = nil) {
-        guard let p = panel else { return }
-        isProgrammaticMove = true
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.3
-            // 少しオーバーシュートさせて弾力を出す
-            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1.12)
-            p.animator().setFrame(rect, display: true)
-        }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                self?.isProgrammaticMove = false
-                completion?()
-            }
-        })
     }
 
     // MARK: - attached時の外側クリックで閉じる

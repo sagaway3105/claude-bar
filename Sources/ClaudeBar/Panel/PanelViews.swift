@@ -12,9 +12,9 @@ struct PanelActions {
     var contentHeightChanged: (CGFloat) -> Void = { _ in }
 }
 
-// MARK: - ルート（モード切り替え）
+// MARK: - ルート（パネル/バブルは別ウィンドウ）
 // ※「ぷるんっ/ポヨン」はSwiftUIで行うとガラスの円形マスクで切れるため、
-//   PanelController.bounceAssembly()（レイヤー変形）で行う
+//   PanelController.bounceAssembly()/bounceBubble()（レイヤー変形）で行う
 
 struct PanelRootView: View {
     var state: AppState
