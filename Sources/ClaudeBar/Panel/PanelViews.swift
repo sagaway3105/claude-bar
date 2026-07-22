@@ -313,8 +313,8 @@ struct BubbleView: View {
                         center: UnitPoint(x: 0.32, y: 0.28),
                         startRadius: 2, endRadius: 46 * sizeFactor
                     ))
-                // ゲージ溝はごく薄く（進捗アークだけが目立つように）
-                Circle().stroke(Color.primary.opacity(0.05), lineWidth: 4)
+                // ゲージ溝は非表示（進捗アークだけを見せる）
+                Circle().stroke(Color.primary.opacity(0), lineWidth: 4)
                 Circle()
                     .trim(from: 0, to: max(0.003, min(value, 100) / 100))
                     .stroke(
