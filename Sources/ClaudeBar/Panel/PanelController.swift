@@ -194,6 +194,14 @@ final class PanelController: NSObject, NSWindowDelegate {
             },
             quit: { NSApp.terminate(nil) },
             toBubble: { [weak self] in self?.toggleBubble() },
+            toOverlay: { [weak self] in
+                guard let self else { return }
+                if self.state.mode == .floating {
+                    self.reattachFromFloating()
+                } else if self.panel?.isVisible == true {
+                    self.detachToFloating()
+                }
+            },
             expand: { [weak self] in self?.expandFromBubble() },
             backToMenuBar: { [weak self] in
                 guard let self else { return }
@@ -345,6 +353,42 @@ final class PanelController: NSObject, NSWindowDelegate {
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
         p.level = .floating
         p.isMovableByWindowBackground = true
+    }
+
+    /// オーバーレイ（floating）からメニューバー直下のattachedへ戻す（ピンのトグルOFF）
+    func reattachFromFloating() {
+        guard state.mode == .floating, let p = panel, p.isVisible else { return }
+        state.mode = .attached
+        p.level = .popUpMenu
+        p.isMovableByWindowBackground = false
+        state.menuHighlighted = true
+        if let bf = statusButtonFrame?() {
+            var x = bf.midX - panelWidth / 2
+            if let screen = p.screen ?? NSScreen.main {
+                x = min(max(x, screen.frame.minX + 8), screen.frame.maxX - panelWidth - 8)
+            }
+            let target = NSRect(x: x, y: bf.minY - panelWindowHeight - 6, width: panelWidth, height: panelWindowHeight)
+            isProgrammaticMove = true
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.28
+                ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1.1)
+                p.animator().setFrame(target, display: true)
+            }, completionHandler: { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.isProgrammaticMove = false
+                    self.attachedOrigin = target.origin
+                    self.syncPanelChromeFrames()
+                }
+            })
+        } else {
+            attachedOrigin = p.frame.origin
+        }
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+        installDismissMonitors()
+        DistributedNotificationCenter.default().post(
+            name: .init("com.apple.HIToolbox.beginMenuTrackingNotification"), object: nil
+        )
     }
 
     // MARK: - 表示/非表示

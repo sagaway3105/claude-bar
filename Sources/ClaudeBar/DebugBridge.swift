@@ -72,6 +72,8 @@ final class DebugBridge {
             panelController.uiActions.toBubble()
         case "expand":
             panelController.expandFromBubble()
+        case "overlay":
+            panelController.uiActions.toOverlay()
         case "pop":
             panelController.popBubble()
         case "hide":

@@ -4,6 +4,7 @@ struct PanelActions {
     var refresh: () -> Void = {}
     var quit: () -> Void = {}
     var toBubble: () -> Void = {}
+    var toOverlay: () -> Void = {}
     var expand: () -> Void = {}
     var backToMenuBar: () -> Void = {}
     var pop: () -> Void = {}
@@ -192,6 +193,12 @@ struct UsagePanelView: View {
                 Spacer()
                 IconButton(systemName: "arrow.clockwise", help: "今すぐ更新") { actions.refresh() }
                 IconButton(systemName: "gearshape.fill", help: "設定") { actions.settings() }
+                IconButton(
+                    systemName: "pin.fill",
+                    help: state.mode == .floating ? "メニューバー直下に戻す" : "オーバーレイモード（常に手前に表示）",
+                    activeState: state.mode == .floating,
+                    activeTint: baseTint
+                ) { actions.toOverlay() }
                 IconButton(
                     systemName: "bubbles.and.sparkles.fill",
                     help: state.bubbleActive ? "バブルを非表示" : "浮遊モード（バブル）",
