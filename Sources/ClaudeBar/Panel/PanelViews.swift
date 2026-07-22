@@ -295,6 +295,10 @@ struct BubbleView: View {
     var state: AppState
     var settings: SettingsStore
     var actions: PanelActions
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// %・ロゴの縁取り色。文字色(.primary)の逆色にして暗背景/明背景の両方で浮かせる
+    private var textHalo: Color { colorScheme == .dark ? .black : .white }
 
     private var usageWindow: UsageWindow? { state.usage?.window(for: settings.bubbleMetric) }
     private var value: Double { usageWindow?.utilization ?? 0 }
@@ -347,8 +351,14 @@ struct BubbleView: View {
                         center: UnitPoint(x: 0.32, y: 0.28),
                         startRadius: 2, endRadius: 46 * sizeFactor
                     ))
-                // ゲージ溝は非表示（進捗アークだけを見せる）
-                Circle().stroke(Color.primary.opacity(0), lineWidth: 4)
+                // ゲージ溝: 淡い白のキーライン（白背景では溶けて見えず、暗背景で輪郭を出す）
+                Circle().stroke(Color.white.opacity(0.2), lineWidth: 4)
+                // 進捗アークの白いアンダーグロー（暗背景でのコントラスト保証）
+                Circle()
+                    .trim(from: 0, to: max(0.003, min(value, 100) / 100))
+                    .stroke(Color.white.opacity(0.85), style: StrokeStyle(lineWidth: 6.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .blur(radius: 1.5)
                 Circle()
                     .trim(from: 0, to: max(0.003, min(value, 100) / 100))
                     .stroke(
@@ -377,6 +387,9 @@ struct BubbleView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                // 文字色と逆のハロー（ライト=白/ダーク=黒）で任意の背景から浮かせる
+                .shadow(color: textHalo.opacity(0.9), radius: 1)
+                .shadow(color: textHalo.opacity(0.55), radius: 3)
                 .rotationEffect(.degrees(sin(t * 0.9) * 3))
 
                 // シャボン玉のハイライト（主）— 表面の特徴なのでサイズ追従
