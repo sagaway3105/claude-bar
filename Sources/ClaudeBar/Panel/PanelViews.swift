@@ -340,10 +340,10 @@ struct BubbleView: View {
                         startRadiusFraction: 0, endRadiusFraction: 0.5
                     ))
                     .blur(radius: 2)
-                // 球面の照り（左上光源）— シャボン玉の立体感
+                // 球面の照り（左上光源）— 抑えめにしてガラスの透明感を残す
                 Circle()
                     .fill(RadialGradient(
-                        colors: [.white.opacity(0.25), .white.opacity(0.06), .clear],
+                        colors: [.white.opacity(0.15), .white.opacity(0.04), .clear],
                         center: UnitPoint(x: 0.32, y: 0.28),
                         startRadius: 2, endRadius: 46 * sizeFactor
                     ))
