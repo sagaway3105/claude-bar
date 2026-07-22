@@ -489,12 +489,9 @@ struct BubbleView: View {
                     .rotationEffect(.degrees(-90))
                     .padding(4)
                 VStack(spacing: 0) {
-                    // 消費中だけClaudeオレンジ、待機中はデフォルトカラー
-                    ClaudeLogoView(
-                        animating: state.isActive,
-                        color: state.isActive ? .claudeOrange : .primary
-                    )
-                    .frame(width: 14, height: 14)
+                    // パネルのヘッダーと同じく常にClaudeオレンジ（消費中は回転で区別）
+                    ClaudeLogoView(animating: state.isActive, color: .claudeOrange)
+                        .frame(width: 14, height: 14)
                     Text(percentText)
                         .font(.system(size: 13))
                         .monospacedDigit()
@@ -505,12 +502,12 @@ struct BubbleView: View {
                             .font(.system(size: 9))
                             .foregroundStyle(.secondary)
                     }
-                    // リミットのリセット時刻 — なるべく目立たない極小・淡色
+                    // リミットのリセット時刻 — 控えめだが読める階調
                     if let resets = usageWindow?.resetsAt {
                         Text("↺ \(UsageGaugeView.resetText(resets))")
-                            .font(.system(size: 8))
+                            .font(.system(size: 9))
                             .monospacedDigit()
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                             .padding(.top, 1)
                     }
                 }
