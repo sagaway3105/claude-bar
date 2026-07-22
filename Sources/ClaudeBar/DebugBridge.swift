@@ -99,6 +99,13 @@ final class DebugBridge {
             } else if command.hasPrefix("err:") {
                 let message = String(command.dropFirst(4))
                 state.errorMessage = message.isEmpty ? nil : message
+            } else if command.hasPrefix("backdrop:") {
+                // 背景輝度判定の強制（dark / light / auto）— 権限なし環境での見た目検証用
+                switch command.dropFirst(9) {
+                case "dark": state.bubbleBackdropIsDark = true
+                case "light": state.bubbleBackdropIsDark = false
+                default: state.bubbleBackdropIsDark = nil
+                }
             }
         }
     }

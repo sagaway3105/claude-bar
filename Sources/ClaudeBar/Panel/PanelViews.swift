@@ -348,6 +348,16 @@ struct BubbleView: View {
         PanelController.bubbleScaleFactor(for: value)
     }
 
+    /// 背後の画面輝度に応じた文字色: 暗い背景=白 / 明るい背景=黒。
+    /// 不明（画面収録の権限なし等）はシステム外観準拠にフォールバック
+    private var dynamicPrimary: Color {
+        switch state.bubbleBackdropIsDark {
+        case .some(true): return .white
+        case .some(false): return .black
+        case nil: return .primary
+        }
+    }
+
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
@@ -405,31 +415,33 @@ struct BubbleView: View {
                     .rotationEffect(.degrees(-90))
                     .padding(4)
                 VStack(spacing: 0) {
-                    // 消費中だけClaudeオレンジ、待機中はデフォルトカラー
+                    // 消費中だけClaudeオレンジ、待機中は背景輝度に応じた色
                     ClaudeLogoView(
                         animating: state.isActive,
-                        color: state.isActive ? .claudeOrange : .primary
+                        color: state.isActive ? .claudeOrange : dynamicPrimary
                     )
                     .frame(width: 14, height: 14)
                     Text(percentText)
                         .font(.system(size: 13))
                         .monospacedDigit()
+                        .foregroundStyle(dynamicPrimary)
                         .contentTransition(.numericText())
                         .animation(.snappy(duration: 0.4), value: percentText)
                     if let metricCaption {
                         Text(metricCaption)
                             .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(dynamicPrimary.opacity(0.6))
                     }
                     // リミットのリセット時刻 — なるべく目立たない極小・淡色
                     if let resets = usageWindow?.resetsAt {
                         Text("↺ \(UsageGaugeView.resetText(resets))")
                             .font(.system(size: 8))
                             .monospacedDigit()
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(dynamicPrimary.opacity(0.45))
                             .padding(.top, 1)
                     }
                 }
+                .animation(.easeOut(duration: 0.25), value: state.bubbleBackdropIsDark)
                 .rotationEffect(.degrees(sin(t * 0.9) * 3))
 
                 // 主ハイライト: 大きく柔らかいブルーム + 小さく鋭いスポット（左上光源）

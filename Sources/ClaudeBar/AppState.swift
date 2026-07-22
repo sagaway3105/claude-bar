@@ -63,6 +63,10 @@ final class AppState {
     /// バブル（浮遊モード）が表示中か。パネルとは独立に共存できる
     var bubbleActive = false
 
+    /// バブル背後の画面が暗いか（輝度サンプリング結果）。
+    /// nil = 不明（画面収録の権限なし等）→ 従来の固定色にフォールバック
+    var bubbleBackdropIsDark: Bool?
+
     // 「ぷるんっ/ポヨン」はPanelController.bounceAssembly()（レイヤー変形）で行う
 
     /// limits[] の scope.model.display_name から動的に決まる（"Fable" / "Opus"）

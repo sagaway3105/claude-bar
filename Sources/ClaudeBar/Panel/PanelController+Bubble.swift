@@ -97,6 +97,13 @@ extension PanelController {
                 options: [.userInitiated], reason: "Bubble float animation"
             )
         }
+        // 文字色の動的切り替え（背景輝度）: 権限が無ければ初回だけ許可を求める
+        state.bubbleBackdropIsDark = nil
+        if !BackdropSampler.hasPermission, !didRequestScreenPermission,
+           ProcessInfo.processInfo.environment["CLAUDEBAR_FAKE"] == nil {
+            didRequestScreenPermission = true
+            BackdropSampler.requestPermission()
+        }
 
         if poppingIn {
             // ぽわんっと出現（ウィンドウは固定、アセンブリだけ膨らむ）
@@ -222,6 +229,7 @@ extension PanelController {
     private func trackMouse() {
         guard state.bubbleActive else { return }
         growBubbleIfNeeded()
+        sampleBackdropIfNeeded()
         guard let bubbleOnScreen = bubbleScreenFrame?.insetBy(dx: -6, dy: -6) else { return }
         let inside = bubbleOnScreen.contains(NSEvent.mouseLocation)
         if inside, !wasHoveringBubble, !dragActive,
@@ -262,6 +270,31 @@ extension PanelController {
         if let activity = napActivity {
             ProcessInfo.processInfo.endActivity(activity)
             napActivity = nil
+        }
+    }
+
+    /// 背後の画面輝度を約1秒間隔でサンプリングし、バブルの文字色（白/黒）を切り替える。
+    /// 画面収録の権限が無い間は何もしない（従来の固定色のまま）
+    private func sampleBackdropIfNeeded() {
+        guard BackdropSampler.hasPermission,
+              state.bubbleActive, !isPopping, !backdropSampleInFlight,
+              Date().timeIntervalSince(lastBackdropSampleAt) > 1.0,
+              let frame = bubbleScreenFrame else { return }
+        lastBackdropSampleAt = Date()
+        backdropSampleInFlight = true
+        Task { [weak self] in
+            let luminance = await BackdropSampler.averageLuminance(of: frame.insetBy(dx: 8, dy: 8))
+            guard let self else { return }
+            self.backdropSampleInFlight = false
+            guard let luminance else { return } // 失敗時は前回の判定を維持
+            // ヒステリシス: 境界付近での白黒チラつきを防ぐ
+            if luminance < 0.42 {
+                self.state.bubbleBackdropIsDark = true
+            } else if luminance > 0.5 {
+                self.state.bubbleBackdropIsDark = false
+            } else if self.state.bubbleBackdropIsDark == nil {
+                self.state.bubbleBackdropIsDark = luminance < 0.46
+            }
         }
     }
 
