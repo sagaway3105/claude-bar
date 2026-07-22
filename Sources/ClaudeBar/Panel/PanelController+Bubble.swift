@@ -55,25 +55,29 @@ extension PanelController {
             return
         }
         var point = defaultBubblePoint()
-        var emergeFromPanel = false
+        var emergeDirection: CGFloat = 0
         if let pf = panel, pf.isVisible {
-            // パネルの右横・フッター（🫧ボタン）の高さから「ポンっ」と出す
-            emergeFromPanel = true
+            // パネルの横・フッター（🫧ボタン）の高さへ「ポーン」と遠めに飛ばす。
+            // 右に余地が無ければ（attachedは画面右端に近い）左へミラー
+            let vf = (pf.screen ?? NSScreen.main)?.visibleFrame
+            let roomRight = (vf?.maxX ?? .greatestFiniteMagnitude) - pf.frame.maxX
+            emergeDirection = roomRight >= 160 ? 1 : -1
             point = NSPoint(
-                x: pf.frame.maxX + 44,
+                x: emergeDirection > 0 ? pf.frame.maxX + bubbleLaunchDistance : pf.frame.minX - bubbleLaunchDistance,
                 y: pf.frame.maxY - lastPanelSize.height + 34
             )
-            if let vf = (pf.screen ?? NSScreen.main)?.visibleFrame {
-                point.x = min(point.x, vf.maxX - 60)
+            if let vf {
+                point.x = min(max(point.x, vf.minX + 60), vf.maxX - 60)
                 point.y = min(max(point.y, vf.minY + 60), vf.maxY - 60)
             }
         }
-        showBubble(at: point, poppingIn: true, emergeTowardTrailing: emergeFromPanel)
+        showBubble(at: point, poppingIn: true, emergeDirection: emergeDirection)
     }
 
     /// バブルを表示（ONにする）。復活・右クリックメニュー・デバッグからも使う。
-    /// emergeTowardTrailing: パネルから出す時、左端（パネル側）を始点に右へポンっと出す
-    func showBubble(at point: NSPoint, poppingIn: Bool = false, emergeTowardTrailing: Bool = false) {
+    /// emergeDirection: パネルから出す時の飛び出し方向（+1=右へ / -1=左へ / 0=その場でぽわん）。
+    /// ウィンドウごとパネルの縁から着地点へ飛ばして「ポーン」の距離感を出す
+    func showBubble(at point: NSPoint, poppingIn: Bool = false, emergeDirection: CGFloat = 0) {
         let p = ensureBubblePanel()
         bubbleHideGeneration += 1 // 進行中の遅延orderOutを無効化
         revivalTask?.cancel()
@@ -105,18 +109,30 @@ extension PanelController {
         }
 
         if poppingIn {
-            // ぽわんっと出現（ウィンドウは固定、アセンブリだけ膨らむ）。
-            // パネルから出す時は左端（パネル側）を始点にして方向感を出す
+            // ぽわんっと出現（アセンブリだけ膨らむ）。
+            // パネルから出す時はウィンドウごとパネルの縁から着地点へ飛ばして「ポーン」
             let target = assembly.frame
-            assembly.frame = emergeTowardTrailing
-                ? NSRect(x: 6, y: target.midY - 4, width: 8, height: 8)
-                : NSRect(x: target.midX - 4, y: target.midY - 4, width: 8, height: 8)
+            let finalOrigin = p.frame.origin
+            if emergeDirection != 0 {
+                // 始点はパネル側の縁（飛翔中はパネルの背後から現れる）
+                assembly.frame = NSRect(
+                    x: emergeDirection > 0 ? 6 : size - 14,
+                    y: target.midY - 4, width: 8, height: 8
+                )
+                p.setFrameOrigin(NSPoint(x: finalOrigin.x - bubbleLaunchDistance * emergeDirection, y: finalOrigin.y))
+            } else {
+                assembly.frame = NSRect(x: target.midX - 4, y: target.midY - 4, width: 8, height: 8)
+            }
             assembly.alphaValue = 0
             p.orderFrontRegardless()
             NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
             NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.34
+                ctx.duration = emergeDirection != 0 ? 0.46 : 0.34
                 ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1.18)
+                if emergeDirection != 0 {
+                    // NSWindowのanimatorはsetFrameOriginを無視するためsetFrameで飛ばす
+                    p.animator().setFrame(NSRect(origin: finalOrigin, size: p.frame.size), display: true)
+                }
                 assembly.animator().frame = target
                 assembly.animator().alphaValue = 1
             }, completionHandler: { [weak self] in

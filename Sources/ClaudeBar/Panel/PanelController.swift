@@ -60,7 +60,6 @@ final class PanelController: NSObject, NSWindowDelegate {
     var bubbleTapCount = 0
     var bubbleTapResetTask: Task<Void, Never>?
 
-
     // レイアウト定数
     let panelWidth: CGFloat = 300
     let panelWindowHeight: CGFloat = 460 // 固定（内容はSwiftUIが上詰めで描き、余りは完全透明）
@@ -68,6 +67,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     let bubbleWindowSize: CGFloat = 150 // 最大バブル(76*1.4)+浮遊・伸縮マージン
     let detachThreshold: CGFloat = 30
     let snapMargin: CGFloat = 60
+    let bubbleLaunchDistance: CGFloat = 110 // 🫧ボタンでパネル横へ「ポーン」と飛ぶ距離
 
     init(state: AppState, usageService: UsageService, settings: SettingsStore) {
         self.state = state

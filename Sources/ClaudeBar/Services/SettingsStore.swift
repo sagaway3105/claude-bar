@@ -34,7 +34,6 @@ final class SettingsStore {
         didSet { persist(bubbleMetric.rawValue, "bubbleMetric") }
     }
 
-
     /// バーの色をmacOSのアクセントカラーに合わせる（falseならClaudeオレンジ）
     var useSystemAccent: Bool {
         didSet { persist(useSystemAccent, "useSystemAccent") }
