@@ -295,10 +295,6 @@ struct BubbleView: View {
     var state: AppState
     var settings: SettingsStore
     var actions: PanelActions
-    @Environment(\.colorScheme) private var colorScheme
-
-    /// %・ロゴの縁取り色。文字色(.primary)の逆色にして暗背景/明背景の両方で浮かせる
-    private var textHalo: Color { colorScheme == .dark ? .black : .white }
 
     private var usageWindow: UsageWindow? { state.usage?.window(for: settings.bubbleMetric) }
     private var value: Double { usageWindow?.utilization ?? 0 }
@@ -351,13 +347,24 @@ struct BubbleView: View {
                         center: UnitPoint(x: 0.32, y: 0.28),
                         startRadius: 2, endRadius: 46 * sizeFactor
                     ))
+                // 上縁の深度シェーディング — 球の丸みを出す暗がり
+                Circle()
+                    .trim(from: 0.5, to: 1.0)
+                    .stroke(Color.black.opacity(0.15), style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .blur(radius: 5)
+                // 底に溜まる透過光（コースティクス）— ガラス玉が光を集める表現
+                Circle()
+                    .trim(from: 0.1, to: 0.4)
+                    .stroke(Color.white.opacity(0.6), style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                    .blur(radius: 5)
+                Circle()
+                    .fill(RadialGradient(
+                        colors: [.white.opacity(0.35), .clear],
+                        center: UnitPoint(x: 0.5, y: 0.9),
+                        startRadius: 1, endRadius: 26 * sizeFactor
+                    ))
                 // ゲージ溝は非表示（進捗アークだけを見せる）
                 Circle().stroke(Color.primary.opacity(0), lineWidth: 4)
-                // 進捗アークの縁取り（クリスプな白1pt。白背景では溶け、暗背景で輪郭を出す）
-                Circle()
-                    .trim(from: 0, to: max(0.003, min(value, 100) / 100))
-                    .stroke(Color.white.opacity(0.9), style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
                 Circle()
                     .trim(from: 0, to: max(0.003, min(value, 100) / 100))
                     .stroke(
@@ -386,17 +393,20 @@ struct BubbleView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                // 文字色と逆のハロー（ライト=白/ダーク=黒）で任意の背景から浮かせる
-                .shadow(color: textHalo.opacity(0.85), radius: 1)
                 .rotationEffect(.degrees(sin(t * 0.9) * 3))
 
-                // シャボン玉のハイライト（主）— 表面の特徴なのでサイズ追従
+                // 主ハイライト: 大きく柔らかいブルーム + 小さく鋭いスポット（左上光源）
                 Ellipse()
-                    .fill(.white.opacity(0.5))
-                    .frame(width: 20 * sizeFactor, height: 9 * sizeFactor)
-                    .rotationEffect(.degrees(-32))
-                    .offset(x: -15 * sizeFactor, y: -19 * sizeFactor)
-                    .blur(radius: 1.5)
+                    .fill(.white.opacity(0.55))
+                    .frame(width: 24 * sizeFactor, height: 14 * sizeFactor)
+                    .rotationEffect(.degrees(-35))
+                    .offset(x: -13 * sizeFactor, y: -17 * sizeFactor)
+                    .blur(radius: 4)
+                Circle()
+                    .fill(.white.opacity(0.95))
+                    .frame(width: 6 * sizeFactor, height: 6 * sizeFactor)
+                    .offset(x: -19 * sizeFactor, y: -13 * sizeFactor)
+                    .blur(radius: 0.6)
                 // 対向の小さなグリント
                 Circle()
                     .fill(.white.opacity(0.28))
