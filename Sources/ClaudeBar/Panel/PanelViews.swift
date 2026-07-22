@@ -27,7 +27,7 @@ struct PanelRootView: View {
             case .bubble:
                 BubbleView(state: state, settings: settings, actions: actions)
             case .attached, .floating:
-                UsagePanelView(state: state, actions: actions)
+                UsagePanelView(state: state, settings: settings, actions: actions)
                     .onGeometryChange(for: CGFloat.self) { proxy in
                         proxy.size.height
                     } action: { height in
@@ -87,7 +87,13 @@ struct SectionTile: ViewModifier {
 
 struct UsagePanelView: View {
     var state: AppState
+    var settings: SettingsStore
     var actions: PanelActions
+
+    /// macOSのアクセントカラー準拠（設定でClaudeオレンジに切り替え可）
+    private var baseTint: Color {
+        settings.useSystemAccent ? Color(nsColor: .controlAccentColor) : .claudeOrange
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -137,15 +143,15 @@ struct UsagePanelView: View {
                 .modifier(SectionTile())
             }
 
-            UsageGaugeView(title: "現在のセッション", window: state.usage?.session, prominent: true)
+            UsageGaugeView(title: "現在のセッション", window: state.usage?.session, baseTint: baseTint, prominent: true)
                 .modifier(SectionTile())
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("週間制限")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                UsageGaugeView(title: "すべてのモデル", window: state.usage?.weeklyAll)
-                UsageGaugeView(title: state.fableLabel, window: state.usage?.weeklyFable)
+                UsageGaugeView(title: "すべてのモデル", window: state.usage?.weeklyAll, baseTint: baseTint)
+                UsageGaugeView(title: state.fableLabel, window: state.usage?.weeklyFable, baseTint: baseTint)
 
                 // ペース予測は上限に達しそうな時だけ警告として表示
                 if case .willHit(let eta) = state.weeklyForecast {
@@ -272,7 +278,7 @@ struct BubbleView: View {
     private var tint: Color {
         if value >= 95 { return .red }
         if value >= 80 { return .orange }
-        return .claudeOrange
+        return settings.useSystemAccent ? Color(nsColor: .controlAccentColor) : .claudeOrange
     }
 
     var body: some View {

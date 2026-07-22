@@ -3,6 +3,7 @@ import SwiftUI
 struct UsageGaugeView: View {
     let title: String
     let window: UsageWindow?
+    var baseTint: Color = .claudeOrange
     var prominent = false
 
     private var value: Double { window?.utilization ?? 0 }
@@ -10,7 +11,7 @@ struct UsageGaugeView: View {
     private var tint: Color {
         if value >= 95 { return .red }
         if value >= 80 { return .orange }
-        return .claudeOrange
+        return baseTint
     }
 
     var body: some View {

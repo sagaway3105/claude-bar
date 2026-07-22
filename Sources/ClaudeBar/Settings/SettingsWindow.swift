@@ -19,6 +19,7 @@ struct SettingsView: View {
                     Text("2分").tag(2)
                     Text("5分").tag(5)
                 }
+                Toggle("バーの色をアクセントカラーに合わせる", isOn: $settings.useSystemAccent)
             }
             Section("通知") {
                 Toggle("80% / 95% 到達時に通知", isOn: $settings.notifyThresholds)

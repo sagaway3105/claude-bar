@@ -34,6 +34,11 @@ final class SettingsStore {
         didSet { persist(bubbleMetric.rawValue, "bubbleMetric") }
     }
 
+    /// バーの色をmacOSのアクセントカラーに合わせる（falseならClaudeオレンジ）
+    var useSystemAccent: Bool {
+        didSet { persist(useSystemAccent, "useSystemAccent") }
+    }
+
     var launchAtLogin: Bool {
         didSet { updateLoginItem() }
     }
@@ -44,11 +49,13 @@ final class SettingsStore {
             "pollIntervalMinutes": 2,
             "reviveBubble": true,
             "bubbleMetric": BubbleMetric.session.rawValue,
+            "useSystemAccent": true,
         ])
         notifyThresholds = Self.defaults.bool(forKey: "notifyThresholds")
         pollIntervalMinutes = Self.defaults.integer(forKey: "pollIntervalMinutes")
         reviveBubble = Self.defaults.bool(forKey: "reviveBubble")
         bubbleMetric = BubbleMetric(rawValue: Self.defaults.string(forKey: "bubbleMetric") ?? "") ?? .session
+        useSystemAccent = Self.defaults.bool(forKey: "useSystemAccent")
         launchAtLogin = false
         if canManageLoginItem {
             launchAtLogin = SMAppService.mainApp.status == .enabled
