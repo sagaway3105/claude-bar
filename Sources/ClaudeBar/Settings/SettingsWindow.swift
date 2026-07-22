@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var settings: SettingsStore
+    var updater: UpdaterService?
 
     var body: some View {
         Form {
@@ -21,6 +22,20 @@ struct SettingsView: View {
                 }
                 Toggle("バーの色をアクセントカラーに合わせる", isOn: $settings.useSystemAccent)
             }
+            Section("アップデート") {
+                Toggle("アップデートを自動で確認", isOn: $settings.autoUpdate)
+                    .disabled(updater?.isAvailable != true)
+                    .onChange(of: settings.autoUpdate) { _, on in
+                        updater?.automaticallyChecksForUpdates = on
+                    }
+                Button("今すぐアップデートを確認") { updater?.checkForUpdates() }
+                    .disabled(updater?.isAvailable != true)
+                if updater?.isAvailable != true {
+                    Text(".appとして起動した場合のみ利用できます")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section("通知") {
                 Toggle("80% / 95% 到達時に通知", isOn: $settings.notifyThresholds)
             }
@@ -37,7 +52,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 380, height: 400)
+        .frame(width: 380, height: 460)
     }
 
     static var version: String {
@@ -49,21 +64,23 @@ struct SettingsView: View {
 final class SettingsWindowController {
     private var window: NSWindow?
     private let settings: SettingsStore
+    private let updater: UpdaterService?
 
-    init(settings: SettingsStore) {
+    init(settings: SettingsStore, updater: UpdaterService? = nil) {
         self.settings = settings
+        self.updater = updater
     }
 
     func show() {
         if window == nil {
             let w = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 380, height: 400),
+                contentRect: NSRect(x: 0, y: 0, width: 380, height: 460),
                 styleMask: [.titled, .closable],
                 backing: .buffered, defer: false
             )
             w.title = "ClaudeBar 設定"
             w.isReleasedWhenClosed = false
-            w.contentView = NSHostingView(rootView: SettingsView(settings: settings))
+            w.contentView = NSHostingView(rootView: SettingsView(settings: settings, updater: updater))
             w.center()
             window = w
         }

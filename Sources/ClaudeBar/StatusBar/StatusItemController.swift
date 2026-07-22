@@ -60,6 +60,9 @@ final class StatusItemController: NSObject {
         menu.addItem(makeItem("今すぐ更新", #selector(refreshNow)))
         menu.addItem(makeItem(panelController.state.bubbleActive ? "バブルを非表示" : "バブルで表示", #selector(toggleBubble)))
         menu.addItem(.separator())
+        if panelController.updater?.isAvailable == true {
+            menu.addItem(makeItem("アップデートを確認…", #selector(checkForUpdates)))
+        }
         menu.addItem(makeItem("設定…", #selector(openSettings)))
         menu.addItem(.separator())
         menu.addItem(makeItem("ClaudeBarを終了", #selector(quit)))
@@ -74,6 +77,7 @@ final class StatusItemController: NSObject {
 
     @objc private func refreshNow() { panelController.uiActions.refresh() }
     @objc private func toggleBubble() { panelController.toggleBubble() }
+    @objc private func checkForUpdates() { panelController.updater?.checkForUpdates() }
     @objc private func openSettings() { panelController.uiActions.settings() }
     @objc private func quit() { NSApp.terminate(nil) }
 }

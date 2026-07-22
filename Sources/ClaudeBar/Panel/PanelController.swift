@@ -18,6 +18,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// StatusItemControllerから注入される（吸着判定・デフォルト位置用）
     var statusButtonFrame: (() -> NSRect?)?
     var onOpenSettings: (() -> Void)?
+    /// 自動アップデート（.app起動時のみ有効）
+    weak var updater: UpdaterService?
 
     private(set) lazy var uiActions: PanelActions = makeActions()
 

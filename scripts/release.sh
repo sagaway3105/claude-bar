@@ -30,4 +30,18 @@ else
 fi
 
 gh release create "v${VERSION}" "$ZIP" --title "v${VERSION}" --generate-notes
-echo "✅ リリース完了: https://github.com/sagaway3105/claude-bar/releases/tag/v${VERSION}"
+echo "✅ GitHub Release作成: https://github.com/sagaway3105/claude-bar/releases/tag/v${VERSION}"
+
+# Sparkle: zipをEdDSA署名してappcast.xmlに追記し、pushする（自動アップデート配信）
+SPARKLE_TOOLS=".build/artifacts/sparkle/Sparkle/bin"
+if [[ -x "$SPARKLE_TOOLS/sign_update" ]]; then
+  python3 scripts/appcast_add.py "$VERSION" "$ZIP" "$SPARKLE_TOOLS"
+  git add docs/appcast.xml
+  git commit -q -m "appcast: v${VERSION} を配信
+
+Claude-Session: https://claude.ai/code/session_01S4fGVycDVJZaRMgQrh1EEp"
+  git push -q
+  echo "📡 appcast.xml を更新・push（既存ユーザーへ自動アップデート配信）"
+else
+  echo "⚠️ Sparkleツールが見つからないためappcast更新をスキップ（swift build後に再実行してください）"
+fi

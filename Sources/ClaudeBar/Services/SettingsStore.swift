@@ -39,6 +39,11 @@ final class SettingsStore {
         didSet { persist(useSystemAccent, "useSystemAccent") }
     }
 
+    /// アップデートを自動で確認する（Sparkle）
+    var autoUpdate: Bool {
+        didSet { persist(autoUpdate, "autoUpdate") }
+    }
+
     var launchAtLogin: Bool {
         didSet { updateLoginItem() }
     }
@@ -50,12 +55,14 @@ final class SettingsStore {
             "reviveBubble": true,
             "bubbleMetric": BubbleMetric.session.rawValue,
             "useSystemAccent": true,
+            "autoUpdate": true,
         ])
         notifyThresholds = Self.defaults.bool(forKey: "notifyThresholds")
         pollIntervalMinutes = Self.defaults.integer(forKey: "pollIntervalMinutes")
         reviveBubble = Self.defaults.bool(forKey: "reviveBubble")
         bubbleMetric = BubbleMetric(rawValue: Self.defaults.string(forKey: "bubbleMetric") ?? "") ?? .session
         useSystemAccent = Self.defaults.bool(forKey: "useSystemAccent")
+        autoUpdate = Self.defaults.bool(forKey: "autoUpdate")
         launchAtLogin = false
         if canManageLoginItem {
             launchAtLogin = SMAppService.mainApp.status == .enabled

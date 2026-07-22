@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelController: PanelController!
     private var statusController: StatusItemController!
     private var settingsController: SettingsWindowController!
+    private var updater: UpdaterService!
     private var debugBridge: DebugBridge?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -35,9 +36,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings = SettingsStore()
         notifier = NotificationService()
         usageService = UsageService(state: state, settings: settings, notifier: notifier)
-        settingsController = SettingsWindowController(settings: settings)
+        updater = UpdaterService()
+        settingsController = SettingsWindowController(settings: settings, updater: updater)
         panelController = PanelController(state: state, usageService: usageService, settings: settings)
         statusController = StatusItemController(state: state, panelController: panelController)
+        panelController.updater = updater
 
         panelController.statusButtonFrame = { [weak self] in
             self?.statusController.buttonScreenFrame
@@ -54,6 +57,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         activityMonitor.start()
         usageService.startPolling()
+        // 自動アップデート（.app起動時のみ有効）。設定の初期値を反映
+        updater.start()
+        if updater.isAvailable {
+            updater.automaticallyChecksForUpdates = settings.autoUpdate
+        }
 
         debugBridge = DebugBridge(
             state: state,
