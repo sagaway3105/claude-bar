@@ -53,6 +53,9 @@ final class AppState {
     /// 認証情報が無い/期限切れなどで、ログイン導線を出すべき状態
     var needsLogin = false
 
+    /// attachedパネルが開いている間、メニューバーのハイライトを点灯
+    var menuHighlighted = false
+
     /// Claude Codeがトークンを消費中かどうか（ロゴアニメーション用）
     var isActive = false
 

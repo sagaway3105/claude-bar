@@ -5,9 +5,11 @@ import SwiftUI
 final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let panelController: PanelController
+    private let state: AppState
 
     init(state: AppState, panelController: PanelController) {
         self.panelController = panelController
+        self.state = state
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
@@ -27,6 +29,8 @@ final class StatusItemController: NSObject {
         button.target = self
         button.action = #selector(didClick)
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        // レガシーな黒い押下ハイライトを抑止（ハイライトはSwiftUI側でApple純正風に描く）
+        (button.cell as? NSButtonCell)?.highlightsBy = []
     }
 
     /// ステータスアイテムのスクリーン座標（バブルの吸着判定などに使う）
@@ -41,9 +45,9 @@ final class StatusItemController: NSObject {
         panelController.toggle(relativeTo: button)
     }
 
-    /// パネルが開いている間、Apple純正メニューと同じネイティブハイライトを表示
+    /// パネルが開いている間、Apple純正メニュー風の薄いカプセルハイライトを表示
     func setHighlighted(_ highlighted: Bool) {
-        statusItem.button?.isHighlighted = highlighted
+        state.menuHighlighted = highlighted
     }
 
     @objc private func didClick() {

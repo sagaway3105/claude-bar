@@ -28,6 +28,13 @@ struct StatusLabelView: View {
         }
         .foregroundStyle(tint ?? .primary)
         .padding(.horizontal, 5)
+        // Apple純正メニュー展開時と同じ、薄い半透明カプセルのハイライト
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Color.primary.opacity(state.menuHighlighted ? 0.14 : 0))
+                .padding(.vertical, 2.5)
+        )
+        .animation(.easeOut(duration: 0.12), value: state.menuHighlighted)
         .fixedSize()
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
