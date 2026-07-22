@@ -384,8 +384,8 @@ struct BubbleView: View {
         // フレームだけ拡大し、リングの太さと中身（ロゴ/%）は固定サイズを保つ
         .frame(width: 76 * sizeFactor, height: 76 * sizeFactor)
         .animation(.bouncy(duration: 0.4), value: sizeFactor)
-        // コントロールセンターのタイルと同じ素のLiquid Glass（強ブラー+リムライト）
-        .glassEffect(.regular, in: Circle())
+        // 素のLiquid Glass（.clear = 透明度の高いガラス玉。屈折とリムライトは維持）
+        .glassEffect(.clear, in: Circle())
         .overlay(
             ZStack {
                 // 内側へにじむ虹色フリンジ
