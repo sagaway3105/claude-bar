@@ -51,8 +51,9 @@ cat > "$APP/Contents/Info.plist" <<EOF
 EOF
 
 # 署名の優先順: Developer ID（配布用・Hardened Runtime付き）> Apple Development > ad-hoc
-DEVID=$(security find-identity -p codesigning -v 2>/dev/null | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')
-IDENTITY=$(security find-identity -p codesigning -v 2>/dev/null | grep -o '"Apple Development: [^"]*"' | head -1 | tr -d '"')
+# ※ grep不一致でもpipefailで落ちないよう || true を付ける
+DEVID=$(security find-identity -p codesigning -v 2>/dev/null | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"' || true)
+IDENTITY=$(security find-identity -p codesigning -v 2>/dev/null | grep -o '"Apple Development: [^"]*"' | head -1 | tr -d '"' || true)
 if [[ -n "${DEVID}" ]]; then
   codesign --force --options runtime --timestamp --sign "${DEVID}" "$APP"
   echo "🔏 Developer ID署名: ${DEVID}"
