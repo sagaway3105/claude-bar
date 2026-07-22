@@ -17,10 +17,10 @@ struct UsageGaugeView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
-                    .font(.system(size: 11.5))
+                    .font(.system(size: 13))
                 Spacer()
                 Text(window == nil ? "–" : "\(Int(value.rounded()))%")
-                    .font(.system(size: 12.5))
+                    .font(.system(size: 13))
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.4), value: value)
@@ -45,7 +45,7 @@ struct UsageGaugeView: View {
                 // 残り時間は1分ごとに更新
                 TimelineView(.periodic(from: .now, by: 60)) { _ in
                     Text("リセット: \(Self.resetText(resets))（\(Self.remainText(resets))）")
-                        .font(.caption2)
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
             }

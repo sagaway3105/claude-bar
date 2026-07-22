@@ -161,7 +161,7 @@ struct UsagePanelView: View {
             Hairline().padding(.vertical, 12)
 
             Text("週間制限")
-                .font(.system(size: 12))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 8)
 
@@ -182,7 +182,7 @@ struct UsagePanelView: View {
 
             HStack(spacing: 8) {
                 Text(updatedText)
-                    .font(.caption2)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                 Spacer()
                 IconButton(systemName: "arrow.clockwise", help: "今すぐ更新") { actions.refresh() }
