@@ -6,11 +6,10 @@ extension Color {
 }
 
 /// Claude公式のスパーク（アスタリスク）風ロゴ。
-/// トークン消費中は回転しながら脈打つ。outlinedで縁取り（背景に埋もれない）。
+/// トークン消費中は回転しながら脈打つ。
 struct ClaudeLogoView: View {
     var animating: Bool
     var color: Color = .primary
-    var outlined: Bool = false
 
     var body: some View {
         if animating {
@@ -26,14 +25,7 @@ struct ClaudeLogoView: View {
     }
 
     private var logo: some View {
-        ZStack {
-            if outlined {
-                // 下層に太めのストロークを敷いて縁取りにする（メニューバーの明暗に自動追従）
-                StarburstShape()
-                    .stroke(Color.primary.opacity(0.55), lineWidth: 1.8)
-            }
-            StarburstShape().fill(color)
-        }
+        StarburstShape().fill(color)
     }
 }
 

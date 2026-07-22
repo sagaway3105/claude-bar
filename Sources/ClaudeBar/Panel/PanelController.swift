@@ -95,7 +95,9 @@ final class PanelController: NSObject, NSWindowDelegate {
             if state.mode == .attached {
                 hide()
             } else {
+                // フローティング/バブル表示中: 前面に出しつつポヨンと弾んで居場所をアピール
                 panel.orderFrontRegardless()
+                bounceAssembly()
             }
             return
         }
