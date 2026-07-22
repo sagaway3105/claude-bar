@@ -117,6 +117,13 @@
     transform: translateY(3px);
   }
   .steps .step-body { flex: 1; min-width: 0; }
+  .opt-row { display: flex; gap: 10px; align-items: flex-start; margin-top: 9px; }
+  .opt-label {
+    flex: none; font-size: 11px; font-weight: 700; letter-spacing: 0.03em;
+    color: var(--accent); border: 1.5px solid var(--accent);
+    border-radius: 999px; padding: 1px 11px; margin-top: 3px; white-space: nowrap;
+  }
+  .opt-row .cmd { margin: 0; }
   code.cmd {
     display: block; width: fit-content; max-width: 100%;
     overflow-x: auto; margin: 6px 0 4px;
@@ -222,9 +229,16 @@
   <section id="install">
     <h2>インストール</h2>
     <ol class="steps">
-      <li><span class="step-body">Homebrewなら1行:
-        <code class="cmd">brew install --cask sagaway3105/tap/claudebar</code>
-        手動の場合は <a href="https://github.com/sagaway3105/claude-bar/releases/latest">Releases</a> のzipを解凍して <code>ClaudeBar.app</code> をアプリケーションフォルダへ</span></li>
+      <li><span class="step-body">アプリを入れる — 2パターンどちらでもOK:
+        <span class="opt-row">
+          <span class="opt-label">Homebrew</span>
+          <code class="cmd">brew install --cask sagaway3105/tap/claudebar</code>
+        </span>
+        <span class="opt-row">
+          <span class="opt-label">手動</span>
+          <span><a href="https://github.com/sagaway3105/claude-bar/releases/latest">Releases</a> のzipを解凍して <code>ClaudeBar.app</code> をアプリケーションフォルダへ</span>
+        </span>
+      </span></li>
       <li><span class="step-body">起動するとメニューバーに「–% ✳」が出ます（Apple公証済み・警告なしで起動）</span></li>
       <li><span class="step-body">初回はパネルの案内に従ってClaude Codeでログイン連携（未導入でも2ステップの案内つき）</span></li>
     </ol>
