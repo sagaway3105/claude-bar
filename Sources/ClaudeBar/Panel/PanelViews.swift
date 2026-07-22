@@ -22,21 +22,26 @@ struct PanelRootView: View {
     var actions: PanelActions
 
     var body: some View {
-        ZStack {
-            switch state.mode {
-            case .bubble:
-                BubbleView(state: state, settings: settings, actions: actions)
-            case .attached, .floating:
-                UsagePanelView(state: state, settings: settings, actions: actions)
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.size.height
-                    } action: { height in
-                        actions.contentHeightChanged(height)
-                    }
+        UsagePanelView(state: state, settings: settings, actions: actions)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { height in
+                actions.contentHeightChanged(height)
             }
-        }
-        // ウィンドウは固定サイズなので、内容（ガラスごと）は上詰めで描く
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // ウィンドウは固定サイズなので、内容（ガラスごと）は上詰めで描く
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+/// バブル専用ウィンドウのルート（バブルはパネルと独立したウィンドウで共存する）
+struct BubbleRootView: View {
+    var state: AppState
+    var settings: SettingsStore
+    var actions: PanelActions
+
+    var body: some View {
+        BubbleView(state: state, settings: settings, actions: actions)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -186,7 +191,12 @@ struct UsagePanelView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 IconButton(systemName: "arrow.clockwise", help: "今すぐ更新") { actions.refresh() }
-                IconButton(systemName: "bubbles.and.sparkles.fill", help: "浮遊モード（バブル）") { actions.toBubble() }
+                IconButton(
+                    systemName: "bubbles.and.sparkles.fill",
+                    help: state.bubbleActive ? "バブルを非表示" : "浮遊モード（バブル）",
+                    activeState: state.bubbleActive,
+                    activeTint: baseTint
+                ) { actions.toBubble() }
                 IconButton(systemName: "gearshape.fill", help: "設定") { actions.settings() }
                 IconButton(systemName: "power", help: "終了") { actions.quit() }
             }
@@ -254,6 +264,9 @@ struct ExtraUsageRow: View {
 struct IconButton: View {
     let systemName: String
     var help = ""
+    /// nil=通常ボタン（ホバー時のみ丸背景）。true/false=トグル（常時グレー地、trueでアクセント色）
+    var activeState: Bool? = nil
+    var activeTint: Color = .accentColor
     let action: () -> Void
     @State private var hovering = false
 
@@ -262,25 +275,38 @@ struct IconButton: View {
             Image(systemName: systemName)
                 .font(.system(size: 12, weight: .medium))
         }
-        .buttonStyle(HoverPressIconStyle(hovering: hovering))
+        .buttonStyle(HoverPressIconStyle(hovering: hovering, activeState: activeState, activeTint: activeTint))
         .onHover { hovering = $0 }
         .help(help)
     }
 }
 
 /// Apple純正コントロール風のインタラクション:
-/// ホバーで丸背景がふわっと出て、押下でわずかに沈む
+/// ホバーで丸背景がふわっと出て、押下でわずかに沈む。
+/// トグル型（activeState != nil）はCCと同じ常時グレー地・ON時はアクセント色+白アイコン
 struct HoverPressIconStyle: ButtonStyle {
     var hovering: Bool
+    var activeState: Bool? = nil
+    var activeTint: Color = .accentColor
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(hovering || configuration.isPressed ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+        let isOn = activeState == true
+        let isToggle = activeState != nil
+        return configuration.label
+            .foregroundStyle(
+                isOn ? AnyShapeStyle(Color.white)
+                    : (hovering || configuration.isPressed || isToggle
+                        ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+            )
             .frame(width: 24, height: 24)
             .background(
-                Circle().fill(Color.primary.opacity(
-                    configuration.isPressed ? 0.18 : (hovering ? 0.10 : 0)
-                ))
+                Circle().fill(
+                    isOn
+                        ? AnyShapeStyle(activeTint.opacity(configuration.isPressed ? 0.75 : 1))
+                        : AnyShapeStyle(Color.primary.opacity(
+                            configuration.isPressed ? 0.18 : (hovering ? 0.14 : (isToggle ? 0.09 : 0))
+                        ))
+                )
             )
             .contentShape(Circle())
             .scaleEffect(configuration.isPressed ? 0.92 : 1)
@@ -459,7 +485,7 @@ struct BubbleView: View {
         .contentShape(Circle())
         .contextMenu {
             Button("パネルに展開") { actions.expand() }
-            Button("メニューバーへ戻す") { actions.backToMenuBar() }
+            Button("バブルを閉じる") { actions.toBubble() }
             Divider()
             Button("設定…") { actions.settings() }
             Button("終了") { actions.quit() }

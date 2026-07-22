@@ -58,7 +58,7 @@ final class StatusItemController: NSObject {
     private func showContextMenu(on button: NSStatusBarButton) {
         let menu = NSMenu()
         menu.addItem(makeItem("今すぐ更新", #selector(refreshNow)))
-        menu.addItem(makeItem("バブルで表示", #selector(showBubble)))
+        menu.addItem(makeItem(panelController.state.bubbleActive ? "バブルを非表示" : "バブルで表示", #selector(toggleBubble)))
         menu.addItem(.separator())
         menu.addItem(makeItem("設定…", #selector(openSettings)))
         menu.addItem(.separator())
@@ -73,7 +73,7 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func refreshNow() { panelController.uiActions.refresh() }
-    @objc private func showBubble() { panelController.showBubbleNearStatusItem() }
+    @objc private func toggleBubble() { panelController.toggleBubble() }
     @objc private func openSettings() { panelController.uiActions.settings() }
     @objc private func quit() { NSApp.terminate(nil) }
 }

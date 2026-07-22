@@ -107,9 +107,9 @@ final class DebugBridge {
         var info: [String: Any] = [:]
         switch state.mode {
         case .attached: info["mode"] = "attached"
-        case .bubble: info["mode"] = "bubble"
         case .floating: info["mode"] = "floating"
         }
+        info["bubbleActive"] = state.bubbleActive
         info["highlighted"] = state.menuHighlighted
         if let frame = panelController.debugPanelFrame {
             info["panel"] = [frame.origin.x, frame.origin.y, frame.width, frame.height]

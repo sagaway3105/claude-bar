@@ -5,10 +5,10 @@ import SwiftUI
 /// パネル/バブルのウィンドウ制御（コア: ウィンドウ生成・attached・tear-off・表示/非表示）。
 /// バブル固有の挙動は PanelController+Bubble.swift にある。
 ///
-/// モード:
-/// - attached: メニューバー直下（外側クリックで閉じる）
-/// - floating: 引き剥がした（またはバブルから展開した）フローティングパネル
-/// - bubble:   その場でゆったり浮遊する常時最前面のバブル（🫧ボタン/右クリックから）
+/// ウィンドウは2枚:
+/// - panel: attached（メニューバー直下）/ floating（引き剥がし後）のパネル
+/// - bubblePanel: 浮遊するバブル専用の小型ウィンドウ。パネルと同時に共存できる
+///   （🫧ボタンはトグル: ONでぽわんっと出現、OFFで消える）
 @MainActor
 final class PanelController: NSObject, NSWindowDelegate {
     let state: AppState
@@ -29,10 +29,16 @@ final class PanelController: NSObject, NSWindowDelegate {
     var contentHosting: NSHostingView<PanelRootView>?
     var popWindow: NSWindow?
 
+    // バブル専用ウィンドウ（パネルと同時に共存できる）
+    var bubblePanel: NSPanel?
+    var bubbleContainer: PassthroughContainerView?
+    var bubbleAssembly: NSView?
+    var bubbleHosting: NSHostingView<BubbleRootView>?
+    var bubbleHideGeneration = 0 // 遅延orderOutと再表示の競合ガード
+
     var attachedOrigin = NSPoint.zero
     var isProgrammaticMove = false
     var isPopping = false
-    var isBubbleChrome = false
     var lastPanelSize = NSSize(width: 240, height: 380)
     var lastBubbleCenter: NSPoint?
     var revivalTask: Task<Void, Never>?
@@ -88,9 +94,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         bubbleDiameter * Self.bubbleScaleFactor(for: bubbleUsageWindow?.utilization ?? 0)
     }
 
-    /// アセンブリの現在のスクリーン座標（アニメーション中はpresentation layerが真実）
-    var assemblyScreenFrame: NSRect? {
-        guard let p = panel, let assembly = assemblyView else { return nil }
+    /// バブルアセンブリの現在のスクリーン座標（アニメーション中はpresentation layerが真実）
+    var bubbleScreenFrame: NSRect? {
+        guard let p = bubblePanel, let assembly = bubbleAssembly else { return nil }
         var rect = assembly.frame
         if let presentation = assembly.layer?.presentation() {
             // macOSのlayer-backed viewはanchorPoint(0,0)なので position == frame.origin
@@ -105,9 +111,6 @@ final class PanelController: NSObject, NSWindowDelegate {
         if let panel, panel.isVisible {
             if state.mode == .attached {
                 hide()
-            } else if state.mode == .bubble {
-                // バブル表示中: メニューバーを押せば通常のパネルに戻る
-                showAttached(relativeTo: button)
             } else {
                 // フローティング表示中: メニューバーを押せば引き剥がし前（attached）に戻る
                 showAttached(relativeTo: button)
@@ -121,7 +124,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     /// AppKitの「ウィンドウ上端はメニューバーの下まで」制約を無効化したパネル。
     /// 位置は全て自前でクランプするため（バブルはメニューバーを覆う高さまで行ける）
-    private final class UnconstrainedPanel: NSPanel {
+    final class UnconstrainedPanel: NSPanel {
         override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
             frameRect
         }
@@ -182,10 +185,7 @@ final class PanelController: NSObject, NSWindowDelegate {
                 Task { await self.usageService.refresh() }
             },
             quit: { NSApp.terminate(nil) },
-            toBubble: { [weak self] in
-                guard let self, let panel = self.panel else { return }
-                self.becomeBubble(at: NSPoint(x: panel.frame.midX, y: panel.frame.midY))
-            },
+            toBubble: { [weak self] in self?.toggleBubble() },
             expand: { [weak self] in self?.expandFromBubble() },
             backToMenuBar: { [weak self] in
                 guard let self else { return }
@@ -205,7 +205,6 @@ final class PanelController: NSObject, NSWindowDelegate {
         let p = ensurePanel()
         cancelPendingHide()
         clearCloseAnimations()
-        exitBubbleChrome()
         state.mode = .attached
         p.isMovableByWindowBackground = false
         p.level = .popUpMenu
@@ -268,7 +267,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     /// 展開アニメーション: ステータスアイテムを支点に上端中央から生える（純正Tahoeメニュー風）。
     /// 使い捨てのCAアニメーション（モデル値不変・完了時自動除去）なので途中で閉じても競合しない。
-    private func playOpenAnimation() {
+    func playOpenAnimation() {
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
               let layer = assemblyView?.layer else { return }
         let grow = CABasicAnimation(keyPath: "transform")
@@ -311,22 +310,20 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func syncPanelChromeFrames() {
-        guard !isBubbleChrome, let container = containerView else { return }
+        guard let container = containerView else { return }
         assemblyView?.frame = container.bounds
         contentHosting?.frame = container.bounds
     }
 
     func windowDidMove(_ notification: Notification) {
-        guard let p = panel, p.isVisible, !isProgrammaticMove else { return }
-        switch state.mode {
-        case .attached:
+        guard let p = panel, p.isVisible, !isProgrammaticMove,
+              (notification.object as? NSWindow) === p else { return }
+        if state.mode == .attached {
             // 引き剥がしたらフローティングパネルになる（バブルは🫧ボタンからのみ）
             let o = p.frame.origin
             if hypot(o.x - attachedOrigin.x, o.y - attachedOrigin.y) > detachThreshold {
                 detachToFloating()
             }
-        case .bubble, .floating:
-            break
         }
     }
 
@@ -360,12 +357,11 @@ final class PanelController: NSObject, NSWindowDelegate {
         )
         guard let p = panel else { return }
 
-        // バブル演出後や「視差を減らす」時は即時クローズ
-        if isBubbleChrome || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || !p.isVisible {
+        // 「視差を減らす」時は即時クローズ
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || !p.isVisible {
             p.orderOut(nil)
             p.alphaValue = 1
             assemblyView?.alphaValue = 1
-            resetChromeAfterHide()
             return
         }
 
@@ -401,7 +397,6 @@ final class PanelController: NSObject, NSWindowDelegate {
             p.orderOut(nil)
             p.alphaValue = 1
             self.assemblyView?.alphaValue = 1
-            self.resetChromeAfterHide()
         }
     }
 
@@ -413,43 +408,52 @@ final class PanelController: NSObject, NSWindowDelegate {
         let h = assembly.bounds.height
         let k = intensity
         let animation = CAKeyframeAnimation(keyPath: "transform")
-        if isBubbleChrome {
-            // バブル: ウィンドウに余白があるため中心基準で素直に膨らめる
-            let cx = w / 2
-            let cy = h / 2
-            func scaled(_ sx: CGFloat, _ sy: CGFloat) -> CATransform3D {
-                var m = CATransform3DMakeTranslation(cx * (1 - sx), cy * (1 - sy), 0)
-                m = CATransform3DScale(m, sx, sy, 1)
-                return m
-            }
-            animation.values = [
-                CATransform3DIdentity,
-                scaled(1 + 0.12 * k, 1 - 0.12 * k),
-                scaled(1 - 0.06 * k, 1 + 0.06 * k),
-                scaled(1 + 0.03 * k, 1 - 0.02 * k),
-                CATransform3DIdentity,
-            ].map { NSValue(caTransform3D: $0) }
-        } else {
-            // パネル: コンテンツは横幅ぴったり・上端いっぱいのため、拡大方向は
-            // ウィンドウ境界でクリップされる（上下欠けの原因）。
-            // 縦は上端アンカーで「下の透明帯ぶんだけ」伸ばし、横は1.0以下に留める
-            let contentH = max(1, lastPanelSize.height)
-            let slackRatio = max(0, h - contentH - 2) / contentH
-            let stretch = 1 + min(0.05 * k, slackRatio)
-            func scaled(_ sx: CGFloat, _ sy: CGFloat) -> CATransform3D {
-                // 横は中央基準・縦は上端(y=h)基準
-                var m = CATransform3DMakeTranslation(w / 2 * (1 - sx), h * (1 - sy), 0)
-                m = CATransform3DScale(m, sx, sy, 1)
-                return m
-            }
-            animation.values = [
-                CATransform3DIdentity,
-                scaled(1 - 0.05 * k, stretch), // 引き剥がされて下へぷるん
-                scaled(1, 1 - 0.045 * k), // 反動で縮む
-                scaled(1 - 0.015 * k, 1 + min(0.012 * k, slackRatio)),
-                CATransform3DIdentity,
-            ].map { NSValue(caTransform3D: $0) }
+        // パネル: コンテンツは横幅ぴったり・上端いっぱいのため、拡大方向は
+        // ウィンドウ境界でクリップされる（上下欠けの原因）。
+        // 縦は上端アンカーで「下の透明帯ぶんだけ」伸ばし、横は1.0以下に留める
+        let contentH = max(1, lastPanelSize.height)
+        let slackRatio = max(0, h - contentH - 2) / contentH
+        let stretch = 1 + min(0.05 * k, slackRatio)
+        func scaled(_ sx: CGFloat, _ sy: CGFloat) -> CATransform3D {
+            // 横は中央基準・縦は上端(y=h)基準
+            var m = CATransform3DMakeTranslation(w / 2 * (1 - sx), h * (1 - sy), 0)
+            m = CATransform3DScale(m, sx, sy, 1)
+            return m
         }
+        animation.values = [
+            CATransform3DIdentity,
+            scaled(1 - 0.05 * k, stretch), // 引き剥がされて下へぷるん
+            scaled(1, 1 - 0.045 * k), // 反動で縮む
+            scaled(1 - 0.015 * k, 1 + min(0.012 * k, slackRatio)),
+            CATransform3DIdentity,
+        ].map { NSValue(caTransform3D: $0) }
+        animation.keyTimes = [0, 0.22, 0.5, 0.75, 1]
+        animation.duration = 0.45
+        animation.timingFunctions = Array(
+            repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: 4
+        )
+        layer.add(animation, forKey: "poyon")
+    }
+
+    /// バブルのポヨン: ウィンドウに余白があるため中心基準で素直に膨らめる
+    func bounceBubble(intensity: CGFloat = 1) {
+        guard let assembly = bubbleAssembly, let layer = assembly.layer else { return }
+        let cx = assembly.bounds.width / 2
+        let cy = assembly.bounds.height / 2
+        func scaled(_ sx: CGFloat, _ sy: CGFloat) -> CATransform3D {
+            var m = CATransform3DMakeTranslation(cx * (1 - sx), cy * (1 - sy), 0)
+            m = CATransform3DScale(m, sx, sy, 1)
+            return m
+        }
+        let k = intensity
+        let animation = CAKeyframeAnimation(keyPath: "transform")
+        animation.values = [
+            CATransform3DIdentity,
+            scaled(1 + 0.12 * k, 1 - 0.12 * k),
+            scaled(1 - 0.06 * k, 1 + 0.06 * k),
+            scaled(1 + 0.03 * k, 1 - 0.02 * k),
+            CATransform3DIdentity,
+        ].map { NSValue(caTransform3D: $0) }
         animation.keyTimes = [0, 0.22, 0.5, 0.75, 1]
         animation.duration = 0.45
         animation.timingFunctions = Array(
@@ -517,9 +521,11 @@ final class PanelController: NSObject, NSWindowDelegate {
     // MARK: - デバッグ用
 
     var debugPanelFrame: NSRect? {
-        if isBubbleChrome { return assemblyScreenFrame }
+        if state.bubbleActive { return bubbleScreenFrame }
         return panel?.frame
     }
 
-    var debugPanelVisible: Bool { panel?.isVisible ?? false }
+    var debugPanelVisible: Bool {
+        state.bubbleActive ? (bubblePanel?.isVisible ?? false) : (panel?.isVisible ?? false)
+    }
 }

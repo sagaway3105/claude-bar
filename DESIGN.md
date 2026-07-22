@@ -24,16 +24,18 @@
                                     ╰─────╯  100%到達→💥割れる(Pop音+飛沫)
 ```
 
-## 状態機械（PanelMode）
+## 状態機械（PanelMode + bubbleActive）
+
+ウィンドウは2枚。パネル（attached/floating）とバブルは**独立して共存できる**。
 
 | 状態 | ウィンドウ | 遷移 |
 |---|---|---|
-| `attached` | メニューバー直下、外側クリックで閉じる、level=.popUpMenu | グリップドラッグ30pt超 → `floating`（ぷるんっ）/ 🫧ボタン → `bubble` |
-| `floating` | 引き剥がしたパネル。背景ドラッグで移動可、常時最前面 | ×ボタン → 閉じて`attached`へ / 🫧 → `bubble` |
-| `bubble` | **画面サイズの透明ウィンドウを固定**し、中のアセンブリ（ガラス+内容76pt）だけが浮遊。バブル上以外はクリック透過 | クリック → `floating`に展開 / メニューバー付近へドラッグ → 吸着して戻る / 100% → 破裂 → リセット後に復活 |
+| `attached` | メニューバー直下、外側クリックで閉じる、level=.popUpMenu | グリップドラッグ30pt超 → `floating`（ぷるんっ） |
+| `floating` | 引き剥がしたパネル。背景ドラッグで移動可、常時最前面 | ×ボタン → 閉じて`attached`へ / メニューバークリック → `attached`へ復帰 |
+| `bubbleActive` | **専用の150pt透明ウィンドウ**の中でアセンブリ（ガラス+内容76-106pt）だけが浮遊 | 🫧ボタン（トグル: 常時グレー地・ONでアクセント色）でON/OFF / メニューバー付近へドラッグ → 吸着して消える / 3連打 or 100% → 破裂 → リセット後に復活 |
 
-1つの `NSPanel` を使い回し、フレームと `NSGlassEffectView.cornerRadius` を変形させる。
-SwiftUI側は `state.mode` で `UsagePanelView` / `BubbleView` を切り替え。
+パネルの `NSPanel` は `UsagePanelView`、バブルの `NSPanel` は `BubbleRootView` を常時ホストする
+（旧設計の「1枚のウィンドウをクローム変形して使い回す」方式は廃止）。
 
 ### バブルのアニメーション（60fps保証の要）
 

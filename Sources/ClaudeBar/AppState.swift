@@ -33,8 +33,7 @@ extension UsageSnapshot {
 
 enum PanelMode {
     case attached // メニューバー直下のパネル
-    case bubble   // ぷかぷか浮遊するバブル
-    case floating // バブルから展開したフローティングパネル
+    case floating // 引き剥がした（またはバブルから展開した）フローティングパネル
 }
 
 enum WeeklyForecast: Equatable {
@@ -60,6 +59,9 @@ final class AppState {
     var isActive = false
 
     var mode: PanelMode = .attached
+
+    /// バブル（浮遊モード）が表示中か。パネルとは独立に共存できる
+    var bubbleActive = false
 
     // 「ぷるんっ/ポヨン」はPanelController.bounceAssembly()（レイヤー変形）で行う
 

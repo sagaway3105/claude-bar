@@ -4,37 +4,105 @@ import SwiftUI
 
 /// バブル（浮遊モード）固有の挙動。
 ///
-/// バブルは100ptの小さな透明ウィンドウで、その中のアセンブリ（ガラス+内容76pt）だけを
+/// バブルは専用の150pt透明ウィンドウで、その中のアセンブリ（ガラス+内容76-106pt）だけを
 /// レンダーサーバ側の無限アニメーションで漂わせる（ウィンドウ自体は動かさないので滑らか）。
-/// 操作はAppKitのローカルモニタで判定: クリック=展開 / ドラッグ=ウィンドウ移動 /
-/// メニューバー付近で放す=吸着して戻る。ホバーで「ポヨン」。
+/// パネルとは独立したウィンドウなので、パネルを開いたままバブルを共存できる。
+/// 操作はAppKitのローカルモニタで判定: クリック=ポヨン(連打で破裂) / ドラッグ=ウィンドウ移動 /
+/// メニューバー付近で放す=吸着して消える。ホバーで「ポヨン」。
 extension PanelController {
 
-    // MARK: - バブル用クローム（小さな固定ウィンドウ + 中で漂うアセンブリ）
+    // MARK: - ウィンドウ生成
 
-    func enterBubbleChrome(centeredAt center: NSPoint) {
-        guard let p = panel, let assembly = assemblyView else { return }
-        isBubbleChrome = true
-        containerView?.pinsChildrenToBounds = false
+    func ensureBubblePanel() -> NSPanel {
+        if let bubblePanel { return bubblePanel }
+
         let size = bubbleWindowSize
-        isProgrammaticMove = true
+        let p = UnconstrainedPanel(
+            contentRect: NSRect(x: 0, y: 0, width: size, height: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered, defer: false
+        )
+        p.isFloatingPanel = true
+        p.level = .floating
+        p.backgroundColor = .clear
+        p.isOpaque = false
+        p.hasShadow = false // アセンブリ移動のたびに影を再計算させない
+        p.hidesOnDeactivate = false
+        p.isReleasedWhenClosed = false
+        p.becomesKeyOnlyIfNeeded = true
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        p.animationBehavior = .none
+
+        let container = PassthroughContainerView(frame: NSRect(x: 0, y: 0, width: size, height: size))
+        container.wantsLayer = true
+        container.pinsChildrenToBounds = false // アセンブリは中で自由に漂う
+
+        let assembly = NSView(frame: container.bounds)
+        assembly.wantsLayer = true
+        assembly.autoresizingMask = []
+
+        let hosting = NSHostingView(
+            rootView: BubbleRootView(state: state, settings: settings, actions: uiActions)
+        )
+        hosting.sizingOptions = [] // SwiftUIの固定サイズを必須制約にしない（ウィンドウ収縮防止）
+        hosting.frame = assembly.bounds
+        hosting.autoresizingMask = []
+
+        assembly.addSubview(hosting)
+        container.addSubview(assembly)
+        p.contentView = container
+
+        bubblePanel = p
+        bubbleContainer = container
+        bubbleAssembly = assembly
+        bubbleHosting = hosting
+        return p
+    }
+
+    // MARK: - トグル（🫧ボタン）
+
+    /// 🫧ボタン: OFF→ぽわんっと出現 / ON→消える。パネルはそのまま
+    func toggleBubble() {
+        if state.bubbleActive {
+            dismissBubble()
+            return
+        }
+        var point = defaultBubblePoint()
+        if let pf = panel, pf.isVisible {
+            // パネルの左横に出す（パネルと重ならないように）
+            point = NSPoint(x: pf.frame.minX - bubbleWindowSize / 2 + 24, y: pf.frame.midY)
+            if let vf = (pf.screen ?? NSScreen.main)?.visibleFrame {
+                point.x = max(point.x, vf.minX + 60)
+                point.y = min(max(point.y, vf.minY + 60), vf.maxY - 60)
+            }
+        }
+        showBubble(at: point, poppingIn: true)
+    }
+
+    /// バブルを表示（ONにする）。復活・右クリックメニュー・デバッグからも使う
+    func showBubble(at point: NSPoint, poppingIn: Bool = false) {
+        let p = ensureBubblePanel()
+        bubbleHideGeneration += 1 // 進行中の遅延orderOutを無効化
+        revivalTask?.cancel()
+        isPopping = false
+        state.bubbleActive = true
+
+        let size = bubbleWindowSize
         p.setFrame(
-            NSRect(x: center.x - size / 2, y: center.y - size / 2, width: size, height: size),
+            NSRect(x: point.x - size / 2, y: point.y - size / 2, width: size, height: size),
             display: true
         )
-        isProgrammaticMove = false
-        p.hasShadow = false // アセンブリ移動のたびに影を再計算させない
-        p.ignoresMouseEvents = false
-
-        assembly.autoresizingMask = []
+        guard let assembly = bubbleAssembly else { return }
+        assembly.layer?.removeAllAnimations()
         let diameter = currentBubbleDiameter
         let margin = (size - diameter) / 2
         floatAnchor = NSPoint(x: margin, y: margin)
         wasHoveringBubble = false
         assembly.frame = NSRect(origin: floatAnchor, size: NSSize(width: diameter, height: diameter))
-        contentHosting?.frame = assembly.bounds
+        assembly.alphaValue = 1
+        bubbleHosting?.frame = assembly.bounds
 
-        updateFloatBounds(around: center)
+        updateFloatBounds(around: point)
         startMouseTracking()
         installBubbleMouseMonitor()
         // アクセサリアプリはApp Napでタイマーが間引かれるため、バブル表示中は抑止する
@@ -43,155 +111,7 @@ extension PanelController {
                 options: [.userInitiated], reason: "Bubble float animation"
             )
         }
-    }
 
-    /// ドラッグ時のウィンドウ原点の可動域を更新する。
-    /// ウィンドウ(150pt)ではなく「見えているバブルの縁」が画面の縁に届く基準:
-    /// 左右・下は画面端（下はDockの上端）に接するまで、上はメニューバーを覆えるまで。
-    func updateFloatBounds(around point: NSPoint) {
-        let size = bubbleWindowSize
-        let margin = (size - currentBubbleDiameter) / 2
-        let screen = NSScreen.screens.first { $0.frame.contains(point) } ?? panel?.screen ?? NSScreen.main
-        guard let vf = screen?.visibleFrame, let sf = screen?.frame else { return }
-        floatBounds = NSRect(
-            x: sf.minX - margin,
-            y: vf.minY - margin,
-            width: max(0, sf.width - size + margin * 2),
-            height: max(0, (sf.maxY - size + margin) - (vf.minY - margin))
-        )
-    }
-
-    /// パネルモードへ戻す: ウィンドウをアセンブリにぴったり合わせ、autoresizeを復帰
-    func exitBubbleChrome() {
-        guard isBubbleChrome, let p = panel, let assembly = assemblyView, let container = containerView else { return }
-        stopFloating()
-        isBubbleChrome = false
-        container.pinsChildrenToBounds = true
-        stopMouseTracking()
-        removeBubbleMouseMonitor()
-        let assemblyOnScreen = p.convertToScreen(assembly.frame)
-        isProgrammaticMove = true
-        p.setFrame(assemblyOnScreen, display: false)
-        isProgrammaticMove = false
-        p.hasShadow = true
-        assembly.autoresizingMask = []
-        assembly.frame = container.bounds
-        syncPanelChromeFrames()
-    }
-
-    /// 非表示のままクロームを解除（pop後・吸着後など）
-    func resetChromeAfterHide() {
-        guard isBubbleChrome, let p = panel, let assembly = assemblyView, let container = containerView else { return }
-        stopFloating()
-        isBubbleChrome = false
-        container.pinsChildrenToBounds = true
-        stopMouseTracking()
-        removeBubbleMouseMonitor()
-        isProgrammaticMove = true
-        p.setFrame(
-            NSRect(origin: p.frame.origin, size: NSSize(width: panelWidth, height: panelWindowHeight)),
-            display: false
-        )
-        isProgrammaticMove = false
-        p.hasShadow = true
-        assembly.autoresizingMask = []
-        assembly.frame = container.bounds
-        assembly.alphaValue = 1
-        syncPanelChromeFrames()
-    }
-
-    // MARK: - カーソル追跡（ホバーのポヨン）
-
-    func startMouseTracking() {
-        stopMouseTracking()
-        let timer = Timer(timeInterval: 0.08, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.trackMouse() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        mouseTrackTimer = timer
-    }
-
-    private func trackMouse() {
-        guard isBubbleChrome else { return }
-        growBubbleIfNeeded()
-        guard let bubbleOnScreen = assemblyScreenFrame?.insetBy(dx: -6, dy: -6) else { return }
-        let inside = bubbleOnScreen.contains(NSEvent.mouseLocation)
-        if inside, !wasHoveringBubble, !dragActive,
-           Date().timeIntervalSince(lastHoverBounceAt) > 0.6 {
-            lastHoverBounceAt = Date()
-            bounceAssembly() // ポヨン
-        }
-        wasHoveringBubble = inside
-    }
-
-    /// 使用量が10%刻みを跨いだらバブルをぷにっと成長させる
-    private func growBubbleIfNeeded() {
-        guard !dragActive, !isPopping,
-              let assembly = assemblyView, let hosting = contentHosting else { return }
-        let desired = currentBubbleDiameter
-        guard abs(assembly.frame.width - desired) > 0.5 else { return }
-
-        let center = NSPoint(x: assembly.frame.midX, y: assembly.frame.midY)
-        let target = NSRect(
-            x: center.x - desired / 2, y: center.y - desired / 2,
-            width: desired, height: desired
-        )
-        floatAnchor = target.origin
-        hosting.frame = NSRect(origin: .zero, size: target.size)
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.4
-            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1.25)
-            assembly.animator().frame = target
-        }
-        // 直径が変わるとマージンも変わるため可動域を取り直す
-        if let w = panel {
-            updateFloatBounds(around: NSPoint(x: w.frame.midX, y: w.frame.midY))
-        }
-    }
-
-    func stopMouseTracking() {
-        mouseTrackTimer?.invalidate()
-        mouseTrackTimer = nil
-        if let activity = napActivity {
-            ProcessInfo.processInfo.endActivity(activity)
-            napActivity = nil
-        }
-    }
-
-    // MARK: - モード遷移
-
-    /// 🫧ボタン経由。パネルを即時閉じてバブルをぽわんっと出す
-    /// （ウィンドウの縮小モーフは手動フレーム管理と同期せず円が欠けて見えるため廃止）
-    func becomeBubble(at point: NSPoint) {
-        guard state.mode != .bubble, let p = panel else { return }
-        if p.isVisible {
-            cancelPendingHide()
-            clearCloseAnimations()
-            p.orderOut(nil)
-        }
-        showBubble(at: point, poppingIn: true)
-    }
-
-    /// 非表示状態から直接バブルを出す（右クリックメニュー・復活・デバッグ）
-    func showBubble(at point: NSPoint, poppingIn: Bool = false) {
-        let p = ensurePanel()
-        cancelPendingHide()
-        clearCloseAnimations()
-        revivalTask?.cancel()
-        removeDismissMonitors()
-        state.menuHighlighted = false
-        state.mode = .bubble
-        assemblyView?.alphaValue = 1
-        // 進行中のalphaフェードがあっても確実に見える状態へ
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.08
-            p.animator().alphaValue = 1
-        }
-        p.level = .floating
-        p.isMovableByWindowBackground = false
-        enterBubbleChrome(centeredAt: point)
-
-        guard let assembly = assemblyView else { return }
         if poppingIn {
             // ぽわんっと出現（ウィンドウは固定、アセンブリだけ膨らむ）
             let target = assembly.frame
@@ -213,6 +133,29 @@ extension PanelController {
         }
     }
 
+    /// バブルを非表示（OFFにする）。アクティブな🫧ボタン押下時
+    func dismissBubble() {
+        state.bubbleActive = false
+        revivalTask?.cancel()
+        guard let p = bubblePanel, p.isVisible, let assembly = bubbleAssembly else { return }
+        stopFloating()
+        stopMouseTracking()
+        removeBubbleMouseMonitor()
+        bubbleHideGeneration += 1
+        let generation = bubbleHideGeneration
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.18
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            assembly.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.bubbleHideGeneration == generation else { return }
+                self.bubblePanel?.orderOut(nil)
+                self.bubbleAssembly?.alphaValue = 1
+            }
+        })
+    }
+
     func showBubbleNearStatusItem() {
         showBubble(at: defaultBubblePoint(), poppingIn: true)
     }
@@ -228,29 +171,112 @@ extension PanelController {
         return NSPoint(x: 300, y: 300)
     }
 
+    /// バブルの右クリック「パネルに展開」: バブルはそのまま、その場にフローティングパネルを開く
     func expandFromBubble() {
-        guard state.mode == .bubble, let p = panel else { return }
+        let anchorFrame = bubbleScreenFrame ?? bubblePanel?.frame
+        let p = ensurePanel()
+        cancelPendingHide()
+        clearCloseAnimations()
         state.mode = .floating
-        exitBubbleChrome()
+        state.menuHighlighted = false
+        p.level = .floating
         p.isMovableByWindowBackground = true
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let p = self.panel else { return }
-            self.lastPanelSize = NSSize(width: self.panelWidth, height: self.measuredPanelHeight())
-            let size = NSSize(width: self.panelWidth, height: self.panelWindowHeight)
+        lastPanelSize = NSSize(width: panelWidth, height: measuredPanelHeight())
+        let size = NSSize(width: panelWidth, height: panelWindowHeight)
+        var origin = NSPoint(x: 300, y: 300)
+        if let anchor = anchorFrame {
+            origin = NSPoint(x: anchor.midX - size.width / 2, y: anchor.maxY - size.height)
+        }
+        if let screen = bubblePanel?.screen ?? NSScreen.main {
+            let vf = screen.visibleFrame
+            origin.x = min(max(origin.x, vf.minX + 8), vf.maxX - size.width - 8)
+            // 内容は上詰めなので、内容部分が画面内に収まるようにクランプ
+            origin.y = min(max(origin.y, vf.minY + 8 - (size.height - lastPanelSize.height)), vf.maxY - size.height - 8)
+        }
+        isProgrammaticMove = true
+        p.setFrame(NSRect(origin: origin, size: size), display: false)
+        isProgrammaticMove = false
+        syncPanelChromeFrames()
+        contentHosting?.layoutSubtreeIfNeeded()
+        p.displayIfNeeded()
+        p.orderFrontRegardless()
+        playOpenAnimation()
+    }
 
-            let bubbleFrame = p.frame
-            var origin = NSPoint(
-                x: bubbleFrame.midX - size.width / 2,
-                y: bubbleFrame.maxY - size.height
-            )
-            if let screen = p.screen ?? NSScreen.main {
-                let vf = screen.visibleFrame
-                origin.x = min(max(origin.x, vf.minX + 8), vf.maxX - size.width - 8)
-                // 内容は上詰めなので、内容部分が画面内に収まるようにクランプ
-                origin.y = min(max(origin.y, vf.minY + 8 - (size.height - self.lastPanelSize.height)), vf.maxY - size.height - 8)
-            }
-            self.animateFrame(to: NSRect(origin: origin, size: size))
+    // MARK: - 可動域
+
+    /// ドラッグ時のウィンドウ原点の可動域を更新する。
+    /// ウィンドウ(150pt)ではなく「見えているバブルの縁」が画面の縁に届く基準:
+    /// 左右・下は画面端（下はDockの上端）に接するまで、上はメニューバーを覆えるまで。
+    func updateFloatBounds(around point: NSPoint) {
+        let size = bubbleWindowSize
+        let margin = (size - currentBubbleDiameter) / 2
+        let screen = NSScreen.screens.first { $0.frame.contains(point) } ?? bubblePanel?.screen ?? NSScreen.main
+        guard let vf = screen?.visibleFrame, let sf = screen?.frame else { return }
+        floatBounds = NSRect(
+            x: sf.minX - margin,
+            y: vf.minY - margin,
+            width: max(0, sf.width - size + margin * 2),
+            height: max(0, (sf.maxY - size + margin) - (vf.minY - margin))
+        )
+    }
+
+    // MARK: - カーソル追跡（ホバーのポヨン）
+
+    func startMouseTracking() {
+        stopMouseTracking()
+        let timer = Timer(timeInterval: 0.08, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.trackMouse() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        mouseTrackTimer = timer
+    }
+
+    private func trackMouse() {
+        guard state.bubbleActive else { return }
+        growBubbleIfNeeded()
+        guard let bubbleOnScreen = bubbleScreenFrame?.insetBy(dx: -6, dy: -6) else { return }
+        let inside = bubbleOnScreen.contains(NSEvent.mouseLocation)
+        if inside, !wasHoveringBubble, !dragActive,
+           Date().timeIntervalSince(lastHoverBounceAt) > 0.6 {
+            lastHoverBounceAt = Date()
+            bounceBubble() // ポヨン
+        }
+        wasHoveringBubble = inside
+    }
+
+    /// 使用量が10%刻みを跨いだらバブルをぷにっと成長させる
+    private func growBubbleIfNeeded() {
+        guard !dragActive, !isPopping,
+              let assembly = bubbleAssembly, let hosting = bubbleHosting else { return }
+        let desired = currentBubbleDiameter
+        guard abs(assembly.frame.width - desired) > 0.5 else { return }
+
+        let center = NSPoint(x: assembly.frame.midX, y: assembly.frame.midY)
+        let target = NSRect(
+            x: center.x - desired / 2, y: center.y - desired / 2,
+            width: desired, height: desired
+        )
+        floatAnchor = target.origin
+        hosting.frame = NSRect(origin: .zero, size: target.size)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.4
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1.25)
+            assembly.animator().frame = target
+        }
+        // 直径が変わるとマージンも変わるため可動域を取り直す
+        if let w = bubblePanel {
+            updateFloatBounds(around: NSPoint(x: w.frame.midX, y: w.frame.midY))
+        }
+    }
+
+    func stopMouseTracking() {
+        mouseTrackTimer?.invalidate()
+        mouseTrackTimer = nil
+        if let activity = napActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            napActivity = nil
         }
     }
 
@@ -259,8 +285,8 @@ extension PanelController {
     /// 周期の異なる正弦波（easeInEaseOutのautoreverse）を加算合成してその場でゆったり漂わせる。
     /// レンダーサーバ側で無限に補間されるため、繋ぎ目もフレーム落ちも存在しない。
     func startFloating() {
-        guard state.mode == .bubble, isBubbleChrome, !isPopping,
-              let assembly = assemblyView, let layer = assembly.layer else { return }
+        guard state.bubbleActive, !isPopping,
+              let assembly = bubbleAssembly, let layer = assembly.layer else { return }
         guard layer.animation(forKey: "float-x1") == nil else { return }
 
         func floatAnimation(_ keyPath: String, amplitude: CGFloat, duration: CFTimeInterval, phase: CFTimeInterval) -> CABasicAnimation {
@@ -288,8 +314,8 @@ extension PanelController {
     func stopFloating() {
         dragStartAnchor = nil
         isDraggingBubble = false
-        guard let assembly = assemblyView, let layer = assembly.layer else { return }
-        if isBubbleChrome, let presentation = layer.presentation() {
+        guard let assembly = bubbleAssembly, let layer = assembly.layer else { return }
+        if let presentation = layer.presentation() {
             // 現在の表示位置で静止させる
             CATransaction.begin()
             CATransaction.setDisableActions(true)
@@ -301,7 +327,7 @@ extension PanelController {
         }
     }
 
-    // MARK: - バブルの操作（AppKitレベルのマウス処理: クリック=展開 / ドラッグ=ウィンドウ移動）
+    // MARK: - バブルの操作（AppKitレベルのマウス処理: クリック=ポヨン / ドラッグ=ウィンドウ移動）
 
     func installBubbleMouseMonitor() {
         removeBubbleMouseMonitor()
@@ -322,10 +348,10 @@ extension PanelController {
     }
 
     private func handleBubbleMouse(_ event: NSEvent) -> Bool {
-        guard isBubbleChrome, let p = panel, event.window === p else { return false }
+        guard state.bubbleActive, let p = bubblePanel, event.window === p else { return false }
         switch event.type {
         case .leftMouseDown:
-            guard let frame = assemblyScreenFrame,
+            guard let frame = bubbleScreenFrame,
                   frame.insetBy(dx: -4, dy: -4).contains(NSEvent.mouseLocation) else { return false }
             dragActive = true
             dragMoved = false
@@ -342,9 +368,7 @@ extension PanelController {
             var origin = NSPoint(x: start.x + dx, y: start.y + dy)
             origin.x = min(max(origin.x, floatBounds.minX), floatBounds.maxX)
             origin.y = min(max(origin.y, floatBounds.minY), floatBounds.maxY)
-            isProgrammaticMove = true
             p.setFrameOrigin(origin)
-            isProgrammaticMove = false
             return true
         case .leftMouseUp:
             guard dragActive else { return false }
@@ -353,7 +377,7 @@ extension PanelController {
             dragStartAnchor = nil
             if !dragMoved {
                 registerBubbleTap() // クリック = ポヨン、連打で破裂!
-            } else if let buttonFrame = statusButtonFrame?(), let onScreen = assemblyScreenFrame {
+            } else if let buttonFrame = statusButtonFrame?(), let onScreen = bubbleScreenFrame {
                 // メニューバー付近で放したら吸着して戻る
                 let zone = buttonFrame.insetBy(dx: -snapMargin, dy: -snapMargin)
                 if zone.contains(NSPoint(x: onScreen.midX, y: onScreen.midY)) {
@@ -376,7 +400,7 @@ extension PanelController {
             popBubble()
             return
         }
-        bounceAssembly(intensity: bubbleTapCount == 1 ? 1.0 : 1.6)
+        bounceBubble(intensity: bubbleTapCount == 1 ? 1.0 : 1.6)
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
         bubbleTapResetTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.1))
@@ -388,10 +412,10 @@ extension PanelController {
     // MARK: - 割れる（100%）と復活
 
     func popBubble() {
-        guard state.mode == .bubble, !isPopping, let assembly = assemblyView else { return }
+        guard state.bubbleActive, !isPopping, let assembly = bubbleAssembly else { return }
         isPopping = true
         stopFloating()
-        if let onScreen = assemblyScreenFrame {
+        if let onScreen = bubbleScreenFrame {
             lastBubbleCenter = NSPoint(x: onScreen.midX, y: onScreen.midY)
         }
 
@@ -406,12 +430,18 @@ extension PanelController {
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             assembly.animator().alphaValue = 0
         }
+        bubbleHideGeneration += 1
+        let generation = bubbleHideGeneration
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(0.8))
             guard let self else { return }
-            self.state.mode = .attached
-            self.hide()
             self.isPopping = false
+            guard self.bubbleHideGeneration == generation else { return }
+            self.state.bubbleActive = false
+            self.stopMouseTracking()
+            self.removeBubbleMouseMonitor()
+            self.bubblePanel?.orderOut(nil)
+            self.bubbleAssembly?.alphaValue = 1
             self.scheduleRevivalIfNeeded()
         }
     }
@@ -426,7 +456,7 @@ extension PanelController {
         revivalTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard let self, !Task.isCancelled else { return }
-            guard self.state.mode == .attached, self.panel?.isVisible != true else { return }
+            guard !self.state.bubbleActive else { return }
             await self.usageService.refresh()
             guard (self.bubbleUsageWindow?.utilization ?? 0) < 100 else { return }
             self.showBubble(at: self.lastBubbleCenter ?? self.defaultBubblePoint(), poppingIn: true)
@@ -456,27 +486,31 @@ extension PanelController {
         }
     }
 
-    /// バブルをメニューバーのステータスアイテム付近へドラッグしたら吸い込まれて戻る
+    /// バブルをメニューバーのステータスアイテム付近へドラッグしたら吸い込まれて消える
     private func snapBackToMenuBar(buttonFrame: NSRect) {
-        guard state.mode == .bubble, isBubbleChrome, let p = panel else { return }
-        state.mode = .attached
-        state.menuHighlighted = false
-        exitBubbleChrome() // ウィンドウがバブルにぴったり合った状態になる
+        guard state.bubbleActive, let p = bubblePanel, let assembly = bubbleAssembly else { return }
+        state.bubbleActive = false
+        revivalTask?.cancel()
+        stopFloating()
+        stopMouseTracking()
+        removeBubbleMouseMonitor()
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
 
-        let target = NSRect(x: buttonFrame.midX - 6, y: buttonFrame.minY - 10, width: 12, height: 12)
-        isProgrammaticMove = true
+        // ウィンドウは固定のまま、アセンブリをアイコンへ飛ばして縮小フェード
+        let targetScreen = NSRect(x: buttonFrame.midX - 6, y: buttonFrame.minY - 10, width: 12, height: 12)
+        let target = p.convertFromScreen(targetScreen)
+        bubbleHideGeneration += 1
+        let generation = bubbleHideGeneration
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.22
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            p.animator().setFrame(target, display: true)
-            p.animator().alphaValue = 0
+            assembly.animator().frame = target
+            assembly.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, let p = self.panel else { return }
-                self.isProgrammaticMove = false
-                p.orderOut(nil)
-                p.alphaValue = 1
+                guard let self, self.bubbleHideGeneration == generation else { return }
+                self.bubblePanel?.orderOut(nil)
+                self.bubbleAssembly?.alphaValue = 1
             }
         })
     }
