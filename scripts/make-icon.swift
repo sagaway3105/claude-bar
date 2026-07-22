@@ -92,10 +92,10 @@ func drawIcon(size s: CGFloat) {
         ray.transform(using: transform)
         star.append(ray)
     }
-    claudeOrange.setFill()
+    NSColor(white: 0.40, alpha: 1).setFill()
     star.fill()
 
-    // Usageゲージ（横バー・下寄り）: グレーのトラック + オレンジの進捗70%
+    // Usageゲージ（横バー・下寄り）: 濃淡グレーのトラック+進捗70%（全体モノトーン）
     let barWidth = rect.width * 0.62
     let barHeight = rect.width * 0.085
     let barRect = NSRect(
@@ -104,11 +104,11 @@ func drawIcon(size s: CGFloat) {
         width: barWidth, height: barHeight
     )
     let track = NSBezierPath(roundedRect: barRect, xRadius: barHeight / 2, yRadius: barHeight / 2)
-    NSColor(white: 0.55, alpha: 0.45).setFill()
+    NSColor(white: 0.60, alpha: 0.40).setFill()
     track.fill()
     let fillRect = NSRect(x: barRect.minX, y: barRect.minY, width: barWidth * 0.70, height: barHeight)
     let fill = NSBezierPath(roundedRect: fillRect, xRadius: barHeight / 2, yRadius: barHeight / 2)
-    claudeOrange.setFill()
+    NSColor(white: 0.40, alpha: 1).setFill()
     fill.fill()
 }
 
