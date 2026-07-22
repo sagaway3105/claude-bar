@@ -326,18 +326,6 @@ struct BubbleView: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             ZStack {
-                // 中心だけ曇らせ、外周へ向けてモワッとぼかして透明に
-                // （%とアイコンの可視性は保ちつつ、周辺は素通し）
-                Circle()
-                    .fill(RadialGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.9), location: 0),
-                            .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.75), location: 0.5),
-                            .init(color: .clear, location: 1),
-                        ]),
-                        center: .center, startRadius: 0, endRadius: 34
-                    ))
-                    .blur(radius: 3)
                 // 球面の照り（左上光源）— シャボン玉の立体感
                 Circle()
                     .fill(RadialGradient(
@@ -396,6 +384,8 @@ struct BubbleView: View {
         // フレームだけ拡大し、リングの太さと中身（ロゴ/%）は固定サイズを保つ
         .frame(width: 76 * sizeFactor, height: 76 * sizeFactor)
         .animation(.bouncy(duration: 0.4), value: sizeFactor)
+        // コントロールセンターのタイルと同じ素のLiquid Glass（強ブラー+リムライト）
+        .glassEffect(.regular, in: Circle())
         .overlay(
             ZStack {
                 // 内側へにじむ虹色フリンジ
