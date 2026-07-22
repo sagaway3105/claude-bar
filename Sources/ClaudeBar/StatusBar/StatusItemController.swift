@@ -26,12 +26,21 @@ final class StatusItemController: NSObject {
             hosting.topAnchor.constraint(equalTo: button.topAnchor),
             hosting.bottomAnchor.constraint(equalTo: button.bottomAnchor),
         ])
-        button.target = self
-        button.action = #selector(didClick)
-        // Apple純正メニューと同じく「押した瞬間」に開く
-        button.sendAction(on: [.leftMouseDown, .rightMouseUp])
-        // レガシーな黒い押下ハイライトを抑止（ハイライトはSwiftUI側でApple純正風に描く）
-        (button.cell as? NSButtonCell)?.highlightsBy = []
+        // ボタンのイベントトラッキングを迂回してクリックを直接受ける。
+        // （NSStatusBarButtonは押下時にレガシーな黒ハイライトを描くため、
+        //   ボタンにイベントを渡さないことで発生源ごと断つ。
+        //   ハイライトはSwiftUI側の薄いカプセルだけで表現する）
+        let catcher = StatusClickCatcherView(frame: button.bounds)
+        catcher.autoresizingMask = [.width, .height]
+        catcher.onLeftMouseDown = { [weak self] in
+            guard let self, let button = self.statusItem.button else { return }
+            self.panelController.toggle(relativeTo: button)
+        }
+        catcher.onRightMouseDown = { [weak self] in
+            guard let self, let button = self.statusItem.button else { return }
+            self.showContextMenu(on: button)
+        }
+        button.addSubview(catcher, positioned: .above, relativeTo: hosting)
     }
 
     /// ステータスアイテムのスクリーン座標（バブルの吸着判定などに使う）
@@ -44,15 +53,6 @@ final class StatusItemController: NSObject {
     func performClick() {
         guard let button = statusItem.button else { return }
         panelController.toggle(relativeTo: button)
-    }
-
-    @objc private func didClick() {
-        guard let button = statusItem.button else { return }
-        if NSApp.currentEvent?.type == .rightMouseUp {
-            showContextMenu(on: button)
-        } else {
-            panelController.toggle(relativeTo: button)
-        }
     }
 
     private func showContextMenu(on button: NSStatusBarButton) {
@@ -76,4 +76,19 @@ final class StatusItemController: NSObject {
     @objc private func showBubble() { panelController.showBubbleNearStatusItem() }
     @objc private func openSettings() { panelController.uiActions.settings() }
     @objc private func quit() { NSApp.terminate(nil) }
+}
+
+/// ステータスアイテム上のクリックを直接受けるキャッチャー
+/// （ボタンのトラッキングに渡さない = ネイティブの押下ハイライトを発生させない）
+final class StatusClickCatcherView: NSView {
+    var onLeftMouseDown: (() -> Void)?
+    var onRightMouseDown: (() -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        onLeftMouseDown?()
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        onRightMouseDown?()
+    }
 }
