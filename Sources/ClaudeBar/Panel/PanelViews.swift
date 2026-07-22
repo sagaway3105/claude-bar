@@ -424,12 +424,12 @@ struct BubbleView: View {
         .animation(.bouncy(duration: 0.4), value: sizeFactor)
         // 素のLiquid Glass（.clear = 透明度の高いガラス玉。屈折とリムライトは維持）
         .glassEffect(.clear, in: Circle())
-        // 微かなドロップシャドウ（白）— 下方向へふわっと光るグロー
+        // 微かなドロップシャドウ（白）— 左上光源に合わせて右下へ落とすグロー
         .background(
             Circle()
                 .fill(Color.white.opacity(0.25))
                 .blur(radius: 7)
-                .offset(y: 5)
+                .offset(x: 4, y: 5)
         )
         .overlay(
             ZStack {
