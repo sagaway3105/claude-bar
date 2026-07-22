@@ -225,6 +225,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         p.displayIfNeeded()
         p.orderFrontRegardless()
         installDismissMonitors()
+        // フルスクリーンアプリ上でもメニューバーが維持される（純正メニューと同じ振る舞い）
+        DistributedNotificationCenter.default().post(
+            name: .init("com.apple.HIToolbox.beginMenuTrackingNotification"), object: nil
+        )
 
         // 高さ実測（透明帯クリック判定用）と更新は表示後に回す
         DispatchQueue.main.async { [weak self] in
@@ -305,6 +309,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         removeDismissMonitors()
         state.menuHighlighted = false
         cancelPendingHide() // 過去のフェードcompletionを無効化
+        DistributedNotificationCenter.default().post(
+            name: .init("com.apple.HIToolbox.endMenuTrackingNotification"), object: nil
+        )
         guard let p = panel else { return }
         p.orderOut(nil)
         p.alphaValue = 1
