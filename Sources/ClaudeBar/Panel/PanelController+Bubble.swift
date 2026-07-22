@@ -147,47 +147,23 @@ extension PanelController {
 
     // MARK: - モード遷移
 
-    /// 🫧ボタン経由（パネル表示中からの変形）
+    /// 🫧ボタン経由。パネルを即時閉じてバブルをぽわんっと出す
+    /// （ウィンドウの縮小モーフは手動フレーム管理と同期せず円が欠けて見えるため廃止）
     func becomeBubble(at point: NSPoint) {
         guard state.mode != .bubble, let p = panel else { return }
-        // 直前の外側クリック等でパネルが閉じ（かけ）ていたら、出現アニメーション経路へ
-        guard p.isVisible else {
-            showBubble(at: point, poppingIn: true)
-            return
+        if p.isVisible {
+            cancelPendingHide()
+            clearCloseAnimations()
+            p.orderOut(nil)
         }
-        cancelPendingHide()
-        revivalTask?.cancel()
-        state.mode = .bubble
-        removeDismissMonitors()
-        state.menuHighlighted = false
-        NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
-
-        // hideのフェードが進行中でも確実に見える状態へ戻す（進行中のalphaアニメーションを上書き）
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.08
-            p.animator().alphaValue = 1
-        }
-        p.orderFrontRegardless()
-        p.level = .floating
-        p.isMovableByWindowBackground = false
-
-        // まずウィンドウごとバブルサイズへ縮め、完了後にバブル用クロームへ差し替える（見た目は不変）
-        let tight = NSRect(
-            x: point.x - bubbleDiameter / 2, y: point.y - bubbleDiameter / 2,
-            width: bubbleDiameter, height: bubbleDiameter
-        )
-        animateFrame(to: tight) { [weak self] in
-            guard let self, self.state.mode == .bubble, let p = self.panel else { return }
-            self.enterBubbleChrome(centeredAt: NSPoint(x: p.frame.midX, y: p.frame.midY))
-            self.startFloating()
-            self.bounceAssembly() // ぷるんっ
-        }
+        showBubble(at: point, poppingIn: true)
     }
 
     /// 非表示状態から直接バブルを出す（右クリックメニュー・復活・デバッグ）
     func showBubble(at point: NSPoint, poppingIn: Bool = false) {
         let p = ensurePanel()
         cancelPendingHide()
+        clearCloseAnimations()
         revivalTask?.cancel()
         removeDismissMonitors()
         state.menuHighlighted = false

@@ -197,6 +197,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     private func showAttached(relativeTo button: NSStatusBarButton) {
         let p = ensurePanel()
         cancelPendingHide()
+        clearCloseAnimations()
         exitBubbleChrome()
         state.mode = .attached
         p.isMovableByWindowBackground = false
@@ -248,21 +249,23 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     // MARK: - tear-off（引き剥がし → フローティングパネル）
 
+    /// 上端中央（ステータスアイテム側）基準のスケール変換
+    private func topAnchoredScale(_ scale: CGFloat) -> CATransform3D {
+        guard let assembly = assemblyView else { return CATransform3DIdentity }
+        let w = assembly.bounds.width
+        let h = assembly.bounds.height
+        var m = CATransform3DMakeTranslation(w / 2 * (1 - scale), h * (1 - scale), 0)
+        m = CATransform3DScale(m, scale, scale, 1)
+        return m
+    }
+
     /// 展開アニメーション: ステータスアイテムを支点に上端中央から生える（純正Tahoeメニュー風）。
     /// 使い捨てのCAアニメーション（モデル値不変・完了時自動除去）なので途中で閉じても競合しない。
     private func playOpenAnimation() {
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-              let assembly = assemblyView, let layer = assembly.layer else { return }
-        let w = assembly.bounds.width
-        let h = assembly.bounds.height
-        // 上端中央(cx, h)基準のスケール
-        func anchoredScale(_ scale: CGFloat) -> CATransform3D {
-            var m = CATransform3DMakeTranslation(w / 2 * (1 - scale), h * (1 - scale), 0)
-            m = CATransform3DScale(m, scale, scale, 1)
-            return m
-        }
+              let layer = assemblyView?.layer else { return }
         let grow = CABasicAnimation(keyPath: "transform")
-        grow.fromValue = NSValue(caTransform3D: anchoredScale(0.97))
+        grow.fromValue = NSValue(caTransform3D: topAnchoredScale(0.97))
         grow.toValue = NSValue(caTransform3D: CATransform3DIdentity)
         grow.duration = 0.18
         grow.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -275,6 +278,12 @@ final class PanelController: NSObject, NSWindowDelegate {
 
         layer.add(grow, forKey: "open-grow")
         layer.add(fade, forKey: "open-fade")
+    }
+
+    /// クローズアニメーション（fillForwards）の残骸を掃除する（show側で必ず呼ぶ）
+    func clearCloseAnimations() {
+        assemblyView?.layer?.removeAnimation(forKey: "close-shrink")
+        assemblyView?.layer?.removeAnimation(forKey: "close-fade")
     }
 
     /// パネル内容の必要高さを同期的に実測する（SwiftUIの報告待ちに依存しない）
@@ -338,15 +347,55 @@ final class PanelController: NSObject, NSWindowDelegate {
     func hide() {
         removeDismissMonitors()
         state.menuHighlighted = false
-        cancelPendingHide() // 過去のフェードcompletionを無効化
+        cancelPendingHide() // 過去の遅延orderOutを無効化
         DistributedNotificationCenter.default().post(
             name: .init("com.apple.HIToolbox.endMenuTrackingNotification"), object: nil
         )
         guard let p = panel else { return }
-        p.orderOut(nil)
-        p.alphaValue = 1
-        assemblyView?.alphaValue = 1
-        resetChromeAfterHide()
+
+        // バブル演出後や「視差を減らす」時は即時クローズ
+        if isBubbleChrome || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || !p.isVisible {
+            p.orderOut(nil)
+            p.alphaValue = 1
+            assemblyView?.alphaValue = 1
+            resetChromeAfterHide()
+            return
+        }
+
+        // 純正風クローズ: アイテム側へわずかに縮みながら素早くフェード。
+        // fillForwardsで終端を保持し、世代ガード付きの遅延orderOutで確定させる
+        // （show側は cancelPendingHide + clearCloseAnimations で必ず巻き戻せる）
+        hideGeneration += 1
+        let generation = hideGeneration
+        if let layer = assemblyView?.layer {
+            let shrink = CABasicAnimation(keyPath: "transform")
+            shrink.fromValue = NSValue(caTransform3D: CATransform3DIdentity)
+            shrink.toValue = NSValue(caTransform3D: topAnchoredScale(0.97))
+            shrink.duration = 0.14
+            shrink.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            shrink.fillMode = .forwards
+            shrink.isRemovedOnCompletion = false
+
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 1.0
+            fade.toValue = 0.0
+            fade.duration = 0.12
+            fade.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            fade.fillMode = .forwards
+            fade.isRemovedOnCompletion = false
+
+            layer.add(shrink, forKey: "close-shrink")
+            layer.add(fade, forKey: "close-fade")
+        }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(0.15))
+            guard let self, self.hideGeneration == generation, let p = self.panel else { return }
+            self.clearCloseAnimations()
+            p.orderOut(nil)
+            p.alphaValue = 1
+            self.assemblyView?.alphaValue = 1
+            self.resetChromeAfterHide()
+        }
     }
 
     /// 「ぷるんっ/ポヨン」— アセンブリ（ガラスごと）を中心基準でスクワッシュ&ストレッチ。
