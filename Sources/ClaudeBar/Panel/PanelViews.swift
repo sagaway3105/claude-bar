@@ -395,6 +395,14 @@ struct BubbleView: View {
                             .font(.system(size: 9))
                             .foregroundStyle(.secondary)
                     }
+                    // リミットのリセット時刻 — なるべく目立たない極小・淡色
+                    if let resets = usageWindow?.resetsAt {
+                        Text("↺ \(UsageGaugeView.resetText(resets))")
+                            .font(.system(size: 8))
+                            .monospacedDigit()
+                            .foregroundStyle(.tertiary)
+                            .padding(.top, 1)
+                    }
                 }
                 .rotationEffect(.degrees(sin(t * 0.9) * 3))
 

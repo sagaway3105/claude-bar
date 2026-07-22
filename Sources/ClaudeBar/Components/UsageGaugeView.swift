@@ -44,7 +44,7 @@ struct UsageGaugeView: View {
             if let resets = window?.resetsAt {
                 // 残り時間は1分ごとに更新
                 TimelineView(.periodic(from: .now, by: 60)) { _ in
-                    Text("リセット: \(Self.resetText(resets))（\(Self.remainText(resets))）")
+                    Text("\(Self.resetText(resets))（\(Self.remainText(resets))後にリセット）")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
@@ -65,9 +65,9 @@ struct UsageGaugeView: View {
         let minutes = (Int(seconds) % 3600) / 60
         if hours >= 24 {
             let remainderHours = hours % 24
-            return remainderHours > 0 ? "あと\(hours / 24)日\(remainderHours)時間" : "あと\(hours / 24)日"
+            return remainderHours > 0 ? "\(hours / 24)日\(remainderHours)時間" : "\(hours / 24)日"
         }
-        if hours > 0 { return "あと\(hours)時間\(minutes)分" }
-        return "あと\(minutes)分"
+        if hours > 0 { return "\(hours)時間\(minutes)分" }
+        return "\(minutes)分"
     }
 }
