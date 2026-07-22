@@ -224,6 +224,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         contentHosting?.layoutSubtreeIfNeeded()
         p.displayIfNeeded()
         p.orderFrontRegardless()
+        playOpenAnimation()
         installDismissMonitors()
         // フルスクリーンアプリ上でもメニューバーが維持される（純正メニューと同じ振る舞い）
         DistributedNotificationCenter.default().post(
@@ -246,6 +247,35 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     // MARK: - tear-off（引き剥がし → フローティングパネル）
+
+    /// 展開アニメーション: ステータスアイテムを支点に上端中央から生える（純正Tahoeメニュー風）。
+    /// 使い捨てのCAアニメーション（モデル値不変・完了時自動除去）なので途中で閉じても競合しない。
+    private func playOpenAnimation() {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              let assembly = assemblyView, let layer = assembly.layer else { return }
+        let w = assembly.bounds.width
+        let h = assembly.bounds.height
+        // 上端中央(cx, h)基準のスケール
+        func anchoredScale(_ scale: CGFloat) -> CATransform3D {
+            var m = CATransform3DMakeTranslation(w / 2 * (1 - scale), h * (1 - scale), 0)
+            m = CATransform3DScale(m, scale, scale, 1)
+            return m
+        }
+        let grow = CABasicAnimation(keyPath: "transform")
+        grow.fromValue = NSValue(caTransform3D: anchoredScale(0.97))
+        grow.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        grow.duration = 0.18
+        grow.timingFunction = CAMediaTimingFunction(name: .easeOut)
+
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0.0
+        fade.toValue = 1.0
+        fade.duration = 0.13
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+
+        layer.add(grow, forKey: "open-grow")
+        layer.add(fade, forKey: "open-fade")
+    }
 
     /// パネル内容の必要高さを同期的に実測する（SwiftUIの報告待ちに依存しない）
     func measuredPanelHeight() -> CGFloat {
