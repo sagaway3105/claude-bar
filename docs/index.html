@@ -49,6 +49,12 @@
   h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
   .tagline { font-size: 16px; color: var(--muted); margin: 0; text-wrap: balance; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cta {
+    font-size: 12.5px; font-weight: 700; letter-spacing: 0.02em;
+    color: #fff !important; background: var(--accent);
+    border-radius: 999px; padding: 3px 14px;
+  }
+  .cta:hover, .cta:focus-visible { text-decoration: none; filter: brightness(1.08); }
   .chip {
     font-size: 12px; letter-spacing: 0.04em; color: var(--muted);
     background: var(--pill); border-radius: 999px; padding: 3px 12px;
@@ -147,6 +153,7 @@
     </div>
     <p class="tagline">Claudeのプラン使用量を、macOSのメニューバーにいつも。</p>
     <div class="chips">
+      <a class="cta" href="https://github.com/sagaway3105/claude-bar/releases/latest">⬇ ダウンロード</a>
       <span class="chip">macOS 26以降</span>
       <span class="chip">Apple Silicon</span>
       <span class="chip">Apple公証済み</span>
