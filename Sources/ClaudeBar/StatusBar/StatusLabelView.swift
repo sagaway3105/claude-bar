@@ -17,11 +17,14 @@ struct StatusLabelView: View {
         tint ?? .primary
     }
 
+    /// 純正メニューバーと同じフォント（サイズ・ウェイト・アクセシビリティ追従）
+    private static let menuBarFont: Font =
+        Font(NSFont.menuBarFont(ofSize: 0) as CTFont).monospacedDigit()
+
     var body: some View {
         HStack(spacing: 3) {
             Text(state.sessionPercentText)
-                .font(.system(size: 12, weight: .semibold))
-                .monospacedDigit()
+                .font(Self.menuBarFont)
                 .contentTransition(.numericText())
                 .animation(.snappy(duration: 0.4), value: state.sessionPercentText)
             // 消費中（回転中）はClaudeオレンジ
@@ -29,7 +32,7 @@ struct StatusLabelView: View {
                 animating: state.isActive,
                 color: state.isActive ? .claudeOrange : contentColor
             )
-            .frame(width: 14, height: 14)
+            .frame(width: 15, height: 15)
         }
         .foregroundStyle(contentColor)
         .padding(.horizontal, 10)
