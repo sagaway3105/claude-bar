@@ -159,7 +159,7 @@ extension PanelController {
         revivalTask?.cancel()
         state.mode = .bubble
         removeDismissMonitors()
-        setStatusHighlighted?(false)
+        state.menuHighlighted = false
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
 
         // hideのフェードが進行中でも確実に見える状態へ戻す（進行中のalphaアニメーションを上書き）
@@ -190,6 +190,7 @@ extension PanelController {
         cancelPendingHide()
         revivalTask?.cancel()
         removeDismissMonitors()
+        state.menuHighlighted = false
         state.mode = .bubble
         assemblyView?.alphaValue = 1
         // 進行中のalphaフェードがあっても確実に見える状態へ
@@ -470,6 +471,7 @@ extension PanelController {
     private func snapBackToMenuBar(buttonFrame: NSRect) {
         guard state.mode == .bubble, isBubbleChrome, let p = panel else { return }
         state.mode = .attached
+        state.menuHighlighted = false
         exitBubbleChrome() // ウィンドウがバブルにぴったり合った状態になる
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
 

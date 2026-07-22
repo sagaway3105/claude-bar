@@ -45,9 +45,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController.onOpenSettings = { [weak self] in
             self?.settingsController.show()
         }
-        panelController.setStatusHighlighted = { [weak self] highlighted in
-            self?.statusController.setHighlighted(highlighted)
-        }
 
         activityMonitor = ActivityMonitor { [weak self] in
             DispatchQueue.main.async {

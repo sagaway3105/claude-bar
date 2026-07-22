@@ -46,11 +46,6 @@ final class StatusItemController: NSObject {
         panelController.toggle(relativeTo: button)
     }
 
-    /// パネルが開いている間、Apple純正メニュー風の薄いカプセルハイライトを表示
-    func setHighlighted(_ highlighted: Bool) {
-        state.menuHighlighted = highlighted
-    }
-
     @objc private func didClick() {
         guard let button = statusItem.button else { return }
         if NSApp.currentEvent?.type == .rightMouseUp {

@@ -18,8 +18,6 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// StatusItemControllerから注入される（吸着判定・デフォルト位置用）
     var statusButtonFrame: (() -> NSRect?)?
     var onOpenSettings: (() -> Void)?
-    /// attachedパネルの開閉に合わせてステータスアイテムのネイティブハイライトを切り替える
-    var setStatusHighlighted: ((Bool) -> Void)?
 
     private(set) lazy var uiActions: PanelActions = makeActions()
 
@@ -205,7 +203,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         p.isMovableByWindowBackground = false
         p.level = .popUpMenu
         assemblyView?.alphaValue = 1
-        setStatusHighlighted?(true) // 押した瞬間に点灯（Apple流）
+        state.menuHighlighted = true // 押した瞬間に点灯（Apple流）
 
         // @Observableの反映を待ってから配置。ウィンドウは固定サイズ
         // （内容はSwiftUIが上詰めでガラスごと描き、余りは完全透明）
@@ -288,7 +286,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         state.mode = .floating
         bounceAssembly() // ぷるんっ
         removeDismissMonitors()
-        setStatusHighlighted?(false)
+        state.menuHighlighted = false
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
         p.level = .floating
         p.isMovableByWindowBackground = true
@@ -305,7 +303,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func hide() {
         removeDismissMonitors()
-        setStatusHighlighted?(false)
+        state.menuHighlighted = false
         guard let p = panel, p.isVisible else {
             if isBubbleChrome { resetChromeAfterHide() }
             return
@@ -321,6 +319,7 @@ final class PanelController: NSObject, NSWindowDelegate {
                 p.orderOut(nil)
                 p.alphaValue = 1
                 self.assemblyView?.alphaValue = 1
+                self.state.menuHighlighted = false
                 self.resetChromeAfterHide()
             }
         })
