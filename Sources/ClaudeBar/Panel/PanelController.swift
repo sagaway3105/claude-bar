@@ -120,10 +120,18 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     // MARK: - ウィンドウ生成
 
+    /// AppKitの「ウィンドウ上端はメニューバーの下まで」制約を無効化したパネル。
+    /// 位置は全て自前でクランプするため（バブルはメニューバーを覆う高さまで行ける）
+    private final class UnconstrainedPanel: NSPanel {
+        override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+            frameRect
+        }
+    }
+
     func ensurePanel() -> NSPanel {
         if let panel { return panel }
 
-        let p = NSPanel(
+        let p = UnconstrainedPanel(
             contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelWindowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false
