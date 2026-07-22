@@ -489,9 +489,13 @@ struct BubbleView: View {
                     .rotationEffect(.degrees(-90))
                     .padding(4)
                 VStack(spacing: 0) {
-                    // パネルのヘッダーと同じく常にClaudeオレンジ（消費中は回転で区別）
-                    ClaudeLogoView(animating: state.isActive, color: .claudeOrange)
-                        .frame(width: 14, height: 14)
+                    // 待機中は通常色・消費中だけClaudeオレンジ（オレンジ=消費中のシグナルを守る）。
+                    // 視認性は色ではなくサイズで確保（16ptで光条も太くなる）
+                    ClaudeLogoView(
+                        animating: state.isActive,
+                        color: state.isActive ? .claudeOrange : .primary
+                    )
+                    .frame(width: 16, height: 16)
                     Text(percentText)
                         .font(.system(size: 13))
                         .monospacedDigit()
