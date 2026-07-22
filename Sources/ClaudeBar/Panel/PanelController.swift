@@ -109,9 +109,8 @@ final class PanelController: NSObject, NSWindowDelegate {
                 // バブル表示中: メニューバーを押せば通常のパネルに戻る
                 showAttached(relativeTo: button)
             } else {
-                // フローティング表示中: 前面に出しつつポヨンと弾んで居場所をアピール
-                panel.orderFrontRegardless()
-                bounceAssembly()
+                // フローティング表示中: メニューバーを押せば引き剥がし前（attached）に戻る
+                showAttached(relativeTo: button)
             }
             return
         }
@@ -412,25 +411,45 @@ final class PanelController: NSObject, NSWindowDelegate {
         guard let assembly = assemblyView, let layer = assembly.layer else { return }
         let w = assembly.bounds.width
         let h = assembly.bounds.height
-        // 弾む中心 = 見えているコンテンツの中心
-        // （パネルモードは上詰めで下が透明領域のため、単純な矩形中心だとズレる）
-        let cx = w / 2
-        let cy = isBubbleChrome ? h / 2 : h - lastPanelSize.height / 2
-        // 中心(cx,cy)基準のスケール: x' = sx*x + cx*(1-sx)
-        func scaled(_ sx: CGFloat, _ sy: CGFloat) -> CATransform3D {
-            var m = CATransform3DMakeTranslation(cx * (1 - sx), cy * (1 - sy), 0)
-            m = CATransform3DScale(m, sx, sy, 1)
-            return m
-        }
         let k = intensity
         let animation = CAKeyframeAnimation(keyPath: "transform")
-        animation.values = [
-            CATransform3DIdentity,
-            scaled(1 + 0.12 * k, 1 - 0.12 * k),
-            scaled(1 - 0.06 * k, 1 + 0.06 * k),
-            scaled(1 + 0.03 * k, 1 - 0.02 * k),
-            CATransform3DIdentity,
-        ].map { NSValue(caTransform3D: $0) }
+        if isBubbleChrome {
+            // バブル: ウィンドウに余白があるため中心基準で素直に膨らめる
+            let cx = w / 2
+            let cy = h / 2
+            func scaled(_ sx: CGFloat, _ sy: CGFloat) -> CATransform3D {
+                var m = CATransform3DMakeTranslation(cx * (1 - sx), cy * (1 - sy), 0)
+                m = CATransform3DScale(m, sx, sy, 1)
+                return m
+            }
+            animation.values = [
+                CATransform3DIdentity,
+                scaled(1 + 0.12 * k, 1 - 0.12 * k),
+                scaled(1 - 0.06 * k, 1 + 0.06 * k),
+                scaled(1 + 0.03 * k, 1 - 0.02 * k),
+                CATransform3DIdentity,
+            ].map { NSValue(caTransform3D: $0) }
+        } else {
+            // パネル: コンテンツは横幅ぴったり・上端いっぱいのため、拡大方向は
+            // ウィンドウ境界でクリップされる（上下欠けの原因）。
+            // 縦は上端アンカーで「下の透明帯ぶんだけ」伸ばし、横は1.0以下に留める
+            let contentH = max(1, lastPanelSize.height)
+            let slackRatio = max(0, h - contentH - 2) / contentH
+            let stretch = 1 + min(0.05 * k, slackRatio)
+            func scaled(_ sx: CGFloat, _ sy: CGFloat) -> CATransform3D {
+                // 横は中央基準・縦は上端(y=h)基準
+                var m = CATransform3DMakeTranslation(w / 2 * (1 - sx), h * (1 - sy), 0)
+                m = CATransform3DScale(m, sx, sy, 1)
+                return m
+            }
+            animation.values = [
+                CATransform3DIdentity,
+                scaled(1 - 0.05 * k, stretch), // 引き剥がされて下へぷるん
+                scaled(1, 1 - 0.045 * k), // 反動で縮む
+                scaled(1 - 0.015 * k, 1 + min(0.012 * k, slackRatio)),
+                CATransform3DIdentity,
+            ].map { NSValue(caTransform3D: $0) }
+        }
         animation.keyTimes = [0, 0.22, 0.5, 0.75, 1]
         animation.duration = 0.45
         animation.timingFunctions = Array(
