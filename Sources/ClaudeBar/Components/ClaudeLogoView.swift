@@ -35,10 +35,10 @@ struct StarburstShape: Shape {
         let center = CGPoint(x: rect.midX, y: rect.midY)
         let radius = min(rect.width, rect.height) / 2
         // 長い光条と短い光条が交互に近いリズムで並ぶ
-        let lengths: [CGFloat] = [1.0, 0.72, 0.93, 0.70, 1.0, 0.72, 0.93, 0.70, 1.0, 0.72]
-        let angleJitter: [CGFloat] = [0, 0.04, -0.03, 0.04, 0, -0.04, 0.03, 0, -0.03, 0.04]
+        let lengths: [CGFloat] = [1.0, 0.68, 0.88, 0.74, 1.0, 0.66, 0.90, 0.72, 0.97, 0.68, 0.86, 0.74]
+        let angleJitter: [CGFloat] = [0, 0.05, -0.04, 0.03, 0, -0.05, 0.04, 0, -0.03, 0.05, -0.04, 0.03]
         let count = lengths.count
-        let rayWidth = radius * 0.18
+        let rayWidth = radius * 0.15
         let innerRadius: CGFloat = 0 // 中心まで重ねて穴を作らない
 
         var path = Path()
