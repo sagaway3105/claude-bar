@@ -12,6 +12,13 @@ struct StatusLabelView: View {
         return nil
     }
 
+    /// Apple純正: メニュー展開中は明るい白ピルの上で内容を濃色に反転する
+    private var contentColor: Color {
+        if let tint { return tint }
+        if state.menuHighlighted { return .black.opacity(0.85) }
+        return .primary
+    }
+
     var body: some View {
         HStack(spacing: 3) {
             Text(state.sessionPercentText)
@@ -22,18 +29,18 @@ struct StatusLabelView: View {
             // 消費中（回転中）はClaudeオレンジ
             ClaudeLogoView(
                 animating: state.isActive,
-                color: state.isActive ? .claudeOrange : (tint ?? .primary)
+                color: state.isActive ? .claudeOrange : contentColor
             )
             .frame(width: 14, height: 14)
         }
-        .foregroundStyle(tint ?? .primary)
+        .foregroundStyle(contentColor)
         .padding(.horizontal, 10)
         // 縦をメニューバーいっぱいに広げてからピルを敷く（Apple純正のフルハイトピル）
         .frame(maxHeight: .infinity)
         .background(
             Capsule()
-                .fill(Color.primary.opacity(state.menuHighlighted ? 0.13 : 0))
-                .padding(.vertical, 1)
+                .fill(.white.opacity(state.menuHighlighted ? 0.85 : 0))
+                .padding(.vertical, 2)
         )
         .fixedSize(horizontal: true, vertical: false)
         .onGeometryChange(for: CGFloat.self) { proxy in
