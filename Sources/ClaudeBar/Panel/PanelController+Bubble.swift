@@ -34,12 +34,15 @@ extension PanelController {
         assembly.frame = NSRect(origin: floatAnchor, size: NSSize(width: diameter, height: diameter))
         contentHosting?.frame = assembly.bounds
 
-        // ドラッグ時のウィンドウ原点の可動域（メニューバーとDockを避けた可視領域）
+        // ドラッグ時のウィンドウ原点の可動域。
+        // 下はDockを避け、上はメニューバーへ食い込める（吸着判定圏に届くように+40pt）
         let screen = NSScreen.screens.first { $0.frame.contains(center) } ?? p.screen ?? NSScreen.main
-        if let vf = screen?.visibleFrame {
+        if let vf = screen?.visibleFrame, let sf = screen?.frame {
             floatBounds = NSRect(
-                x: vf.minX, y: vf.minY,
-                width: max(0, vf.width - size), height: max(0, vf.height - size)
+                x: sf.minX,
+                y: vf.minY,
+                width: max(0, sf.width - size),
+                height: max(0, (sf.maxY + 40) - vf.minY - size)
             )
         }
         startMouseTracking()
