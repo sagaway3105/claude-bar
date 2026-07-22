@@ -14,7 +14,9 @@ rm -f "$ZIP"
 ditto -c -k --keepParent build/ClaudeBar.app "$ZIP"
 
 # Developer ID署名済み かつ notary認証情報（claudebar-notary プロファイル）があれば公証する
-if codesign -dv build/ClaudeBar.app 2>&1 | grep -q "Developer ID" &&
+# ※ grep -q はpipefail下でSIGPIPE(141)になるため変数に受けてから判定する
+SIGN_INFO=$(codesign -dvv build/ClaudeBar.app 2>&1 || true)
+if [[ "$SIGN_INFO" == *"Developer ID"* ]] &&
    xcrun notarytool history --keychain-profile claudebar-notary >/dev/null 2>&1; then
   echo "📤 Appleへ公証を申請中（数分かかります）..."
   xcrun notarytool submit "$ZIP" --keychain-profile claudebar-notary --wait

@@ -46,16 +46,30 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Claude Codeのログインをターミナルで起動するために使用します。</string>
 </dict>
 </plist>
 EOF
+
+# Hardened Runtime下でAppleEvents送信（ターミナルでのログイン起動）を許可
+cat > "build/entitlements.plist" <<ENTEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+</dict>
+</plist>
+ENTEOF
 
 # 署名の優先順: Developer ID（配布用・Hardened Runtime付き）> Apple Development > ad-hoc
 # ※ grep不一致でもpipefailで落ちないよう || true を付ける
 DEVID=$(security find-identity -p codesigning -v 2>/dev/null | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"' || true)
 IDENTITY=$(security find-identity -p codesigning -v 2>/dev/null | grep -o '"Apple Development: [^"]*"' | head -1 | tr -d '"' || true)
 if [[ -n "${DEVID}" ]]; then
-  codesign --force --options runtime --timestamp --sign "${DEVID}" "$APP"
+  codesign --force --options runtime --timestamp --entitlements build/entitlements.plist --sign "${DEVID}" "$APP"
   echo "🔏 Developer ID署名: ${DEVID}"
 elif [[ -n "${IDENTITY}" ]]; then
   codesign --force --sign "${IDENTITY}" "$APP"

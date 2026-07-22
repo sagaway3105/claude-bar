@@ -36,13 +36,9 @@ Claude Codeがトークン消費中はロゴが回転しながら脈打ち、80%
 ## インストール（ダウンロード版）
 
 1. [Releases](https://github.com/sagaway3105/claude-bar/releases/latest) から `ClaudeBar-vX.X.X.zip` をダウンロードして解凍
-2. `ClaudeBar.app` を **アプリケーション** フォルダに移動
-3. **初回のみ、Gatekeeperの許可が必要です**（Apple公証を受けていないアプリのため）:
-   1. ClaudeBar.app をダブルクリック →「開けません」と出るので、いったん閉じる
-   2. **システム設定 → プライバシーとセキュリティ** を開き、下の方の「"ClaudeBar"はブロックされました」の隣の **「このまま開く」** を押す
-   3. 確認ダイアログで「開く」（Touch ID / パスワード）
-   - ターミナル派なら `xattr -d com.apple.quarantine /Applications/ClaudeBar.app` の一発でも同じです
-4. メニューバーに「–% ✳」が出たら成功。あとは下の「初めて使う人のセットアップ」へ
+2. `ClaudeBar.app` を **アプリケーション** フォルダに移動してダブルクリック
+   - v1.2.0以降は**Apple公証済み**（Developer ID署名）なので、そのまま起動できます
+3. メニューバーに「–% ✳」が出たら成功。あとは下の「初めて使う人のセットアップ」へ
 
 ## 💰 追加課金は不要です
 
@@ -114,4 +110,4 @@ echo "usage:100,41,12" >> /tmp/cbcmd  # → 割れる
 - **トークンのrefresh（更新）は行いません。** refresh tokenのローテーションはClaude Code本体に任せます（二重refreshによる認証破壊と、規約上のリスクの両方を避けるため）
 - **推論APIは一切呼びません。** トークン消費を伴わない使用量照会のみです
 - それでも `/api/oauth/usage` は非公開エンドポイントであり、Anthropicは予告なくアクセス制御を変更できます。その場合このアプリの使用量表示は動作しなくなります（同種のOSSツール — CodexBar、Raycast拡張など — と同じ立ち位置です）
-- 配布中のzipは **Developer ID署名 / Apple公証なし** です。そのため初回起動時に上記のGatekeeper許可が必要になります。Homebrew cask等での正式配布にはApple Developer Program加入（Developer ID署名 + 公証）が必要です
+- v1.2.0以降は **Developer ID署名 + Apple公証済み** で配布しています（Gatekeeperの警告なしで起動できます）
