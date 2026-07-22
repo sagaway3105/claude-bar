@@ -427,7 +427,7 @@ struct BubbleView: View {
         // 微かなドロップシャドウ — バブルの円が下方向へ落とす影
         .background(
             Circle()
-                .fill(Color.black.opacity(0.3))
+                .fill(Color.black.opacity(0.15))
                 .blur(radius: 7)
                 .offset(y: 5)
         )
