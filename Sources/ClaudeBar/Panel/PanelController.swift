@@ -57,7 +57,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     var bubbleTapResetTask: Task<Void, Never>?
 
     // レイアウト定数
-    let panelWidth: CGFloat = 240
+    let panelWidth: CGFloat = 300
     let panelWindowHeight: CGFloat = 460 // 固定（内容はSwiftUIが上詰めで描き、余りは完全透明）
     let bubbleDiameter: CGFloat = 76
     let bubbleWindowSize: CGFloat = 120 // バブル本体+浮遊・伸縮マージン(±22pt)

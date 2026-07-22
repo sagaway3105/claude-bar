@@ -64,12 +64,21 @@ struct IridescentRim<S: InsettableShape>: View {
     }
 }
 
-/// コントロールセンター風の繊細なヘアライン縁取り
+/// Apple公式メニュー風の繊細なヘアライン縁取り
 struct PanelSheen: View {
     var body: some View {
-        RoundedRectangle(cornerRadius: 24)
+        RoundedRectangle(cornerRadius: 18)
             .strokeBorder(.white.opacity(0.14), lineWidth: 1)
             .allowsHitTesting(false)
+    }
+}
+
+/// セクション区切りのヘアライン（バッテリーメニュー等と同じ流儀）
+struct Hairline: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.09))
+            .frame(height: 1)
     }
 }
 
@@ -96,21 +105,22 @@ struct UsagePanelView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Spacer()
                 Capsule().fill(.tertiary).frame(width: 36, height: 5)
                 Spacer()
             }
-            .padding(.top, 9)
+            .padding(.top, 7)
             .contentShape(Rectangle())
             .gesture(WindowDragGesture())
 
-            HStack(spacing: 6) {
+            // Apple公式メニューと同じ太字ヘッダ
+            HStack(spacing: 7) {
                 ClaudeLogoView(animating: state.isActive, color: .claudeOrange)
-                    .frame(width: 15, height: 15)
+                    .frame(width: 16, height: 16)
                 Text("Claude 使用量")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                 Spacer()
                 if state.mode == .floating {
                     IconButton(systemName: "xmark.circle.fill", help: "メニューバーへ戻す") {
@@ -118,6 +128,8 @@ struct UsagePanelView: View {
                     }
                 }
             }
+            .padding(.top, 2)
+            .padding(.bottom, 12)
 
             if let message = state.errorMessage {
                 VStack(alignment: .leading, spacing: 6) {
@@ -141,15 +153,19 @@ struct UsagePanelView: View {
                     }
                 }
                 .modifier(SectionTile())
+                .padding(.bottom, 12)
             }
 
             UsageGaugeView(title: "現在のセッション", window: state.usage?.session, baseTint: baseTint)
-                .modifier(SectionTile())
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("週間制限")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            Hairline().padding(.vertical, 12)
+
+            Text("週間制限")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 8)
+
+            VStack(alignment: .leading, spacing: 12) {
                 UsageGaugeView(title: "すべてのモデル", window: state.usage?.weeklyAll, baseTint: baseTint)
                 UsageGaugeView(title: state.fableLabel, window: state.usage?.weeklyFable, baseTint: baseTint)
 
@@ -161,7 +177,8 @@ struct UsagePanelView: View {
                     ExtraUsageRow(extra: extra)
                 }
             }
-            .modifier(SectionTile())
+
+            Hairline().padding(.vertical, 10)
 
             HStack(spacing: 8) {
                 Text(updatedText)
@@ -173,12 +190,11 @@ struct UsagePanelView: View {
                 IconButton(systemName: "gearshape.fill", help: "設定") { actions.settings() }
                 IconButton(systemName: "power", help: "終了") { actions.quit() }
             }
-            .padding(.top, 2)
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 11)
-        .frame(width: 240)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+        .frame(width: 300)
+        .glassEffect(.regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.45)), in: RoundedRectangle(cornerRadius: 18))
         .overlay(PanelSheen())
     }
 
@@ -285,7 +301,7 @@ struct BubbleView: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             ZStack {
-                Circle().stroke(.quaternary, lineWidth: 4)
+                Circle().stroke(Color.primary.opacity(0.14), lineWidth: 4)
                 Circle()
                     .trim(from: 0, to: max(0.003, min(value, 100) / 100))
                     .stroke(
@@ -327,7 +343,7 @@ struct BubbleView: View {
             .padding(7)
         }
         .frame(width: 76, height: 76)
-        .glassEffect(.regular, in: Circle())
+        .glassEffect(.regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.45)), in: Circle())
         .overlay(IridescentRim(shape: Circle()))
         .contentShape(Circle())
         .contextMenu {

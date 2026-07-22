@@ -29,7 +29,7 @@ struct UsageGaugeView: View {
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(.quaternary)
+                    Capsule().fill(Color.primary.opacity(0.12))
                     Capsule()
                         .fill(LinearGradient(
                             colors: [tint.opacity(0.55), tint],
@@ -46,7 +46,7 @@ struct UsageGaugeView: View {
                 TimelineView(.periodic(from: .now, by: 60)) { _ in
                     Text("リセット: \(Self.resetText(resets))（\(Self.remainText(resets))）")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
