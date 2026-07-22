@@ -364,7 +364,9 @@ struct BubbleView: View {
                         startRadius: 1, endRadius: 26 * sizeFactor
                     ))
                 // ゲージ溝は非表示（進捗アークだけを見せる）
+                // ゲージだけ従来の位置（縁から7pt）に留める追加インセット
                 Circle().stroke(Color.primary.opacity(0), lineWidth: 4)
+                    .padding(4)
                 Circle()
                     .trim(from: 0, to: max(0.003, min(value, 100) / 100))
                     .stroke(
@@ -375,6 +377,7 @@ struct BubbleView: View {
                         style: StrokeStyle(lineWidth: 4, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
+                    .padding(4)
                 VStack(spacing: 0) {
                     // 消費中だけClaudeオレンジ、待機中はデフォルトカラー
                     ClaudeLogoView(
