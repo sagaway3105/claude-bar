@@ -116,6 +116,12 @@ final class DebugBridge {
         }
         if let w = panelController.panel {
             info["window"] = [w.frame.origin.x, w.frame.origin.y, w.frame.width, w.frame.height]
+            let content = w.contentRect(forFrameRect: w.frame)
+            info["contentRect"] = [content.width, content.height]
+            info["contentViewIsContainer"] = (w.contentView === panelController.containerView)
+        }
+        if let c = panelController.containerView {
+            info["container"] = [c.frame.origin.x, c.frame.origin.y, c.frame.width, c.frame.height]
         }
         if let a = panelController.assemblyView {
             info["assemblyModel"] = [a.frame.origin.x, a.frame.origin.y, a.frame.width, a.frame.height]
@@ -123,8 +129,8 @@ final class DebugBridge {
                 info["assemblyPresentation"] = [pres.position.x, pres.position.y]
             }
         }
-        if let g = panelController.glassView {
-            info["glass"] = [g.frame.origin.x, g.frame.origin.y, g.frame.width, g.frame.height]
+        if let h = panelController.contentHosting {
+            info["hosting"] = [h.frame.origin.x, h.frame.origin.y, h.frame.width, h.frame.height]
         }
         if let screen = NSScreen.main {
             info["screen"] = [screen.frame.width, screen.frame.height]

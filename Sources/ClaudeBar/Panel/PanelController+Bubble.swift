@@ -13,8 +13,9 @@ extension PanelController {
     // MARK: - バブル用クローム（小さな固定ウィンドウ + 中で漂うアセンブリ）
 
     func enterBubbleChrome(centeredAt center: NSPoint) {
-        guard let p = panel, let assembly = assemblyView, let glass = glassView else { return }
+        guard let p = panel, let assembly = assemblyView else { return }
         isBubbleChrome = true
+        containerView?.pinsChildrenToBounds = false
         let size = bubbleWindowSize
         isProgrammaticMove = true
         p.setFrame(
@@ -30,7 +31,7 @@ extension PanelController {
         floatAnchor = NSPoint(x: margin, y: margin)
         wasHoveringBubble = false
         assembly.frame = NSRect(origin: floatAnchor, size: NSSize(width: bubbleDiameter, height: bubbleDiameter))
-        glass.cornerRadius = bubbleDiameter / 2
+        contentHosting?.frame = assembly.bounds
 
         // ドラッグ時のウィンドウ原点の可動域（メニューバーとDockを避けた可視領域）
         let screen = NSScreen.screens.first { $0.frame.contains(center) } ?? p.screen ?? NSScreen.main
@@ -55,6 +56,7 @@ extension PanelController {
         guard isBubbleChrome, let p = panel, let assembly = assemblyView, let container = containerView else { return }
         stopFloating()
         isBubbleChrome = false
+        container.pinsChildrenToBounds = true
         stopMouseTracking()
         removeBubbleMouseMonitor()
         let assemblyOnScreen = p.convertToScreen(assembly.frame)
@@ -62,8 +64,9 @@ extension PanelController {
         p.setFrame(assemblyOnScreen, display: false)
         isProgrammaticMove = false
         p.hasShadow = true
-        assembly.autoresizingMask = [.width, .height]
+        assembly.autoresizingMask = []
         assembly.frame = container.bounds
+        syncPanelChromeFrames()
     }
 
     /// 非表示のままクロームを解除（pop後・吸着後など）
@@ -71,15 +74,20 @@ extension PanelController {
         guard isBubbleChrome, let p = panel, let assembly = assemblyView, let container = containerView else { return }
         stopFloating()
         isBubbleChrome = false
+        container.pinsChildrenToBounds = true
         stopMouseTracking()
         removeBubbleMouseMonitor()
         isProgrammaticMove = true
-        p.setFrame(NSRect(origin: p.frame.origin, size: lastPanelSize), display: false)
+        p.setFrame(
+            NSRect(origin: p.frame.origin, size: NSSize(width: panelWidth, height: panelWindowHeight)),
+            display: false
+        )
         isProgrammaticMove = false
         p.hasShadow = true
-        assembly.autoresizingMask = [.width, .height]
+        assembly.autoresizingMask = []
         assembly.frame = container.bounds
         assembly.alphaValue = 1
+        syncPanelChromeFrames()
     }
 
     // MARK: - カーソル追跡（ホバーのポヨン）
@@ -130,7 +138,6 @@ extension PanelController {
         removeDismissMonitors()
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
 
-        glassView?.cornerRadius = bubbleDiameter / 2
         // hideのフェードが進行中でも確実に見える状態へ戻す（進行中のalphaアニメーションを上書き）
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.08
@@ -211,12 +218,12 @@ extension PanelController {
         guard state.mode == .bubble, let p = panel else { return }
         state.mode = .floating
         exitBubbleChrome()
-        glassView?.cornerRadius = panelCornerRadius
         p.isMovableByWindowBackground = true
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let p = self.panel else { return }
-            let size = self.lastPanelSize
+            self.lastPanelSize = NSSize(width: self.panelWidth, height: self.measuredPanelHeight())
+            let size = NSSize(width: self.panelWidth, height: self.panelWindowHeight)
 
             let bubbleFrame = p.frame
             var origin = NSPoint(
@@ -226,7 +233,8 @@ extension PanelController {
             if let screen = p.screen ?? NSScreen.main {
                 let vf = screen.visibleFrame
                 origin.x = min(max(origin.x, vf.minX + 8), vf.maxX - size.width - 8)
-                origin.y = min(max(origin.y, vf.minY + 8), vf.maxY - size.height - 8)
+                // 内容は上詰めなので、内容部分が画面内に収まるようにクランプ
+                origin.y = min(max(origin.y, vf.minY + 8 - (size.height - self.lastPanelSize.height)), vf.maxY - size.height - 8)
             }
             self.animateFrame(to: NSRect(origin: origin, size: size))
         }

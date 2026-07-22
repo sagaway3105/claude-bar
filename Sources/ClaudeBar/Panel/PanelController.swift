@@ -21,11 +21,11 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private(set) lazy var uiActions: PanelActions = makeActions()
 
-    // ウィンドウ構成: panel > container(クリック透過) > assembly(動かす単位) > glass > hosting
+    // ウィンドウ構成: panel > container(クリック透過) > assembly(動かす単位) > hosting
+    // ガラスはSwiftUI側の .glassEffect が内容にピッタリ描く（AppKitのレイアウト問題を排除）
     var panel: NSPanel?
     var containerView: PassthroughContainerView?
     var assemblyView: NSView?
-    var glassView: NSGlassEffectView?
     var contentHosting: NSHostingView<PanelRootView>?
     var popWindow: NSWindow?
 
@@ -56,6 +56,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     // レイアウト定数
     let panelWidth: CGFloat = 240
+    let panelWindowHeight: CGFloat = 460 // 固定（内容はSwiftUIが上詰めで描き、余りは完全透明）
     let bubbleDiameter: CGFloat = 76
     let bubbleWindowSize: CGFloat = 120 // バブル本体+浮遊・伸縮マージン(±22pt)
     let panelCornerRadius: CGFloat = 24
@@ -107,7 +108,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         if let panel { return panel }
 
         let p = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: 380),
+            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelWindowHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
@@ -123,38 +124,30 @@ final class PanelController: NSObject, NSWindowDelegate {
         p.animationBehavior = .none
         p.delegate = self
 
-        let container = PassthroughContainerView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: 380))
+        let container = PassthroughContainerView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: panelWindowHeight))
         container.wantsLayer = true
 
-        // 「アセンブリ」= 動かす単位。ガラスのcontentViewに内容を入れる
-        // （alphaを下げたりコンテンツを外に出すとLiquid Glassのブラー/屈折が無効化されるため、
-        //   透明感は style = .clear に任せる）
+        // フレームは全て手動管理（autoresizing/Auto Layoutのタイミング問題を排除）
         let assembly = NSView(frame: container.bounds)
         assembly.wantsLayer = true
-        assembly.autoresizingMask = [.width, .height]
-
-        let glass = NSGlassEffectView(frame: assembly.bounds)
-        glass.cornerRadius = panelCornerRadius
-        glass.style = .clear // 透明で背後を屈折させるLiquid Glass
-        glass.autoresizingMask = [.width, .height]
+        assembly.autoresizingMask = []
 
         let hosting = NSHostingView(
             rootView: PanelRootView(state: state, settings: settings, actions: uiActions)
         )
-        // SwiftUI側の固定サイズ(バブル76pt等)が必須制約としてAuto Layoutに伝わると
-        // ウィンドウごと内容サイズへ強制収縮されるため、サイズ要求を無効化する。
-        // 実サイズはPanelRootViewのonGeometryChange→contentHeightChangedで追従する。
+        // SwiftUI側の固定サイズが必須制約としてAuto Layoutへ伝わり
+        // ウィンドウが内容サイズへ勝手に収縮するため、サイズ要求を無効化する
         hosting.sizingOptions = []
-        glass.contentView = hosting
+        hosting.frame = assembly.bounds
+        hosting.autoresizingMask = []
 
-        assembly.addSubview(glass)
+        assembly.addSubview(hosting)
         container.addSubview(assembly)
         p.contentView = container
 
         panel = p
         containerView = container
         assemblyView = assembly
-        glassView = glass
         contentHosting = hosting
         return p
     }
@@ -192,26 +185,27 @@ final class PanelController: NSObject, NSWindowDelegate {
         state.mode = .attached
         p.isMovableByWindowBackground = false
         p.level = .popUpMenu
-        glassView?.cornerRadius = panelCornerRadius
         assemblyView?.alphaValue = 1
 
-        // @Observableの反映を待ってから配置（高さはonGeometryChange→contentHeightChangedで追従）
+        // @Observableの反映を待ってから配置。ウィンドウは固定サイズ
+        // （内容はSwiftUIが上詰めでガラスごと描き、余りは完全透明）
         DispatchQueue.main.async { [weak self] in
             guard let self, let p = self.panel else { return }
-            let size = self.lastPanelSize
+            self.lastPanelSize = NSSize(width: self.panelWidth, height: self.measuredPanelHeight())
 
             guard let buttonWindow = button.window else { return }
             let screen = buttonWindow.screen ?? NSScreen.main
             let buttonRect = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
-            var x = buttonRect.midX - size.width / 2
+            var x = buttonRect.midX - self.panelWidth / 2
             if let screen {
-                x = min(max(x, screen.frame.minX + 8), screen.frame.maxX - size.width - 8)
+                x = min(max(x, screen.frame.minX + 8), screen.frame.maxX - self.panelWidth - 8)
             }
-            let y = buttonRect.minY - size.height - 6
+            let y = buttonRect.minY - self.panelWindowHeight - 6
 
             self.isProgrammaticMove = true
-            p.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+            p.setFrame(NSRect(x: x, y: y, width: self.panelWidth, height: self.panelWindowHeight), display: true)
             self.isProgrammaticMove = false
+            self.syncPanelChromeFrames()
             self.attachedOrigin = NSPoint(x: x, y: y)
 
             p.alphaValue = 0
@@ -225,21 +219,37 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// コンテンツの実高さが変わったらウィンドウを上端固定で追従させる
+    /// コンテンツの実高さの記録（ウィンドウは固定サイズなのでリサイズはしない。
+    /// 下部の透明帯クリック判定に使う）
     private func contentHeightChanged(_ height: CGFloat) {
-        guard let p = panel, p.isVisible, state.mode != .bubble,
-              !isProgrammaticMove, height > 100 else { return }
-        let frame = p.frame
-        guard abs(frame.height - height) > 2 else { return }
-        let newFrame = NSRect(x: frame.origin.x, y: frame.maxY - height, width: frame.width, height: height)
-        isProgrammaticMove = true
-        p.setFrame(newFrame, display: true)
-        isProgrammaticMove = false
-        lastPanelSize = newFrame.size
-        if state.mode == .attached { attachedOrigin = newFrame.origin }
+        guard height > 100 else { return }
+        lastPanelSize = NSSize(width: panelWidth, height: height)
     }
 
     // MARK: - tear-off（引き剥がし → フローティングパネル）
+
+    /// パネル内容の必要高さを同期的に実測する（SwiftUIの報告待ちに依存しない）
+    func measuredPanelHeight() -> CGFloat {
+        let controller = NSHostingController(
+            rootView: UsagePanelView(state: state, actions: uiActions)
+        )
+        let size = controller.sizeThatFits(in: NSSize(width: panelWidth, height: 2000))
+        return max(200, min(size.height, 800))
+    }
+
+    /// パネルモードでは assembly/glass/hosting をコンテナへ明示同期する。
+    /// リサイズ通知中はautoresize処理と競合するため、次のランループで行う。
+    func windowDidResize(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            self?.syncPanelChromeFrames()
+        }
+    }
+
+    func syncPanelChromeFrames() {
+        guard !isBubbleChrome, let container = containerView else { return }
+        assemblyView?.frame = container.bounds
+        contentHosting?.frame = container.bounds
+    }
 
     func windowDidMove(_ notification: Notification) {
         guard let p = panel, p.isVisible, !isProgrammaticMove else { return }
@@ -352,7 +362,12 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
         if let m = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
             MainActor.assumeIsolated {
-                if let self, let p = self.panel, event.window !== p {
+                guard let self, let p = self.panel else { return }
+                if event.window !== p {
+                    self.hideIfAttached()
+                } else if self.state.mode == .attached,
+                          event.locationInWindow.y < p.frame.height - self.lastPanelSize.height {
+                    // パネル下の透明帯をクリックした場合も閉じる
                     self.hideIfAttached()
                 }
             }

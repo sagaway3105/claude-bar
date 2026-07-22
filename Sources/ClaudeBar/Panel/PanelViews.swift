@@ -35,6 +35,8 @@ struct PanelRootView: View {
                     }
             }
         }
+        // ウィンドウは固定サイズなので、内容（ガラスごと）は上詰めで描く
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
 
@@ -62,19 +64,22 @@ struct IridescentRim<S: InsettableShape>: View {
     }
 }
 
+/// コントロールセンター風の繊細なヘアライン縁取り
 struct PanelSheen: View {
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            IridescentRim(shape: RoundedRectangle(cornerRadius: 24))
-            // 上部のスペキュラハイライト
-            Ellipse()
-                .fill(.white.opacity(0.09))
-                .frame(width: 170, height: 44)
-                .blur(radius: 10)
-                .offset(x: 16, y: -14)
-        }
-        .allowsHitTesting(false)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
+        RoundedRectangle(cornerRadius: 24)
+            .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+            .allowsHitTesting(false)
+    }
+}
+
+/// コントロールセンターのモジュール風タイル背景
+struct SectionTile: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 
@@ -129,14 +134,11 @@ struct UsagePanelView: View {
                         .tint(.claudeOrange)
                     }
                 }
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                .modifier(SectionTile())
             }
 
             UsageGaugeView(title: "現在のセッション", window: state.usage?.session, prominent: true)
-
-            Divider().opacity(0.5)
+                .modifier(SectionTile())
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("週間制限")
@@ -145,18 +147,20 @@ struct UsagePanelView: View {
                 UsageGaugeView(title: "すべてのモデル", window: state.usage?.weeklyAll)
                 UsageGaugeView(title: state.fableLabel, window: state.usage?.weeklyFable)
 
-                if let forecast = state.weeklyForecast {
-                    ForecastRow(forecast: forecast)
+                // ペース予測は上限に達しそうな時だけ警告として表示
+                if case .willHit(let eta) = state.weeklyForecast {
+                    ForecastRow(eta: eta)
                 }
                 if let extra = state.usage?.extra, extra.isEnabled {
                     ExtraUsageRow(extra: extra)
                 }
             }
+            .modifier(SectionTile())
 
             HStack(spacing: 8) {
                 Text(updatedText)
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                 Spacer()
                 IconButton(systemName: "arrow.clockwise", help: "今すぐ更新") { actions.refresh() }
                 IconButton(systemName: "bubbles.and.sparkles.fill", help: "浮遊モード（バブル）") { actions.toBubble() }
@@ -165,9 +169,10 @@ struct UsagePanelView: View {
             }
             .padding(.top, 2)
         }
-        .padding(.horizontal, 14)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 11)
         .frame(width: 240)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         .overlay(PanelSheen())
     }
 
@@ -180,26 +185,15 @@ struct UsagePanelView: View {
 }
 
 struct ForecastRow: View {
-    let forecast: WeeklyForecast
+    let eta: Date
 
     var body: some View {
         HStack(spacing: 5) {
-            switch forecast {
-            case .safe:
-                Image(systemName: "checkmark.circle")
-                Text("このペースならリセットまで持ちそうです")
-            case .willHit(let date):
-                Image(systemName: "exclamationmark.triangle.fill")
-                Text("このペースだと \(Self.format(date)) 頃に週間上限")
-            }
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text("このペースだと \(Self.format(eta)) 頃に週間上限")
         }
         .font(.caption2)
-        .foregroundStyle(color)
-    }
-
-    private var color: Color {
-        if case .willHit = forecast { return .orange }
-        return .secondary
+        .foregroundStyle(.orange)
     }
 
     private static func format(_ date: Date) -> String {
@@ -323,6 +317,7 @@ struct BubbleView: View {
             .padding(7)
         }
         .frame(width: 76, height: 76)
+        .glassEffect(.regular, in: Circle())
         .overlay(IridescentRim(shape: Circle()))
         .contentShape(Circle())
         .contextMenu {
