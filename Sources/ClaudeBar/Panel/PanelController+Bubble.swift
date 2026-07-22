@@ -55,19 +55,25 @@ extension PanelController {
             return
         }
         var point = defaultBubblePoint()
+        var emergeFromPanel = false
         if let pf = panel, pf.isVisible {
-            // パネルの左横に出す（パネルと重ならないように）
-            point = NSPoint(x: pf.frame.minX - bubbleWindowSize / 2 + 24, y: pf.frame.midY)
+            // パネルの右横・フッター（🫧ボタン）の高さから「ポンっ」と出す
+            emergeFromPanel = true
+            point = NSPoint(
+                x: pf.frame.maxX + 44,
+                y: pf.frame.maxY - lastPanelSize.height + 34
+            )
             if let vf = (pf.screen ?? NSScreen.main)?.visibleFrame {
-                point.x = max(point.x, vf.minX + 60)
+                point.x = min(point.x, vf.maxX - 60)
                 point.y = min(max(point.y, vf.minY + 60), vf.maxY - 60)
             }
         }
-        showBubble(at: point, poppingIn: true)
+        showBubble(at: point, poppingIn: true, emergeTowardTrailing: emergeFromPanel)
     }
 
-    /// バブルを表示（ONにする）。復活・右クリックメニュー・デバッグからも使う
-    func showBubble(at point: NSPoint, poppingIn: Bool = false) {
+    /// バブルを表示（ONにする）。復活・右クリックメニュー・デバッグからも使う。
+    /// emergeTowardTrailing: パネルから出す時、左端（パネル側）を始点に右へポンっと出す
+    func showBubble(at point: NSPoint, poppingIn: Bool = false, emergeTowardTrailing: Bool = false) {
         let p = ensureBubblePanel()
         bubbleHideGeneration += 1 // 進行中の遅延orderOutを無効化
         revivalTask?.cancel()
@@ -99,9 +105,12 @@ extension PanelController {
         }
 
         if poppingIn {
-            // ぽわんっと出現（ウィンドウは固定、アセンブリだけ膨らむ）
+            // ぽわんっと出現（ウィンドウは固定、アセンブリだけ膨らむ）。
+            // パネルから出す時は左端（パネル側）を始点にして方向感を出す
             let target = assembly.frame
-            assembly.frame = NSRect(x: target.midX - 4, y: target.midY - 4, width: 8, height: 8)
+            assembly.frame = emergeTowardTrailing
+                ? NSRect(x: 6, y: target.midY - 4, width: 8, height: 8)
+                : NSRect(x: target.midX - 4, y: target.midY - 4, width: 8, height: 8)
             assembly.alphaValue = 0
             p.orderFrontRegardless()
             NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)

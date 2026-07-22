@@ -191,13 +191,13 @@ struct UsagePanelView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 IconButton(systemName: "arrow.clockwise", help: "今すぐ更新") { actions.refresh() }
+                IconButton(systemName: "gearshape.fill", help: "設定") { actions.settings() }
                 IconButton(
                     systemName: "bubbles.and.sparkles.fill",
                     help: state.bubbleActive ? "バブルを非表示" : "浮遊モード（バブル）",
                     activeState: state.bubbleActive,
                     activeTint: baseTint
                 ) { actions.toBubble() }
-                IconButton(systemName: "gearshape.fill", help: "設定") { actions.settings() }
             }
         }
         .padding(.horizontal, 16)
