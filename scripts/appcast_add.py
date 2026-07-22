@@ -32,7 +32,7 @@ item = f"""    <item>
       <pubDate>{pub}</pubDate>
       <sparkle:version>{version}</sparkle:version>
       <sparkle:shortVersionString>{version}</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[{notes}]]></description>
       <enclosure url="{zip_url}" sparkle:edSignature="{sig}" length="{length}" type="application/octet-stream" />
     </item>"""

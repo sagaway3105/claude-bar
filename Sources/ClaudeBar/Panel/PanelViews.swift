@@ -24,10 +24,8 @@ struct PanelRootView: View {
 
     var body: some View {
         UsagePanelView(state: state, settings: settings, actions: actions)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { height in
-                actions.contentHeightChanged(height)
+            .measureSize { size in
+                actions.contentHeightChanged(size.height)
             }
             // ウィンドウは固定サイズなので、内容（ガラスごと）は上詰めで描く
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -67,6 +65,41 @@ struct IridescentRim<S: InsettableShape>: View {
                 .strokeBorder(.white.opacity(0.25), lineWidth: 0.8)
         }
         .allowsHitTesting(false)
+    }
+}
+
+// MARK: - OS適応ガラス
+// macOS 26 = Liquid Glass（純正メニューと同じ質感）/ それ以前 = 従来のすりガラス(Material)
+
+/// パネル背景: 26はLiquid Glass+乳白ティント、旧OSはultraThinMaterial+同じティント
+struct AdaptivePanelGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(
+                .regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.45)),
+                in: RoundedRectangle(cornerRadius: 18)
+            )
+        } else {
+            content.background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(Color(nsColor: .windowBackgroundColor).opacity(0.45))
+                }
+            )
+        }
+    }
+}
+
+/// バブルのガラス玉: 26は透明なLiquid Glass、旧OSはすりガラスの球
+/// （ハイライト・コースティクス・虹色リムは自前描画なので全OS共通）
+struct AdaptiveBubbleGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.clear, in: Circle())
+        } else {
+            content.background(Circle().fill(.ultraThinMaterial))
+        }
     }
 }
 
@@ -119,7 +152,7 @@ struct UsagePanelView: View {
             }
             .padding(.top, 7)
             .contentShape(Rectangle())
-            .gesture(WindowDragGesture())
+            .modifier(GripDrag())
 
             // Apple公式メニューと同じ太字ヘッダ
             HStack(spacing: 7) {
@@ -201,7 +234,7 @@ struct UsagePanelView: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
         .frame(width: 300)
-        .glassEffect(.regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.45)), in: RoundedRectangle(cornerRadius: 18))
+        .modifier(AdaptivePanelGlass())
         .overlay(PanelSheen())
     }
 
@@ -500,8 +533,8 @@ struct BubbleView: View {
         // フレームだけ拡大し、リングの太さと中身（ロゴ/%）は固定サイズを保つ
         .frame(width: 76 * sizeFactor, height: 76 * sizeFactor)
         .animation(.bouncy(duration: 0.4), value: sizeFactor)
-        // 素のLiquid Glass（.clear = 透明度の高いガラス玉。屈折とリムライトは維持）
-        .glassEffect(.clear, in: Circle())
+        // 素のLiquid Glass（.clear = 透明度の高いガラス玉。旧OSはすりガラスにフォールバック）
+        .modifier(AdaptiveBubbleGlass())
         // 微かなドロップシャドウ（白）— 左上光源に合わせて右下へ落とすグロー
         .background(
             Circle()

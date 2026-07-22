@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "ClaudeBar",
-    platforms: [.macOS("26.0")],
+    platforms: [.macOS("14.0")],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
     ],

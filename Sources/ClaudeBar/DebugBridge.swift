@@ -143,7 +143,7 @@ final class DebugBridge {
             info["screen"] = [screen.frame.width, screen.frame.height]
         }
         info["statusBarThickness"] = NSStatusBar.system.thickness
-        if let w = statusController.buttonScreenFrame, let bw = NSApp.windows.first(where: { $0.className.contains("StatusBar") }) {
+        if statusController.buttonScreenFrame != nil, let bw = NSApp.windows.first(where: { $0.className.contains("StatusBar") }) {
             info["statusWindow"] = [bw.frame.origin.x, bw.frame.origin.y, bw.frame.width, bw.frame.height]
         }
         if let buttonFrame = statusController.buttonScreenFrame {

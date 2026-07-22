@@ -49,10 +49,8 @@ struct StatusLabelView: View {
                 .padding(.vertical, -4)
         )
         .fixedSize(horizontal: true, vertical: false)
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.width
-        } action: { width in
-            onWidthChange(width)
+        .measureSize { size in
+            onWidthChange(size.width)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

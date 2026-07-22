@@ -30,7 +30,7 @@ Claude Codeがトークン消費中はロゴが回転しながら脈打ち、80%
 
 ## 動作環境
 
-- macOS 26 (Tahoe) 以降 — Liquid Glass (`NSGlassEffectView`) を使用
+- macOS 14 (Sonoma) 以降 — macOS 26ではLiquid Glass、それ以前は従来のすりガラス表示
 - Apple Silicon (arm64)
 - Claude Code がログイン済みであること（Pro / Max プラン）
 
