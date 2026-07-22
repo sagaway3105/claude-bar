@@ -326,6 +326,20 @@ struct BubbleView: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             ZStack {
+                // 周辺だけ曇らせるヘイズ（中心はクリアなまま）
+                // — .clearガラスの透明感とCC風の曇りの両立
+                Circle()
+                    .fill(EllipticalGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .clear, location: 0.5),
+                            .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.4), location: 0.85),
+                            .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.5), location: 1),
+                        ]),
+                        center: .center,
+                        startRadiusFraction: 0, endRadiusFraction: 0.5
+                    ))
+                    .blur(radius: 2)
                 // 球面の照り（左上光源）— シャボン玉の立体感
                 Circle()
                     .fill(RadialGradient(
