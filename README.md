@@ -34,12 +34,21 @@ Claude Codeがトークン消費中はロゴが回転しながら脈打ち、80%
 - Apple Silicon (arm64)
 - Claude Code がログイン済みであること（Pro / Max プラン）
 
-## インストール（ダウンロード版）
+## インストール
+
+### Homebrew（おすすめ）
+
+```sh
+brew install --cask sagaway3105/tap/claudebar
+```
+
+### 手動ダウンロード
 
 1. [Releases](https://github.com/sagaway3105/claude-bar/releases/latest) から `ClaudeBar-vX.X.X.zip` をダウンロードして解凍
 2. `ClaudeBar.app` を **アプリケーション** フォルダに移動してダブルクリック
    - v1.2.0以降は**Apple公証済み**（Developer ID署名）なので、そのまま起動できます
-3. メニューバーに「–% ✳」が出たら成功。あとは下の「初めて使う人のセットアップ」へ
+
+どちらの方法でも、メニューバーに「–% ✳」が出たら成功。あとは下の「初めて使う人のセットアップ」へ。以降の更新はアプリ内の自動アップデート（Sparkle）が知らせてくれます。
 
 ## 💰 追加課金は不要です
 

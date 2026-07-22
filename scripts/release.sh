@@ -45,3 +45,24 @@ Claude-Session: https://claude.ai/code/session_01S4fGVycDVJZaRMgQrh1EEp"
 else
   echo "⚠️ Sparkleツールが見つからないためappcast更新をスキップ（swift build後に再実行してください）"
 fi
+
+# Homebrew tap（sagaway3105/homebrew-tap）のcaskを新バージョンへ更新してpush
+TAP_DIR="$(brew --repository sagaway3105/tap 2>/dev/null || true)"
+if [[ -n "$TAP_DIR" && -d "$TAP_DIR" ]]; then
+  SHA=$(shasum -a 256 "$ZIP" | awk '{print $1}')
+  /usr/bin/python3 - "$VERSION" "$SHA" "$TAP_DIR" <<'PY'
+import re, sys
+version, sha, tap = sys.argv[1:4]
+path = f"{tap}/Casks/claudebar.rb"
+s = open(path).read()
+s = re.sub(r'version "[^"]+"', f'version "{version}"', s, count=1)
+s = re.sub(r'sha256 "[^"]+"', f'sha256 "{sha}"', s, count=1)
+open(path, "w").write(s)
+PY
+  git -C "$TAP_DIR" -c user.name=sagaway3105 -c user.email=253613309+sagaway3105@users.noreply.github.com \
+    commit -aqm "claudebar ${VERSION}"
+  git -C "$TAP_DIR" push -q
+  echo "🍺 Homebrew tap を v${VERSION} に更新"
+else
+  echo "⚠️ tap未取得のためHomebrew更新をスキップ（brew tap sagaway3105/tap を実行してください）"
+fi
