@@ -1,7 +1,10 @@
 #!/bin/zsh
 # ClaudeBar.app をビルドして build/ に生成する
+# VERSION=1.2.3 ./scripts/make-app.sh でバージョン指定（省略時 1.0.0）
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+VERSION="${VERSION:-1.0.0}"
 
 swift build -c release
 
@@ -18,7 +21,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/ClaudeBar "$APP/Contents/MacOS/ClaudeBar"
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
-cat > "$APP/Contents/Info.plist" <<'EOF'
+cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -34,9 +37,9 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>${VERSION}</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>${VERSION}</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
 	<key>LSUIElement</key>

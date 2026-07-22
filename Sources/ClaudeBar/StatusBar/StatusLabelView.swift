@@ -12,11 +12,9 @@ struct StatusLabelView: View {
         return nil
     }
 
-    /// Apple純正: メニュー展開中は明るい白ピルの上で内容を濃色に反転する
+    /// 内容の色は通常のまま（純正の展開ピルは淡いオーバーレイで、文字色は反転しない）
     private var contentColor: Color {
-        if let tint { return tint }
-        if state.menuHighlighted { return .black.opacity(0.85) }
-        return .primary
+        tint ?? .primary
     }
 
     var body: some View {
@@ -38,8 +36,9 @@ struct StatusLabelView: View {
         // 縦をメニューバーいっぱいに広げてからピルを敷く（Apple純正のフルハイトピル）
         .frame(maxHeight: .infinity)
         .background(
+            // 純正の展開ピル: 外観追従の淡い半透明オーバーレイ（拡大実測 約22%）
             Capsule()
-                .fill(.white.opacity(state.menuHighlighted ? 0.85 : 0))
+                .fill(Color.primary.opacity(state.menuHighlighted ? 0.22 : 0))
                 .padding(.vertical, 2)
         )
         .fixedSize(horizontal: true, vertical: false)
