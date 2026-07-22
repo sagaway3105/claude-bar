@@ -60,9 +60,6 @@ final class PanelController: NSObject, NSWindowDelegate {
     var bubbleTapCount = 0
     var bubbleTapResetTask: Task<Void, Never>?
 
-    // 背後の輝度サンプリング（文字色の動的切り替え）
-    var lastBackdropSampleAt = Date.distantPast
-    var backdropSampleInFlight = false
 
     // レイアウト定数
     let panelWidth: CGFloat = 300
