@@ -203,33 +203,34 @@ final class PanelController: NSObject, NSWindowDelegate {
         p.isMovableByWindowBackground = false
         p.level = .popUpMenu
         assemblyView?.alphaValue = 1
+        p.alphaValue = 1
         state.menuHighlighted = true // 押した瞬間に点灯（Apple流）
 
-        // @Observableの反映を待ってから配置。ウィンドウは固定サイズ
-        // （内容はSwiftUIが上詰めでガラスごと描き、余りは完全透明）
+        // 位置決め（同期・固定サイズ）
+        guard let buttonWindow = button.window else { return }
+        let screen = buttonWindow.screen ?? NSScreen.main
+        let buttonRect = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+        var x = buttonRect.midX - panelWidth / 2
+        if let screen {
+            x = min(max(x, screen.frame.minX + 8), screen.frame.maxX - panelWidth - 8)
+        }
+        let y = buttonRect.minY - panelWindowHeight - 6
+        isProgrammaticMove = true
+        p.setFrame(NSRect(x: x, y: y, width: panelWidth, height: panelWindowHeight), display: false)
+        isProgrammaticMove = false
+        syncPanelChromeFrames()
+        attachedOrigin = NSPoint(x: x, y: y)
+
+        // 最初のフレームを完成させてから即時表示（純正メニューと同じ歯切れ）
+        contentHosting?.layoutSubtreeIfNeeded()
+        p.displayIfNeeded()
+        p.orderFrontRegardless()
+        installDismissMonitors()
+
+        // 高さ実測（透明帯クリック判定用）と更新は表示後に回す
         DispatchQueue.main.async { [weak self] in
-            guard let self, let p = self.panel else { return }
+            guard let self else { return }
             self.lastPanelSize = NSSize(width: self.panelWidth, height: self.measuredPanelHeight())
-
-            guard let buttonWindow = button.window else { return }
-            let screen = buttonWindow.screen ?? NSScreen.main
-            let buttonRect = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
-            var x = buttonRect.midX - self.panelWidth / 2
-            if let screen {
-                x = min(max(x, screen.frame.minX + 8), screen.frame.maxX - self.panelWidth - 8)
-            }
-            let y = buttonRect.minY - self.panelWindowHeight - 6
-
-            self.isProgrammaticMove = true
-            p.setFrame(NSRect(x: x, y: y, width: self.panelWidth, height: self.panelWindowHeight), display: true)
-            self.isProgrammaticMove = false
-            self.syncPanelChromeFrames()
-            self.attachedOrigin = NSPoint(x: x, y: y)
-
-            // 純正メニューと同じく即時表示（フェードなし）
-            p.alphaValue = 1
-            p.orderFrontRegardless()
-            self.installDismissMonitors()
             self.usageService.refreshIfStale(olderThan: 45)
         }
     }
@@ -304,25 +305,12 @@ final class PanelController: NSObject, NSWindowDelegate {
     func hide() {
         removeDismissMonitors()
         state.menuHighlighted = false
-        guard let p = panel, p.isVisible else {
-            if isBubbleChrome { resetChromeAfterHide() }
-            return
-        }
-        hideGeneration += 1
-        let generation = hideGeneration
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.08
-            p.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, self.hideGeneration == generation else { return }
-                p.orderOut(nil)
-                p.alphaValue = 1
-                self.assemblyView?.alphaValue = 1
-                self.state.menuHighlighted = false
-                self.resetChromeAfterHide()
-            }
-        })
+        cancelPendingHide() // 過去のフェードcompletionを無効化
+        guard let p = panel else { return }
+        p.orderOut(nil)
+        p.alphaValue = 1
+        assemblyView?.alphaValue = 1
+        resetChromeAfterHide()
     }
 
     /// 「ぷるんっ/ポヨン」— アセンブリ（ガラスごと）を中心基準でスクワッシュ&ストレッチ。

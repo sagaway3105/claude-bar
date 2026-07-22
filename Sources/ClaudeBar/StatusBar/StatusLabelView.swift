@@ -34,7 +34,6 @@ struct StatusLabelView: View {
                 .fill(Color.primary.opacity(state.menuHighlighted ? 0.14 : 0))
                 .padding(.vertical, 2.5)
         )
-        .animation(.easeOut(duration: 0.12), value: state.menuHighlighted)
         .fixedSize()
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
