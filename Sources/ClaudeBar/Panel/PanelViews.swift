@@ -255,17 +255,37 @@ struct IconButton: View {
     let systemName: String
     var help = ""
     let action: () -> Void
+    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(HoverPressIconStyle(hovering: hovering))
+        .onHover { hovering = $0 }
         .help(help)
+    }
+}
+
+/// Apple純正コントロール風のインタラクション:
+/// ホバーで丸背景がふわっと出て、押下でわずかに沈む
+struct HoverPressIconStyle: ButtonStyle {
+    var hovering: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(hovering || configuration.isPressed ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+            .frame(width: 24, height: 24)
+            .background(
+                Circle().fill(Color.primary.opacity(
+                    configuration.isPressed ? 0.18 : (hovering ? 0.10 : 0)
+                ))
+            )
+            .contentShape(Circle())
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(.easeOut(duration: 0.12), value: hovering)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 }
 
