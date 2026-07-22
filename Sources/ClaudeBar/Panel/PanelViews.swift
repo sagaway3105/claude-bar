@@ -198,7 +198,6 @@ struct UsagePanelView: View {
                     activeTint: baseTint
                 ) { actions.toBubble() }
                 IconButton(systemName: "gearshape.fill", help: "設定") { actions.settings() }
-                IconButton(systemName: "power", help: "終了") { actions.quit() }
             }
         }
         .padding(.horizontal, 16)
