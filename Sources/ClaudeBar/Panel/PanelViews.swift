@@ -414,7 +414,7 @@ struct BubbleView: View {
                     .offset(x: 15 * sizeFactor, y: 19 * sizeFactor)
                     .blur(radius: 0.8)
             }
-            .padding(7)
+            .padding(3)
         }
         // フレームだけ拡大し、リングの太さと中身（ロゴ/%）は固定サイズを保つ
         .frame(width: 76 * sizeFactor, height: 76 * sizeFactor)
