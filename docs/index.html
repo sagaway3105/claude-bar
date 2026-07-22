@@ -29,6 +29,8 @@
     --accent: #E08963; --hairline: rgba(237,232,225,0.12); --pill: rgba(237,232,225,0.09);
   }
 
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   body {
     background: var(--ground);
     color: var(--ink);
@@ -113,6 +115,12 @@
     display: inline-flex; align-items: center; justify-content: center;
     transform: translateY(3px);
   }
+  .steps .step-body { flex: 1; min-width: 0; }
+  code.cmd {
+    display: block; width: fit-content; max-width: 100%;
+    overflow-x: auto; margin: 6px 0 4px;
+    padding: 6px 14px; font-size: 13px;
+  }
   .note { font-size: 12.5px; color: var(--muted); }
   code {
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -153,7 +161,7 @@
     </div>
     <p class="tagline">Claudeのプラン使用量を、macOSのメニューバーにいつも。</p>
     <div class="chips">
-      <a class="cta" href="https://github.com/sagaway3105/claude-bar/releases/latest">⬇ ダウンロード</a>
+      <a class="cta" href="#install">⬇ インストール</a>
       <span class="chip">macOS 26以降</span>
       <span class="chip">Apple Silicon</span>
       <span class="chip">Apple公証済み</span>
@@ -210,12 +218,14 @@
     <p class="how"><strong>Claude Codeのログインをそのまま利用します。</strong>アプリ自体にログイン画面はなく、公式CLIの認証情報を読み取り専用で参照して、使用量照会APIをポーリングするだけ。パスワードがアプリを経由することはなく、トークン消費や追加課金も発生しません（Pro / Maxプラン対応）。</p>
   </section>
 
-  <section>
+  <section id="install">
     <h2>インストール</h2>
     <ol class="steps">
-      <li>Homebrewなら1行: <code>brew install --cask sagaway3105/tap/claudebar</code><br>（手動の場合は <a href="https://github.com/sagaway3105/claude-bar/releases/latest">Releases</a> のzipを解凍して <code>ClaudeBar.app</code> をアプリケーションフォルダへ）</li>
-      <li>起動するとメニューバーに「–% ✳」が出ます（Apple公証済み・警告なしで起動）</li>
-      <li>初回はパネルの案内に従ってClaude Codeでログイン連携（未導入でも2ステップの案内つき）</li>
+      <li><span class="step-body">Homebrewなら1行:
+        <code class="cmd">brew install --cask sagaway3105/tap/claudebar</code>
+        手動の場合は <a href="https://github.com/sagaway3105/claude-bar/releases/latest">Releases</a> のzipを解凍して <code>ClaudeBar.app</code> をアプリケーションフォルダへ</span></li>
+      <li><span class="step-body">起動するとメニューバーに「–% ✳」が出ます（Apple公証済み・警告なしで起動）</span></li>
+      <li><span class="step-body">初回はパネルの案内に従ってClaude Codeでログイン連携（未導入でも2ステップの案内つき）</span></li>
     </ol>
     <p class="note">Keychainの許可ダイアログが出たら「常に許可」を選択してください。</p>
   </section>
