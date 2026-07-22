@@ -34,17 +34,7 @@ extension PanelController {
         assembly.frame = NSRect(origin: floatAnchor, size: NSSize(width: diameter, height: diameter))
         contentHosting?.frame = assembly.bounds
 
-        // ドラッグ時のウィンドウ原点の可動域。
-        // 下はDockを避け、上はメニューバーへ食い込める（吸着判定圏に届くように+40pt）
-        let screen = NSScreen.screens.first { $0.frame.contains(center) } ?? p.screen ?? NSScreen.main
-        if let vf = screen?.visibleFrame, let sf = screen?.frame {
-            floatBounds = NSRect(
-                x: sf.minX,
-                y: vf.minY,
-                width: max(0, sf.width - size),
-                height: max(0, (sf.maxY + 40) - vf.minY - size)
-            )
-        }
+        updateFloatBounds(around: center)
         startMouseTracking()
         installBubbleMouseMonitor()
         // アクセサリアプリはApp Napでタイマーが間引かれるため、バブル表示中は抑止する
@@ -53,6 +43,22 @@ extension PanelController {
                 options: [.userInitiated], reason: "Bubble float animation"
             )
         }
+    }
+
+    /// ドラッグ時のウィンドウ原点の可動域を更新する。
+    /// ウィンドウ(150pt)ではなく「見えているバブルの縁」が画面の縁に届く基準:
+    /// 左右・下は画面端（下はDockの上端）に接するまで、上はメニューバーを覆えるまで。
+    func updateFloatBounds(around point: NSPoint) {
+        let size = bubbleWindowSize
+        let margin = (size - currentBubbleDiameter) / 2
+        let screen = NSScreen.screens.first { $0.frame.contains(point) } ?? panel?.screen ?? NSScreen.main
+        guard let vf = screen?.visibleFrame, let sf = screen?.frame else { return }
+        floatBounds = NSRect(
+            x: sf.minX - margin,
+            y: vf.minY - margin,
+            width: max(0, sf.width - size + margin * 2),
+            height: max(0, (sf.maxY - size + margin) - (vf.minY - margin))
+        )
     }
 
     /// パネルモードへ戻す: ウィンドウをアセンブリにぴったり合わせ、autoresizeを復帰
@@ -136,6 +142,10 @@ extension PanelController {
             ctx.duration = 0.4
             ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1.25)
             assembly.animator().frame = target
+        }
+        // 直径が変わるとマージンも変わるため可動域を取り直す
+        if let w = panel {
+            updateFloatBounds(around: NSPoint(x: w.frame.midX, y: w.frame.midY))
         }
     }
 
