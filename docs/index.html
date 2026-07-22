@@ -30,6 +30,7 @@
   }
 
   html { scroll-behavior: smooth; }
+  #install { scroll-margin-top: 24px; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   body {
     background: var(--ground);
@@ -252,3 +253,14 @@
     <a href="https://github.com/sagaway3105/claude-bar">github.com/sagaway3105/claude-bar</a>
   </footer>
 </main>
+<script>
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest('a[href="#install"]');
+    if (!a) return;
+    e.preventDefault();
+    const target = document.getElementById("install");
+    if (!target) return;
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  });
+</script>
