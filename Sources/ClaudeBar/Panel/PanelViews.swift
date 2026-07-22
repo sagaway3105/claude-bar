@@ -311,7 +311,7 @@ struct BubbleView: View {
                     .fill(RadialGradient(
                         colors: [.white.opacity(0.25), .white.opacity(0.06), .clear],
                         center: UnitPoint(x: 0.32, y: 0.28),
-                        startRadius: 2, endRadius: 46
+                        startRadius: 2, endRadius: 46 * sizeFactor
                     ))
                 // ゲージ溝はごく薄く（進捗アークだけが目立つように）
                 Circle().stroke(Color.primary.opacity(0.05), lineWidth: 4)
@@ -333,36 +333,35 @@ struct BubbleView: View {
                     )
                     .frame(width: 14, height: 14)
                     Text(percentText)
-                        .font(.system(size: 11.5, weight: .bold))
+                        .font(.system(size: 13))
                         .monospacedDigit()
                         .contentTransition(.numericText())
                         .animation(.snappy(duration: 0.4), value: percentText)
                     if let metricCaption {
                         Text(metricCaption)
-                            .font(.system(size: 6.5, weight: .semibold))
+                            .font(.system(size: 9))
                             .foregroundStyle(.secondary)
                     }
                 }
                 .rotationEffect(.degrees(sin(t * 0.9) * 3))
 
-                // シャボン玉のハイライト（主）
+                // シャボン玉のハイライト（主）— 表面の特徴なのでサイズ追従
                 Ellipse()
                     .fill(.white.opacity(0.5))
-                    .frame(width: 20, height: 9)
+                    .frame(width: 20 * sizeFactor, height: 9 * sizeFactor)
                     .rotationEffect(.degrees(-32))
-                    .offset(x: -15, y: -19)
+                    .offset(x: -15 * sizeFactor, y: -19 * sizeFactor)
                     .blur(radius: 1.5)
                 // 対向の小さなグリント
                 Circle()
                     .fill(.white.opacity(0.28))
-                    .frame(width: 5, height: 5)
-                    .offset(x: 15, y: 19)
+                    .frame(width: 5 * sizeFactor, height: 5 * sizeFactor)
+                    .offset(x: 15 * sizeFactor, y: 19 * sizeFactor)
                     .blur(radius: 0.8)
             }
             .padding(7)
         }
-        .frame(width: 76, height: 76)
-        .scaleEffect(sizeFactor)
+        // フレームだけ拡大し、リングの太さと中身（ロゴ/%）は固定サイズを保つ
         .frame(width: 76 * sizeFactor, height: 76 * sizeFactor)
         .animation(.bouncy(duration: 0.4), value: sizeFactor)
         .glassEffect(.regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.45)), in: Circle())
