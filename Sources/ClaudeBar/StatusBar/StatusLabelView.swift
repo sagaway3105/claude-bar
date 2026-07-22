@@ -41,10 +41,12 @@ struct StatusLabelView: View {
         // 縦をメニューバーいっぱいに広げてからピルを敷く（Apple純正のフルハイトピル）
         .frame(maxHeight: .infinity)
         .background(
-            // 純正の展開ピル: 外観追従の淡い半透明オーバーレイ（拡大実測 約22%）
+            // 純正の展開ピル: 外観追従の淡い半透明オーバーレイ（拡大実測 約22%）。
+            // Tahoeのボタンは16ptしかなく30ptのバーの中央に置かれるため、
+            // 負のパディングでボタン枠を超えて純正サイズ(約24pt)まで拡張する
             Capsule()
                 .fill(Color.primary.opacity(state.menuHighlighted ? 0.22 : 0))
-                .padding(.vertical, 2)
+                .padding(.vertical, -4)
         )
         .fixedSize(horizontal: true, vertical: false)
         .onGeometryChange(for: CGFloat.self) { proxy in
