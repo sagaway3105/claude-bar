@@ -31,6 +31,17 @@ struct SettingsView: View {
                     Text("Fable（週間）").tag(BubbleMetric.fable)
                 }
                 Toggle("割れた後、リセット時に復活", isOn: $settings.reviveBubble)
+                Toggle("背景に合わせて文字色を調整", isOn: $settings.adaptiveBubbleTextColor)
+                    .onChange(of: settings.adaptiveBubbleTextColor) { _, enabled in
+                        if enabled, !BackdropSampler.hasPermission {
+                            BackdropSampler.requestPermission()
+                        }
+                    }
+                if settings.adaptiveBubbleTextColor, !BackdropSampler.hasPermission {
+                    Text("「画面収録」の許可が必要です（バブル直下の明るさを読むためだけに使います）。許可後はアプリを再起動してください")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Section {
                 LabeledContent("バージョン", value: Self.version)

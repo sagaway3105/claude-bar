@@ -63,7 +63,6 @@ final class PanelController: NSObject, NSWindowDelegate {
     // 背後の輝度サンプリング（文字色の動的切り替え）
     var lastBackdropSampleAt = Date.distantPast
     var backdropSampleInFlight = false
-    var didRequestScreenPermission = false
 
     // レイアウト定数
     let panelWidth: CGFloat = 300

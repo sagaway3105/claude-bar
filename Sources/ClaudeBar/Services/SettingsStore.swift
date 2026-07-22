@@ -34,6 +34,11 @@ final class SettingsStore {
         didSet { persist(bubbleMetric.rawValue, "bubbleMetric") }
     }
 
+    /// バブルの文字色を背景の明暗に追従させる（要・画面収録権限。ONにした時だけ要求する）
+    var adaptiveBubbleTextColor: Bool {
+        didSet { persist(adaptiveBubbleTextColor, "adaptiveBubbleTextColor") }
+    }
+
     /// バーの色をmacOSのアクセントカラーに合わせる（falseならClaudeオレンジ）
     var useSystemAccent: Bool {
         didSet { persist(useSystemAccent, "useSystemAccent") }
@@ -50,11 +55,13 @@ final class SettingsStore {
             "reviveBubble": true,
             "bubbleMetric": BubbleMetric.session.rawValue,
             "useSystemAccent": true,
+            "adaptiveBubbleTextColor": false,
         ])
         notifyThresholds = Self.defaults.bool(forKey: "notifyThresholds")
         pollIntervalMinutes = Self.defaults.integer(forKey: "pollIntervalMinutes")
         reviveBubble = Self.defaults.bool(forKey: "reviveBubble")
         bubbleMetric = BubbleMetric(rawValue: Self.defaults.string(forKey: "bubbleMetric") ?? "") ?? .session
+        adaptiveBubbleTextColor = Self.defaults.bool(forKey: "adaptiveBubbleTextColor")
         useSystemAccent = Self.defaults.bool(forKey: "useSystemAccent")
         launchAtLogin = false
         if canManageLoginItem {

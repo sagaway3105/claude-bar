@@ -117,6 +117,7 @@ final class DebugBridge {
         case .floating: info["mode"] = "floating"
         }
         info["bubbleActive"] = state.bubbleActive
+        info["backdropIsDark"] = state.bubbleBackdropIsDark.map { $0 ? "dark" : "light" } ?? "unknown"
         info["highlighted"] = state.menuHighlighted
         if let frame = panelController.debugPanelFrame {
             info["panel"] = [frame.origin.x, frame.origin.y, frame.width, frame.height]

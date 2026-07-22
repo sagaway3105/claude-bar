@@ -97,13 +97,8 @@ extension PanelController {
                 options: [.userInitiated], reason: "Bubble float animation"
             )
         }
-        // 文字色の動的切り替え（背景輝度）: 権限が無ければ初回だけ許可を求める
+        // 文字色の動的切り替えは設定でONの場合のみ（権限要求は設定トグル側で行う）
         state.bubbleBackdropIsDark = nil
-        if !BackdropSampler.hasPermission, !didRequestScreenPermission,
-           ProcessInfo.processInfo.environment["CLAUDEBAR_FAKE"] == nil {
-            didRequestScreenPermission = true
-            BackdropSampler.requestPermission()
-        }
 
         if poppingIn {
             // ぽわんっと出現（ウィンドウは固定、アセンブリだけ膨らむ）
@@ -274,8 +269,13 @@ extension PanelController {
     }
 
     /// 背後の画面輝度を約1秒間隔でサンプリングし、バブルの文字色（白/黒）を切り替える。
-    /// 画面収録の権限が無い間は何もしない（従来の固定色のまま）
+    /// 設定でOFF・画面収録の権限が無い間は何もしない（従来の固定色のまま）
     private func sampleBackdropIfNeeded() {
+        guard ProcessInfo.processInfo.environment["CLAUDEBAR_FAKE"] == nil else { return } // デバッグはbackdrop:コマンドで強制
+        guard settings.adaptiveBubbleTextColor else {
+            if state.bubbleBackdropIsDark != nil { state.bubbleBackdropIsDark = nil }
+            return
+        }
         guard BackdropSampler.hasPermission,
               state.bubbleActive, !isPopping, !backdropSampleInFlight,
               Date().timeIntervalSince(lastBackdropSampleAt) > 1.0,
