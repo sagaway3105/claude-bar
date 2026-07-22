@@ -28,7 +28,8 @@ final class StatusItemController: NSObject {
         ])
         button.target = self
         button.action = #selector(didClick)
-        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        // Apple純正メニューと同じく「押した瞬間」に開く
+        button.sendAction(on: [.leftMouseDown, .rightMouseUp])
         // レガシーな黒い押下ハイライトを抑止（ハイライトはSwiftUI側でApple純正風に描く）
         (button.cell as? NSButtonCell)?.highlightsBy = []
     }

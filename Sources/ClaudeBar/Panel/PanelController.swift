@@ -205,6 +205,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         p.isMovableByWindowBackground = false
         p.level = .popUpMenu
         assemblyView?.alphaValue = 1
+        setStatusHighlighted?(true) // 押した瞬間に点灯（Apple流）
 
         // @Observableの反映を待ってから配置。ウィンドウは固定サイズ
         // （内容はSwiftUIが上詰めでガラスごと描き、余りは完全透明）
@@ -227,14 +228,10 @@ final class PanelController: NSObject, NSWindowDelegate {
             self.syncPanelChromeFrames()
             self.attachedOrigin = NSPoint(x: x, y: y)
 
-            p.alphaValue = 0
+            // 純正メニューと同じく即時表示（フェードなし）
+            p.alphaValue = 1
             p.orderFrontRegardless()
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.16
-                p.animator().alphaValue = 1
-            }
             self.installDismissMonitors()
-            self.setStatusHighlighted?(true)
             self.usageService.refreshIfStale(olderThan: 45)
         }
     }
@@ -316,7 +313,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         hideGeneration += 1
         let generation = hideGeneration
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.14
+            ctx.duration = 0.08
             p.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
@@ -390,6 +387,11 @@ final class PanelController: NSObject, NSWindowDelegate {
         if let m = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
             MainActor.assumeIsolated {
                 guard let self, let p = self.panel else { return }
+                // ステータスアイコン上のクリックはtoggle側で開閉するので、ここでは閉じない
+                if let bf = self.statusButtonFrame?(), let w = event.window {
+                    let screenPoint = w.convertPoint(toScreen: event.locationInWindow)
+                    if bf.insetBy(dx: -2, dy: -2).contains(screenPoint) { return }
+                }
                 if event.window !== p {
                     self.hideIfAttached()
                 } else if self.state.mode == .attached,
