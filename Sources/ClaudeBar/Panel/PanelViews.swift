@@ -143,7 +143,7 @@ struct UsagePanelView: View {
                 .modifier(SectionTile())
             }
 
-            UsageGaugeView(title: "現在のセッション", window: state.usage?.session, baseTint: baseTint, prominent: true)
+            UsageGaugeView(title: "現在のセッション", window: state.usage?.session, baseTint: baseTint)
                 .modifier(SectionTile())
 
             VStack(alignment: .leading, spacing: 10) {

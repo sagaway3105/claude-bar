@@ -231,7 +231,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// パネル内容の必要高さを同期的に実測する（SwiftUIの報告待ちに依存しない）
     func measuredPanelHeight() -> CGFloat {
         let controller = NSHostingController(
-            rootView: UsagePanelView(state: state, actions: uiActions)
+            rootView: UsagePanelView(state: state, settings: settings, actions: uiActions)
         )
         let size = controller.sizeThatFits(in: NSSize(width: panelWidth, height: 2000))
         return max(200, min(size.height, 800))

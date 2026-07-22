@@ -4,7 +4,6 @@ struct UsageGaugeView: View {
     let title: String
     let window: UsageWindow?
     var baseTint: Color = .claudeOrange
-    var prominent = false
 
     private var value: Double { window?.utilization ?? 0 }
 
@@ -18,10 +17,10 @@ struct UsageGaugeView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
-                    .font(.system(size: prominent ? 12 : 11.5, weight: prominent ? .semibold : .regular))
+                    .font(.system(size: 11.5))
                 Spacer()
                 Text(window == nil ? "–" : "\(Int(value.rounded()))%")
-                    .font(.system(size: prominent ? 16 : 12.5, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .semibold))
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.4), value: value)
@@ -38,7 +37,7 @@ struct UsageGaugeView: View {
                         .frame(width: max(0, geo.size.width * min(value, 100) / 100))
                 }
             }
-            .frame(height: prominent ? 9 : 6)
+            .frame(height: 6)
             .animation(.easeOut(duration: 0.4), value: value)
 
             if let resets = window?.resetsAt {
