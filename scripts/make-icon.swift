@@ -16,87 +16,67 @@ func drawIcon(size s: CGFloat) {
 
     // 外形のドロップシャドウ
     let shadow = NSShadow()
-    shadow.shadowColor = NSColor.black.withAlphaComponent(0.28)
+    shadow.shadowColor = NSColor.black.withAlphaComponent(0.30)
     shadow.shadowOffset = NSSize(width: 0, height: -s * 0.012)
     shadow.shadowBlurRadius = s * 0.022
     shadow.set()
 
     let squircle = NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius)
-    NSColor(red: 0.957, green: 0.937, blue: 0.898, alpha: 1).setFill()
+    NSColor(white: 0.90, alpha: 1).setFill()
     squircle.fill()
     NSShadow().set()
 
-    // クリーム地の縦グラデーション
-    if let gradient = NSGradient(
-        colors: [
-            NSColor(red: 0.976, green: 0.961, blue: 0.933, alpha: 1),
-            NSColor(red: 0.925, green: 0.894, blue: 0.839, alpha: 1),
-        ]
-    ) {
-        gradient.draw(in: squircle, angle: -90)
-    }
-
-    // ---- ガラス玉バブル ----
-    let center = NSPoint(x: s / 2, y: s / 2)
-    let ballR = rect.width * 0.335
-    let ballRect = NSRect(x: center.x - ballR, y: center.y - ballR, width: ballR * 2, height: ballR * 2)
-    let ball = NSBezierPath(ovalIn: ballRect)
-
-    // 球の落ち影（下方向・柔らかく）
-    let ballShadow = NSShadow()
-    ballShadow.shadowColor = NSColor(red: 0.45, green: 0.32, blue: 0.24, alpha: 0.30)
-    ballShadow.shadowOffset = NSSize(width: 0, height: -ballR * 0.16)
-    ballShadow.shadowBlurRadius = ballR * 0.22
-    ballShadow.set()
-    NSColor.white.withAlphaComponent(0.10).setFill()
-    ball.fill()
-    NSShadow().set()
-
-    // 球体の面: 左上光源のラジアルグラデーション（ガラスの透け感）
+    // グレーのガラス面（左上光源のラジアル）— スクエア自体がバブル
     if let sphere = NSGradient(colorsAndLocations:
-        (NSColor.white.withAlphaComponent(0.92), 0.0),
-        (NSColor.white.withAlphaComponent(0.38), 0.45),
-        (NSColor(red: 0.82, green: 0.78, blue: 0.74, alpha: 0.40), 0.85),
-        (NSColor.white.withAlphaComponent(0.55), 1.0)
+        (NSColor(white: 0.97, alpha: 1), 0.0),
+        (NSColor(white: 0.88, alpha: 1), 0.55),
+        (NSColor(white: 0.72, alpha: 1), 1.0)
     ) {
-        sphere.draw(in: ball, relativeCenterPosition: NSPoint(x: -0.38, y: 0.42))
+        sphere.draw(in: squircle, relativeCenterPosition: NSPoint(x: -0.4, y: 0.45))
     }
 
-    // 底のコースティクス（下内縁の明るい帯）
     NSGraphicsContext.current?.saveGraphicsState()
-    ball.addClip()
-    if let caustic = NSGradient(colorsAndLocations:
-        (NSColor.white.withAlphaComponent(0.55), 0.0),
-        (NSColor.white.withAlphaComponent(0.0), 0.35)
-    ) {
-        let causticRect = NSRect(
-            x: ballRect.minX, y: ballRect.minY,
-            width: ballRect.width, height: ballRect.height * 0.5
+    squircle.addClip()
+
+    // 内側の映り込み（バブルの三日月）: 左上に2本のクレセント
+    let rimInset = rect.width * 0.055
+    let rimRect = rect.insetBy(dx: rimInset, dy: rimInset)
+    let rimPath = NSBezierPath(roundedRect: rimRect, xRadius: cornerRadius * 0.82, yRadius: cornerRadius * 0.82)
+    rimPath.lineWidth = rect.width * 0.022
+    rimPath.lineCapStyle = .round
+
+    func strokeCrescent(startDeg: CGFloat, endDeg: CGFloat, alpha: CGFloat, width: CGFloat) {
+        // 角丸スクエア縁に沿う円弧近似（中心から少し内側の大円）
+        let arc = NSBezierPath()
+        arc.appendArc(
+            withCenter: NSPoint(x: rect.midX, y: rect.midY),
+            radius: rect.width * 0.40,
+            startAngle: startDeg, endAngle: endDeg, clockwise: false
         )
-        caustic.draw(in: NSBezierPath(rect: causticRect), angle: 90)
+        arc.lineWidth = width
+        arc.lineCapStyle = .round
+        NSColor.white.withAlphaComponent(alpha).setStroke()
+        arc.stroke()
     }
+    strokeCrescent(startDeg: 105, endDeg: 150, alpha: 0.85, width: rect.width * 0.030)
+    strokeCrescent(startDeg: 96, endDeg: 122, alpha: 0.55, width: rect.width * 0.016)
+    // 右上にも薄い映り込み
+    strokeCrescent(startDeg: 40, endDeg: 66, alpha: 0.40, width: rect.width * 0.018)
+    // 下の内側反射（大きく淡い弧）
+    strokeCrescent(startDeg: 235, endDeg: 305, alpha: 0.30, width: rect.width * 0.020)
+    // 左縁のグリント
+    let glint = NSBezierPath(ovalIn: NSRect(
+        x: rect.minX + rect.width * 0.075, y: rect.midY + rect.height * 0.05,
+        width: rect.width * 0.045, height: rect.width * 0.075
+    ))
+    NSColor.white.withAlphaComponent(0.75).setFill()
+    glint.fill()
+
     NSGraphicsContext.current?.restoreGraphicsState()
 
-    // リム（ガラスの縁）
-    NSColor.white.withAlphaComponent(0.85).setStroke()
-    let rim = NSBezierPath(ovalIn: ballRect.insetBy(dx: ballR * 0.012, dy: ballR * 0.012))
-    rim.lineWidth = max(1, ballR * 0.035)
-    rim.stroke()
-
-    // 使用量アーク（12時から時計回りに65%・Claudeオレンジ）
-    let arcR = ballR * 0.78
-    let arc = NSBezierPath()
-    arc.appendArc(
-        withCenter: center, radius: arcR,
-        startAngle: 90, endAngle: 90 - 360 * 0.65, clockwise: true
-    )
-    arc.lineWidth = ballR * 0.13
-    arc.lineCapStyle = .round
-    claudeOrange.setStroke()
-    arc.stroke()
-
-    // 中央のスパーク（アプリ内StarburstShapeと同形状・小さめ）
-    let sparkR = ballR * 0.42
+    // ✳スパーク（上寄り中央・Claudeオレンジ）
+    let sparkCenter = NSPoint(x: rect.midX, y: rect.midY + rect.height * 0.145)
+    let sparkR = rect.width * 0.21
     let lengths: [CGFloat] = [1.0, 0.68, 0.88, 0.74, 1.0, 0.66, 0.90, 0.72, 0.97, 0.68, 0.86, 0.74]
     let angleJitter: [CGFloat] = [0, 0.05, -0.04, 0.03, 0, -0.05, 0.04, 0, -0.03, 0.05, -0.04, 0.03]
     let rayWidth = sparkR * 0.15
@@ -107,7 +87,7 @@ func drawIcon(size s: CGFloat) {
             roundedRect: NSRect(x: 0, y: -rayWidth / 2, width: sparkR * lengths[i], height: rayWidth),
             xRadius: rayWidth / 2, yRadius: rayWidth / 2
         )
-        var transform = AffineTransform(translationByX: center.x, byY: center.y)
+        var transform = AffineTransform(translationByX: sparkCenter.x, byY: sparkCenter.y)
         transform.rotate(byRadians: angle)
         ray.transform(using: transform)
         star.append(ray)
@@ -115,25 +95,21 @@ func drawIcon(size s: CGFloat) {
     claudeOrange.setFill()
     star.fill()
 
-    // スペキュラハイライト（左上・大小2枚）
-    NSGraphicsContext.current?.saveGraphicsState()
-    let bloom = NSBezierPath(ovalIn: NSRect(
-        x: center.x - ballR * 0.62, y: center.y + ballR * 0.28,
-        width: ballR * 0.52, height: ballR * 0.30
-    ))
-    var tilt = AffineTransform(translationByX: center.x - ballR * 0.36, byY: center.y + ballR * 0.43)
-    tilt.rotate(byDegrees: 32)
-    tilt.translate(x: -(center.x - ballR * 0.36), y: -(center.y + ballR * 0.43))
-    bloom.transform(using: tilt)
-    NSColor.white.withAlphaComponent(0.85).setFill()
-    bloom.fill()
-    let glint = NSBezierPath(ovalIn: NSRect(
-        x: center.x + ballR * 0.38, y: center.y - ballR * 0.60,
-        width: ballR * 0.14, height: ballR * 0.14
-    ))
-    NSColor.white.withAlphaComponent(0.55).setFill()
-    glint.fill()
-    NSGraphicsContext.current?.restoreGraphicsState()
+    // Usageゲージ（横バー・下寄り）: グレーのトラック + オレンジの進捗70%
+    let barWidth = rect.width * 0.62
+    let barHeight = rect.width * 0.085
+    let barRect = NSRect(
+        x: rect.midX - barWidth / 2,
+        y: rect.midY - rect.height * 0.235 - barHeight / 2,
+        width: barWidth, height: barHeight
+    )
+    let track = NSBezierPath(roundedRect: barRect, xRadius: barHeight / 2, yRadius: barHeight / 2)
+    NSColor(white: 0.55, alpha: 0.45).setFill()
+    track.fill()
+    let fillRect = NSRect(x: barRect.minX, y: barRect.minY, width: barWidth * 0.70, height: barHeight)
+    let fill = NSBezierPath(roundedRect: fillRect, xRadius: barHeight / 2, yRadius: barHeight / 2)
+    claudeOrange.setFill()
+    fill.fill()
 }
 
 func render(pixels: Int) -> Data? {
