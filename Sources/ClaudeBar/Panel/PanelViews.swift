@@ -402,49 +402,43 @@ struct BubbleView: View {
     }
 }
 
-// MARK: - 割れる演出（衝撃波 + 飛沫）
+// MARK: - 割れる演出（シャボン玉の膜が弾ける）
 
 struct PopBurstView: View {
     var burstScale: CGFloat = 1
     @State private var expand = false
 
-    // 不揃いな飛沫（角度オフセット・距離・サイズを決め打ちで散らす）
-    private static let droplets: [(angle: Double, distance: CGFloat, size: CGFloat, opacity: Double)] = {
-        let count = 14
-        var result: [(Double, CGFloat, CGFloat, Double)] = []
-        let distances: [CGFloat] = [88, 62, 76, 54, 92, 68, 80, 58, 86, 64, 74, 96, 60, 82]
-        let sizes: [CGFloat] = [8, 5, 6, 4, 9, 5, 7, 4, 6, 5, 8, 4, 6, 5]
-        let jitters: [Double] = [0.1, -0.15, 0.05, 0.2, -0.08, 0.12, -0.2, 0.07, -0.05, 0.18, -0.12, 0.03, 0.15, -0.1]
-        for i in 0..<count {
-            let angle = Double(i) / Double(count) * 2 * .pi + jitters[i]
-            result.append((angle, distances[i], sizes[i], i.isMultiple(of: 3) ? 0.9 : 0.6))
-        }
-        return result
-    }()
-
     var body: some View {
         ZStack {
-            // 衝撃波リング
+            // 虹色の膜の縁が広がりながら薄れて消える
             Circle()
-                .stroke(.white.opacity(expand ? 0 : 0.55), lineWidth: 2.5)
-                .frame(width: 64 * burstScale, height: 64 * burstScale)
-                .scaleEffect(expand ? 2.8 : 0.9)
+                .stroke(
+                    AngularGradient(colors: [
+                        .cyan.opacity(0.55), .purple.opacity(0.45), .pink.opacity(0.5),
+                        .orange.opacity(0.35), .mint.opacity(0.45), .cyan.opacity(0.55),
+                    ], center: .center),
+                    lineWidth: expand ? 1 : 5
+                )
+                .frame(width: 76 * burstScale, height: 76 * burstScale)
+                .scaleEffect(expand ? 1.55 : 1.0)
+                .opacity(expand ? 0 : 0.9)
 
-            ForEach(Array(Self.droplets.enumerated()), id: \.offset) { _, d in
-                Circle()
-                    .fill(Color.claudeOrange.opacity(d.opacity))
-                    .frame(width: d.size * burstScale, height: d.size * burstScale)
-                    .offset(
-                        x: expand ? cos(d.angle) * d.distance * burstScale : 0,
-                        y: expand ? sin(d.angle) * d.distance * burstScale : 0
-                    )
-                    .opacity(expand ? 0 : 1)
-                    .scaleEffect(expand ? 0.3 : 1)
-            }
+            // 白い衝撃波（ひと回り速く広がる）
+            Circle()
+                .stroke(.white.opacity(expand ? 0 : 0.5), lineWidth: 2)
+                .frame(width: 60 * burstScale, height: 60 * burstScale)
+                .scaleEffect(expand ? 2.0 : 0.8)
+
+            // 霧のようにふわっと消える
+            Circle()
+                .fill(.white.opacity(expand ? 0 : 0.16))
+                .frame(width: 70 * burstScale, height: 70 * burstScale)
+                .scaleEffect(expand ? 1.5 : 0.9)
+                .blur(radius: expand ? 16 : 6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
-            withAnimation(.easeOut(duration: 0.65)) { expand = true }
+            withAnimation(.easeOut(duration: 0.5)) { expand = true }
         }
     }
 }
