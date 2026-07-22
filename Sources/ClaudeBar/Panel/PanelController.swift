@@ -61,7 +61,6 @@ final class PanelController: NSObject, NSWindowDelegate {
     let panelWindowHeight: CGFloat = 460 // 固定（内容はSwiftUIが上詰めで描き、余りは完全透明）
     let bubbleDiameter: CGFloat = 76
     let bubbleWindowSize: CGFloat = 150 // 最大バブル(76*1.4)+浮遊・伸縮マージン
-    let panelCornerRadius: CGFloat = 24
     let detachThreshold: CGFloat = 30
     let snapMargin: CGFloat = 60
 

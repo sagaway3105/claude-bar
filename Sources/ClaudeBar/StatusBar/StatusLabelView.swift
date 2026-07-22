@@ -35,7 +35,9 @@ struct StatusLabelView: View {
             .frame(width: 15, height: 15)
         }
         .foregroundStyle(contentColor)
-        .padding(.horizontal, 10)
+        // Tahoeはシステム側がNSStatusItemSelectionPaddingで外側余白を付与するため、
+        // 自前の余白は控えめに（二重の余白でアイテムが間延びしない範囲でピルの内余白を確保）
+        .padding(.horizontal, 6)
         // 縦をメニューバーいっぱいに広げてからピルを敷く（Apple純正のフルハイトピル）
         .frame(maxHeight: .infinity)
         .background(
