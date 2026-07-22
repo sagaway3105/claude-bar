@@ -345,7 +345,7 @@ struct BubbleView: View {
             try? await Task.sleep(for: .seconds(1.2))
             if value >= 100 { actions.pop() }
         }
-        .help("クリックで展開・ドラッグで移動・メニューバーへ持っていくと戻る")
+        .help("クリックでポヨン・3連打で破裂・ドラッグで移動・パネルはメニューバーから")
     }
 }
 

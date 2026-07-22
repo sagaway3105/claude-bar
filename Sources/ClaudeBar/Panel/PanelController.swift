@@ -48,11 +48,13 @@ final class PanelController: NSObject, NSWindowDelegate {
     var mouseTrackTimer: Timer?
     var napActivity: NSObjectProtocol?
 
-    // バブルのマウス操作（クリック=展開 / ドラッグ=移動）
+    // バブルのマウス操作（クリック=ポヨン、連打=破裂 / ドラッグ=移動）
     var bubbleMouseMonitor: Any?
     var dragActive = false
     var dragMoved = false
     var dragStartMouse = NSPoint.zero
+    var bubbleTapCount = 0
+    var bubbleTapResetTask: Task<Void, Never>?
 
     // レイアウト定数
     let panelWidth: CGFloat = 240
@@ -94,8 +96,11 @@ final class PanelController: NSObject, NSWindowDelegate {
         if let panel, panel.isVisible {
             if state.mode == .attached {
                 hide()
+            } else if state.mode == .bubble {
+                // バブル表示中: メニューバーを押せば通常のパネルに戻る
+                showAttached(relativeTo: button)
             } else {
-                // フローティング/バブル表示中: 前面に出しつつポヨンと弾んで居場所をアピール
+                // フローティング表示中: 前面に出しつつポヨンと弾んで居場所をアピール
                 panel.orderFrontRegardless()
                 bounceAssembly()
             }
@@ -311,7 +316,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     /// 「ぷるんっ/ポヨン」— アセンブリ（ガラスごと）を中心基準でスクワッシュ&ストレッチ。
     /// SwiftUI側でコンテンツを拡大するとガラスの円形マスクで切れるため、レイヤー変形で行う。
-    func bounceAssembly() {
+    func bounceAssembly(intensity: CGFloat = 1) {
         guard let assembly = assemblyView, let layer = assembly.layer else { return }
         let w = assembly.bounds.width
         let h = assembly.bounds.height
@@ -325,12 +330,13 @@ final class PanelController: NSObject, NSWindowDelegate {
             m = CATransform3DScale(m, sx, sy, 1)
             return m
         }
+        let k = intensity
         let animation = CAKeyframeAnimation(keyPath: "transform")
         animation.values = [
             CATransform3DIdentity,
-            scaled(1.12, 0.88),
-            scaled(0.94, 1.06),
-            scaled(1.03, 0.98),
+            scaled(1 + 0.12 * k, 1 - 0.12 * k),
+            scaled(1 - 0.06 * k, 1 + 0.06 * k),
+            scaled(1 + 0.03 * k, 1 - 0.02 * k),
             CATransform3DIdentity,
         ].map { NSValue(caTransform3D: $0) }
         animation.keyTimes = [0, 0.22, 0.5, 0.75, 1]

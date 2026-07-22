@@ -338,7 +338,7 @@ extension PanelController {
             isDraggingBubble = false
             dragStartAnchor = nil
             if !dragMoved {
-                expandFromBubble() // 動かさず放した = クリック → パネルに展開
+                registerBubbleTap() // クリック = ポヨン、連打で破裂!
             } else if let buttonFrame = statusButtonFrame?(), let onScreen = assemblyScreenFrame {
                 // メニューバー付近で放したら吸着して戻る
                 let zone = buttonFrame.insetBy(dx: -snapMargin, dy: -snapMargin)
@@ -349,6 +349,25 @@ extension PanelController {
             return true
         default:
             return false
+        }
+    }
+
+    /// バブルのクリック遊び: 1回目ポヨン、2回目強めのポヨン、3連打で破裂💥
+    private func registerBubbleTap() {
+        bubbleTapCount += 1
+        bubbleTapResetTask?.cancel()
+
+        if bubbleTapCount >= 3 {
+            bubbleTapCount = 0
+            popBubble()
+            return
+        }
+        bounceAssembly(intensity: bubbleTapCount == 1 ? 1.0 : 1.6)
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        bubbleTapResetTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.1))
+            guard !Task.isCancelled else { return }
+            self?.bubbleTapCount = 0
         }
     }
 
