@@ -18,6 +18,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// StatusItemControllerから注入される（吸着判定・デフォルト位置用）
     var statusButtonFrame: (() -> NSRect?)?
     var onOpenSettings: (() -> Void)?
+    /// attachedパネルの開閉に合わせてステータスアイテムのネイティブハイライトを切り替える
+    var setStatusHighlighted: ((Bool) -> Void)?
 
     private(set) lazy var uiActions: PanelActions = makeActions()
 
@@ -232,6 +234,7 @@ final class PanelController: NSObject, NSWindowDelegate {
                 p.animator().alphaValue = 1
             }
             self.installDismissMonitors()
+            self.setStatusHighlighted?(true)
             self.usageService.refreshIfStale(olderThan: 45)
         }
     }
@@ -288,6 +291,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         state.mode = .floating
         bounceAssembly() // ぷるんっ
         removeDismissMonitors()
+        setStatusHighlighted?(false)
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
         p.level = .floating
         p.isMovableByWindowBackground = true
@@ -304,6 +308,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func hide() {
         removeDismissMonitors()
+        setStatusHighlighted?(false)
         guard let p = panel, p.isVisible else {
             if isBubbleChrome { resetChromeAfterHide() }
             return

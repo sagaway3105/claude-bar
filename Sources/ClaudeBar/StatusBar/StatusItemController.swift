@@ -41,6 +41,11 @@ final class StatusItemController: NSObject {
         panelController.toggle(relativeTo: button)
     }
 
+    /// パネルが開いている間、Apple純正メニューと同じネイティブハイライトを表示
+    func setHighlighted(_ highlighted: Bool) {
+        statusItem.button?.isHighlighted = highlighted
+    }
+
     @objc private func didClick() {
         guard let button = statusItem.button else { return }
         if NSApp.currentEvent?.type == .rightMouseUp {

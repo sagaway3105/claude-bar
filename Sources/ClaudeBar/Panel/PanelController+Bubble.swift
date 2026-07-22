@@ -159,6 +159,7 @@ extension PanelController {
         revivalTask?.cancel()
         state.mode = .bubble
         removeDismissMonitors()
+        setStatusHighlighted?(false)
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
 
         // hideのフェードが進行中でも確実に見える状態へ戻す（進行中のalphaアニメーションを上書き）
