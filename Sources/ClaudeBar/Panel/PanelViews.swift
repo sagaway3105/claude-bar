@@ -397,6 +397,13 @@ struct BubbleView: View {
     var state: AppState
     var settings: SettingsStore
     var actions: PanelActions
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// 中央の下地色。ダークモードでは黒ベースで一段暗くする
+    private var hazeCore: Color {
+        colorScheme == .dark ? .black : Color(nsColor: .windowBackgroundColor)
+    }
+    private var hazeCoreOpacity: Double { colorScheme == .dark ? 0.38 : 0.25 }
 
     private var usageWindow: UsageWindow? { state.usage?.window(for: settings.bubbleMetric) }
     private var value: Double { usageWindow?.utilization ?? 0 }
@@ -433,8 +440,8 @@ struct BubbleView: View {
                 Circle()
                     .fill(EllipticalGradient(
                         gradient: Gradient(stops: [
-                            .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.25), location: 0),
-                            .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.22), location: 0.4),
+                            .init(color: hazeCore.opacity(hazeCoreOpacity), location: 0),
+                            .init(color: hazeCore.opacity(hazeCoreOpacity - 0.03), location: 0.4),
                             .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.06), location: 0.65),
                             .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.4), location: 0.88),
                             .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.5), location: 1),
