@@ -137,26 +137,17 @@ struct UsagePanelView: View {
             .padding(.top, 2)
             .padding(.bottom, 12)
 
-            if let message = state.errorMessage {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                        Text(message)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    if state.needsLogin {
-                        Button {
-                            actions.login()
-                        } label: {
-                            Label("Claude Codeにログイン", systemImage: "terminal")
-                                .font(.caption.weight(.semibold))
-                        }
-                        .buttonStyle(.borderless)
-                        .tint(.claudeOrange)
-                    }
+            if state.needsLogin {
+                LoginSetupTile(actions: actions)
+                    .padding(.bottom, 12)
+            } else if let message = state.errorMessage {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 .modifier(SectionTile())
                 .padding(.bottom, 12)
@@ -219,6 +210,52 @@ struct UsagePanelView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "H:mm 更新"
         return formatter.string(from: date)
+    }
+}
+
+/// 初回セットアップ（アカウント連携）の導線タイル。
+/// Claude Code未導入なら「①インストール→②ログイン」の2ステップに分岐する
+struct LoginSetupTile: View {
+    var actions: PanelActions
+    @State private var cliInstalled = LoginHelper.claudeCLIInstalled
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("アカウント連携", systemImage: "person.crop.circle.badge.checkmark")
+                .font(.caption.weight(.semibold))
+            Text(cliInstalled
+                ? "Claude Codeの公式ログインで連携します。パスワードがこのアプリを経由することはありません"
+                : "連携にはClaude Codeが必要です（未検出）。①でインストールしてから②でログインしてください")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !cliInstalled {
+                Button {
+                    LoginHelper.copyInstallCommand()
+                    copied = true
+                } label: {
+                    Label(copied ? "コピーしました — ターミナルで実行してください" : "① インストールコマンドをコピー",
+                          systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderless)
+                .tint(.claudeOrange)
+            }
+            Button {
+                actions.login()
+            } label: {
+                Label(cliInstalled ? "Claude Codeにログイン" : "② Claude Codeにログイン", systemImage: "terminal")
+                    .font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.borderless)
+            .tint(.claudeOrange)
+        }
+        .modifier(SectionTile())
+        .task {
+            // パネルを開くたびに検出し直す（①実行後に開き直せば②だけの表示になる）
+            cliInstalled = LoginHelper.claudeCLIInstalled
+        }
     }
 }
 

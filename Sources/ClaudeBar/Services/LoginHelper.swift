@@ -5,6 +5,26 @@ import AppKit
 /// 禁止されているため、公式CLIの `claude /login` へ誘導する。
 @MainActor
 enum LoginHelper {
+    static let installCommand = "npm install -g @anthropic-ai/claude-code"
+
+    /// Claude Code CLIがインストール済みか（一般的な配置場所を確認）
+    static var claudeCLIInstalled: Bool {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser.path
+        return [
+            "/opt/homebrew/bin/claude",
+            "/usr/local/bin/claude",
+            home + "/.local/bin/claude",
+            home + "/.npm-global/bin/claude",
+        ].contains { fm.isExecutableFile(atPath: $0) }
+    }
+
+    /// npmインストールコマンドをクリップボードへ
+    static func copyInstallCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(installCommand, forType: .string)
+    }
+
     /// ターミナルで claude /login を起動する（失敗時はコマンドをコピーしてターミナルを開く）
     static func openLoginTerminal() {
         let source = """

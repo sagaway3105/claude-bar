@@ -101,6 +101,8 @@ final class DebugBridge {
             } else if command.hasPrefix("err:") {
                 let message = String(command.dropFirst(4))
                 state.errorMessage = message.isEmpty ? nil : message
+            } else if command.hasPrefix("needslogin:") {
+                state.needsLogin = command.hasSuffix("1")
             }
         }
     }

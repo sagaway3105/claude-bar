@@ -50,9 +50,13 @@ cat > "$APP/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
-# Apple Development証明書があればそれで署名（Keychainの「常に許可」が再ビルド後も維持される）
+# 署名の優先順: Developer ID（配布用・Hardened Runtime付き）> Apple Development > ad-hoc
+DEVID=$(security find-identity -p codesigning -v 2>/dev/null | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')
 IDENTITY=$(security find-identity -p codesigning -v 2>/dev/null | grep -o '"Apple Development: [^"]*"' | head -1 | tr -d '"')
-if [[ -n "${IDENTITY}" ]]; then
+if [[ -n "${DEVID}" ]]; then
+  codesign --force --options runtime --timestamp --sign "${DEVID}" "$APP"
+  echo "🔏 Developer ID署名: ${DEVID}"
+elif [[ -n "${IDENTITY}" ]]; then
   codesign --force --sign "${IDENTITY}" "$APP"
 else
   codesign --force --sign - "$APP"
