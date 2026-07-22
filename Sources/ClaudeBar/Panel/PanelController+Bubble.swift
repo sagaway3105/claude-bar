@@ -27,10 +27,11 @@ extension PanelController {
         p.ignoresMouseEvents = false
 
         assembly.autoresizingMask = []
-        let margin = (size - bubbleDiameter) / 2
+        let diameter = currentBubbleDiameter
+        let margin = (size - diameter) / 2
         floatAnchor = NSPoint(x: margin, y: margin)
         wasHoveringBubble = false
-        assembly.frame = NSRect(origin: floatAnchor, size: NSSize(width: bubbleDiameter, height: bubbleDiameter))
+        assembly.frame = NSRect(origin: floatAnchor, size: NSSize(width: diameter, height: diameter))
         contentHosting?.frame = assembly.bounds
 
         // ドラッグ時のウィンドウ原点の可動域（メニューバーとDockを避けた可視領域）
@@ -103,6 +104,7 @@ extension PanelController {
 
     private func trackMouse() {
         guard isBubbleChrome else { return }
+        growBubbleIfNeeded()
         guard let bubbleOnScreen = assemblyScreenFrame?.insetBy(dx: -6, dy: -6) else { return }
         let inside = bubbleOnScreen.contains(NSEvent.mouseLocation)
         if inside, !wasHoveringBubble, !dragActive,
@@ -111,6 +113,27 @@ extension PanelController {
             bounceAssembly() // ポヨン
         }
         wasHoveringBubble = inside
+    }
+
+    /// 使用量が10%刻みを跨いだらバブルをぷにっと成長させる
+    private func growBubbleIfNeeded() {
+        guard !dragActive, !isPopping,
+              let assembly = assemblyView, let hosting = contentHosting else { return }
+        let desired = currentBubbleDiameter
+        guard abs(assembly.frame.width - desired) > 0.5 else { return }
+
+        let center = NSPoint(x: assembly.frame.midX, y: assembly.frame.midY)
+        let target = NSRect(
+            x: center.x - desired / 2, y: center.y - desired / 2,
+            width: desired, height: desired
+        )
+        floatAnchor = target.origin
+        hosting.frame = NSRect(origin: .zero, size: target.size)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.4
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1.25)
+            assembly.animator().frame = target
+        }
     }
 
     func stopMouseTracking() {
@@ -384,7 +407,7 @@ extension PanelController {
         NSSound(named: "Pop")?.play()
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
         if let center = lastBubbleCenter {
-            showPopBurst(centeredOn: center)
+            showPopBurst(centeredOn: center, scale: Self.bubbleScaleFactor(for: bubbleUsageWindow?.utilization ?? 0))
         }
 
         NSAnimationContext.runAnimationGroup { ctx in
@@ -419,8 +442,8 @@ extension PanelController {
         }
     }
 
-    private func showPopBurst(centeredOn center: NSPoint) {
-        let size: CGFloat = 240
+    private func showPopBurst(centeredOn center: NSPoint, scale: CGFloat = 1) {
+        let size: CGFloat = 240 * scale
         let w = NSWindow(
             contentRect: NSRect(x: center.x - size / 2, y: center.y - size / 2, width: size, height: size),
             styleMask: .borderless, backing: .buffered, defer: false
@@ -432,7 +455,7 @@ extension PanelController {
         w.level = .floating
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         w.isReleasedWhenClosed = false
-        w.contentView = NSHostingView(rootView: PopBurstView())
+        w.contentView = NSHostingView(rootView: PopBurstView(burstScale: scale))
         w.orderFrontRegardless()
         popWindow = w
         Task { [weak self] in

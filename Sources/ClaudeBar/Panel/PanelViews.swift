@@ -297,11 +297,24 @@ struct BubbleView: View {
         return settings.useSystemAccent ? Color(nsColor: .controlAccentColor) : .claudeOrange
     }
 
+    /// 使用量に応じて風船のように膨らむ（10%ごとに+6%、100%で1.6倍）
+    private var sizeFactor: CGFloat {
+        PanelController.bubbleScaleFactor(for: value)
+    }
+
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             ZStack {
-                Circle().stroke(Color.primary.opacity(0.14), lineWidth: 4)
+                // 球面の照り（左上光源）— シャボン玉の立体感
+                Circle()
+                    .fill(RadialGradient(
+                        colors: [.white.opacity(0.25), .white.opacity(0.06), .clear],
+                        center: UnitPoint(x: 0.32, y: 0.28),
+                        startRadius: 2, endRadius: 46
+                    ))
+                // ゲージ溝はごく薄く（進捗アークだけが目立つように）
+                Circle().stroke(Color.primary.opacity(0.05), lineWidth: 4)
                 Circle()
                     .trim(from: 0, to: max(0.003, min(value, 100) / 100))
                     .stroke(
@@ -332,19 +345,44 @@ struct BubbleView: View {
                 }
                 .rotationEffect(.degrees(sin(t * 0.9) * 3))
 
-                // シャボン玉のハイライト
+                // シャボン玉のハイライト（主）
                 Ellipse()
-                    .fill(.white.opacity(0.35))
-                    .frame(width: 18, height: 9)
+                    .fill(.white.opacity(0.5))
+                    .frame(width: 20, height: 9)
                     .rotationEffect(.degrees(-32))
                     .offset(x: -15, y: -19)
-                    .blur(radius: 1)
+                    .blur(radius: 1.5)
+                // 対向の小さなグリント
+                Circle()
+                    .fill(.white.opacity(0.28))
+                    .frame(width: 5, height: 5)
+                    .offset(x: 15, y: 19)
+                    .blur(radius: 0.8)
             }
             .padding(7)
         }
         .frame(width: 76, height: 76)
+        .scaleEffect(sizeFactor)
+        .frame(width: 76 * sizeFactor, height: 76 * sizeFactor)
+        .animation(.bouncy(duration: 0.4), value: sizeFactor)
         .glassEffect(.regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.45)), in: Circle())
-        .overlay(IridescentRim(shape: Circle()))
+        .overlay(
+            ZStack {
+                // 内側へにじむ虹色フリンジ
+                Circle()
+                    .strokeBorder(
+                        AngularGradient(colors: [
+                            .cyan.opacity(0.3), .purple.opacity(0.24), .pink.opacity(0.28),
+                            .orange.opacity(0.22), .mint.opacity(0.26), .cyan.opacity(0.3),
+                        ], center: .center),
+                        lineWidth: 4
+                    )
+                    .blur(radius: 3)
+                    .opacity(0.7)
+                IridescentRim(shape: Circle())
+            }
+            .allowsHitTesting(false)
+        )
         .contentShape(Circle())
         .contextMenu {
             Button("パネルに展開") { actions.expand() }
@@ -368,6 +406,7 @@ struct BubbleView: View {
 // MARK: - 割れる演出（衝撃波 + 飛沫）
 
 struct PopBurstView: View {
+    var burstScale: CGFloat = 1
     @State private var expand = false
 
     // 不揃いな飛沫（角度オフセット・距離・サイズを決め打ちで散らす）
@@ -389,16 +428,16 @@ struct PopBurstView: View {
             // 衝撃波リング
             Circle()
                 .stroke(.white.opacity(expand ? 0 : 0.55), lineWidth: 2.5)
-                .frame(width: 64, height: 64)
+                .frame(width: 64 * burstScale, height: 64 * burstScale)
                 .scaleEffect(expand ? 2.8 : 0.9)
 
             ForEach(Array(Self.droplets.enumerated()), id: \.offset) { _, d in
                 Circle()
                     .fill(Color.claudeOrange.opacity(d.opacity))
-                    .frame(width: d.size, height: d.size)
+                    .frame(width: d.size * burstScale, height: d.size * burstScale)
                     .offset(
-                        x: expand ? cos(d.angle) * d.distance : 0,
-                        y: expand ? sin(d.angle) * d.distance : 0
+                        x: expand ? cos(d.angle) * d.distance * burstScale : 0,
+                        y: expand ? sin(d.angle) * d.distance * burstScale : 0
                     )
                     .opacity(expand ? 0 : 1)
                     .scaleEffect(expand ? 0.3 : 1)
