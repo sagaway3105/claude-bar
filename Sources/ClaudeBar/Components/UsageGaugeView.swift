@@ -24,7 +24,8 @@ struct UsageGaugeView: View {
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.4), value: value)
-                    .foregroundStyle(window == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(tint))
+                    // 数字は標準の文字色（色はバー側で表現する）
+                    .foregroundStyle(window == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
