@@ -60,7 +60,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     let panelWidth: CGFloat = 300
     let panelWindowHeight: CGFloat = 460 // 固定（内容はSwiftUIが上詰めで描き、余りは完全透明）
     let bubbleDiameter: CGFloat = 76
-    let bubbleWindowSize: CGFloat = 170 // 最大バブル(76*1.6)+浮遊・伸縮マージン
+    let bubbleWindowSize: CGFloat = 150 // 最大バブル(76*1.4)+浮遊・伸縮マージン
     let panelCornerRadius: CGFloat = 24
     let detachThreshold: CGFloat = 30
     let snapMargin: CGFloat = 60
@@ -79,9 +79,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         state.usage?.window(for: settings.bubbleMetric)
     }
 
-    /// 使用量に応じたバブルの拡大率: 10%ごとに+6%、100%で1.6倍（風船のように膨らむ）
+    /// 使用量に応じたバブルの拡大率: 10%ごとに+4%、100%で1.4倍（風船のように膨らむ）
     static func bubbleScaleFactor(for utilization: Double) -> CGFloat {
-        1 + 0.06 * CGFloat((min(max(utilization, 0), 100) / 10).rounded(.down))
+        1 + 0.04 * CGFloat((min(max(utilization, 0), 100) / 10).rounded(.down))
     }
 
     /// 現在の使用量に応じたバブルの直径
