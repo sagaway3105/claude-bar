@@ -34,34 +34,30 @@ func drawIcon(size s: CGFloat) {
         gradient.draw(in: squircle, angle: -90)
     }
 
-    // サンバースト（アプリ内のStarburstShapeと同じ形状）
+    // Claude公式スパーク風: 丸端・長さ不揃いのスポーク（アプリ内StarburstShapeと同形状）
     let center = NSPoint(x: s / 2, y: s / 2)
-    let radius = rect.width * 0.34
-    let innerRadius = radius * 0.13
-    let rays = 9
-    let lengths: [CGFloat] = [1.0, 0.78, 0.93, 0.84, 1.0, 0.8, 0.95, 0.82, 0.9]
-    let baseHalfAngle = CGFloat.pi / CGFloat(rays) * 0.6
-    let tipHalfAngle = baseHalfAngle * 0.42
-
-    func point(_ r: CGFloat, _ angle: CGFloat) -> NSPoint {
-        NSPoint(x: center.x + cos(angle) * r, y: center.y + sin(angle) * r)
-    }
+    let radius = rect.width * 0.36
+    let lengths: [CGFloat] = [1.0, 0.72, 0.93, 0.70, 1.0, 0.72, 0.93, 0.70, 1.0, 0.72]
+    let angleJitter: [CGFloat] = [0, 0.04, -0.03, 0.04, 0, -0.04, 0.03, 0, -0.03, 0.04]
+    let count = lengths.count
+    let rayWidth = radius * 0.18
+    let innerRadius: CGFloat = 0
 
     let star = NSBezierPath()
-    for i in 0..<rays {
-        let angle = CGFloat(i) / CGFloat(rays) * 2 * .pi - .pi / 2
-        let length = radius * lengths[i % lengths.count]
-        star.move(to: point(innerRadius, angle - baseHalfAngle))
-        star.line(to: point(length, angle - tipHalfAngle))
-        star.line(to: point(length, angle + tipHalfAngle))
-        star.line(to: point(innerRadius, angle + baseHalfAngle))
-        star.close()
+    for i in 0..<count {
+        let angle = CGFloat(i) / CGFloat(count) * 2 * .pi - .pi / 2 + angleJitter[i]
+        let ray = NSBezierPath(
+            roundedRect: NSRect(
+                x: innerRadius, y: -rayWidth / 2,
+                width: radius * lengths[i] - innerRadius, height: rayWidth
+            ),
+            xRadius: rayWidth / 2, yRadius: rayWidth / 2
+        )
+        var transform = AffineTransform(translationByX: center.x, byY: center.y)
+        transform.rotate(byRadians: angle)
+        ray.transform(using: transform)
+        star.append(ray)
     }
-    let dotRadius = innerRadius * 1.35
-    star.appendOval(in: NSRect(
-        x: center.x - dotRadius, y: center.y - dotRadius,
-        width: dotRadius * 2, height: dotRadius * 2
-    ))
     NSColor(red: 0.851, green: 0.467, blue: 0.341, alpha: 1).setFill()
     star.fill()
 }

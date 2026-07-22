@@ -20,7 +20,7 @@ struct UsageGaugeView: View {
                     .font(.system(size: 11.5))
                 Spacer()
                 Text(window == nil ? "–" : "\(Int(value.rounded()))%")
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.system(size: 12.5))
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.4), value: value)

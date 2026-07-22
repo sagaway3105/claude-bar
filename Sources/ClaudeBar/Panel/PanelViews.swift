@@ -297,8 +297,12 @@ struct BubbleView: View {
                     )
                     .rotationEffect(.degrees(-90))
                 VStack(spacing: 0) {
-                    ClaudeLogoView(animating: state.isActive, color: .claudeOrange)
-                        .frame(width: 14, height: 14)
+                    // 消費中だけClaudeオレンジ、待機中はデフォルトカラー
+                    ClaudeLogoView(
+                        animating: state.isActive,
+                        color: state.isActive ? .claudeOrange : .primary
+                    )
+                    .frame(width: 14, height: 14)
                     Text(percentText)
                         .font(.system(size: 11.5, weight: .bold))
                         .monospacedDigit()

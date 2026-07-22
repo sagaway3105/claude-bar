@@ -19,10 +19,11 @@ struct StatusLabelView: View {
                 .monospacedDigit()
                 .contentTransition(.numericText())
                 .animation(.snappy(duration: 0.4), value: state.sessionPercentText)
-            // 消費中（回転中）はClaudeオレンジで光る
+            // 消費中（回転中）はClaudeオレンジ+縁取りで光る（背景に埋もれない）
             ClaudeLogoView(
                 animating: state.isActive,
-                color: state.isActive ? .claudeOrange : (tint ?? .primary)
+                color: state.isActive ? .claudeOrange : (tint ?? .primary),
+                outlined: state.isActive || tint != nil
             )
             .frame(width: 14, height: 14)
         }
