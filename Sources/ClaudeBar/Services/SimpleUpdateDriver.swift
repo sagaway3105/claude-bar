@@ -14,21 +14,46 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
     // MARK: - 表示するのはここだけ
 
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
-        reply(runUpdateAlert())
+        let releasePage = URL(string: "https://github.com/sagaway3105/claude-bar/releases/tag/v\(appcastItem.displayVersionString)")
+        reply(runUpdateAlert(detailsURL: releasePage))
     }
 
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
-        reply(runUpdateAlert())
+        // この経路ではバージョン不明のためリリース一覧へ
+        reply(runUpdateAlert(detailsURL: URL(string: "https://github.com/sagaway3105/claude-bar/releases")))
     }
 
-    /// アプリアイコン＋メッセージ＋2択だけの確認ダイアログ
-    private func runUpdateAlert() -> SPUUserUpdateChoice {
+    /// アプリアイコン＋メッセージ＋2択だけの確認ダイアログ。
+    /// 詳細を知りたい人向けにリリースページへのテキストリンクだけ添える
+    private func runUpdateAlert(detailsURL: URL?) -> SPUUserUpdateChoice {
         let alert = NSAlert()
         alert.messageText = "新しいバージョンのClaudeBarがご利用できます！"
+        if let detailsURL {
+            alert.accessoryView = Self.makeDetailsLink(to: detailsURL)
+        }
         alert.addButton(withTitle: "インストールして再起動")
         alert.addButton(withTitle: "後にする")
         NSApp.activate(ignoringOtherApps: true)
         return alert.runModal() == .alertFirstButtonReturn ? .install : .dismiss
+    }
+
+    /// 「詳しいアップデート内容を見る」リンク（クリックでブラウザが開く。ダイアログは開いたまま）
+    private static func makeDetailsLink(to url: URL) -> NSView {
+        let text = NSAttributedString(
+            string: "詳しいアップデート内容を見る",
+            attributes: [
+                .link: url,
+                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+            ]
+        )
+        let view = NSTextView(frame: NSRect(x: 0, y: 0, width: 240, height: 18))
+        view.textStorage?.setAttributedString(text)
+        view.alignment = .center
+        view.isEditable = false
+        view.isSelectable = true // リンクのクリックに必要
+        view.drawsBackground = false
+        view.textContainerInset = .zero
+        return view
     }
 
     // MARK: - 手動チェック時だけ結果を知らせる
