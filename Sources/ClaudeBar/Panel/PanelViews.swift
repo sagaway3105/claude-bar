@@ -224,10 +224,10 @@ struct UsagePanelView: View {
                     activeTint: baseTint
                 ) { actions.toOverlay() }
                 IconButton(
-                    systemName: "bubbles.and.sparkles.fill",
                     help: state.bubbleActive ? "バブルを非表示" : "浮遊モード（バブル）",
                     activeState: state.bubbleActive,
-                    activeTint: baseTint
+                    activeTint: baseTint,
+                    icon: BubbleSparkleIcon()
                 ) { actions.toBubble() }
             }
         }
@@ -337,23 +337,69 @@ struct ExtraUsageRow: View {
     }
 }
 
-struct IconButton: View {
-    let systemName: String
+struct IconButton<Icon: View>: View {
     var help = ""
     /// nil=通常ボタン（ホバー時のみ丸背景）。true/false=トグル（常時グレー地、trueでアクセント色）
     var activeState: Bool? = nil
     var activeTint: Color = .accentColor
     let action: () -> Void
+    let icon: Icon
     @State private var hovering = false
+
+    init(help: String = "", activeState: Bool? = nil, activeTint: Color = .accentColor,
+         icon: Icon, action: @escaping () -> Void) {
+        self.help = help
+        self.activeState = activeState
+        self.activeTint = activeTint
+        self.action = action
+        self.icon = icon
+    }
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12, weight: .medium))
+            icon.font(.system(size: 12, weight: .medium))
         }
         .buttonStyle(HoverPressIconStyle(hovering: hovering, activeState: activeState, activeTint: activeTint))
         .onHover { hovering = $0 }
         .help(help)
+    }
+}
+
+extension IconButton where Icon == Image {
+    init(systemName: String, help: String = "", activeState: Bool? = nil,
+         activeTint: Color = .accentColor, action: @escaping () -> Void) {
+        self.init(help: help, activeState: activeState, activeTint: activeTint,
+                  icon: Image(systemName: systemName), action: action)
+    }
+}
+
+/// 単体のシャボン玉+キラキラ（線の十字）。SF Symbolsに無い組み合わせなのでPathで自前描画
+struct BubbleSparkleIcon: View {
+    var body: some View {
+        let center = CGPoint(x: 6.2, y: 9.8)
+        let sparkle = CGPoint(x: 13.1, y: 3.2)
+        let arm: CGFloat = 2.5
+        ZStack {
+            Path { p in
+                p.addEllipse(in: CGRect(x: center.x - 5, y: center.y - 5, width: 10, height: 10))
+            }
+            .stroke(style: StrokeStyle(lineWidth: 1.4))
+            // シャボン玉のハイライト（左上の弧）
+            Path { p in
+                p.addArc(center: center, radius: 3.0,
+                         startAngle: .degrees(200), endAngle: .degrees(245), clockwise: false)
+            }
+            .stroke(style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
+            // キラキラ: 均一な線幅の十字
+            Path { p in
+                p.move(to: CGPoint(x: sparkle.x, y: sparkle.y - arm))
+                p.addLine(to: CGPoint(x: sparkle.x, y: sparkle.y + arm))
+                p.move(to: CGPoint(x: sparkle.x - arm, y: sparkle.y))
+                p.addLine(to: CGPoint(x: sparkle.x + arm, y: sparkle.y))
+            }
+            .stroke(style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+        }
+        .frame(width: 16, height: 16)
     }
 }
 
