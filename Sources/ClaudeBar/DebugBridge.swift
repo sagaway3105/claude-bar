@@ -121,6 +121,17 @@ final class DebugBridge {
         }
         info["bubbleActive"] = state.bubbleActive
         info["highlighted"] = state.menuHighlighted
+        info["needsLogin"] = state.needsLogin
+        if let msg = state.errorMessage { info["errorMessage"] = msg }
+        if let last = state.lastUpdated { info["lastUpdatedEpoch"] = last.timeIntervalSince1970 }
+        if let u = state.usage {
+            var usage: [String: Any] = [:]
+            if let s = u.session?.utilization { usage["session"] = s }
+            if let w = u.weeklyAll?.utilization { usage["weeklyAll"] = w }
+            if let f = u.weeklyFable?.utilization { usage["weeklyFable"] = f }
+            info["usage"] = usage
+            info["fableLabel"] = state.fableLabel
+        }
         if let frame = panelController.debugPanelFrame {
             info["panel"] = [frame.origin.x, frame.origin.y, frame.width, frame.height]
             info["visible"] = panelController.debugPanelVisible
