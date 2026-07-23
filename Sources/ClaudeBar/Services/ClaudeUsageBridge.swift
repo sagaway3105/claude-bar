@@ -12,29 +12,38 @@ import Foundation
 /// 既存の `UsageParser` でそのまま解釈できる。
 enum ClaudeUsageBridge {
 
-    /// 取得できたら utilization JSON（UsageParserが読める形）を返す。取得不能なら nil。
+    /// 取得できたら utilization JSON（UsageParserが読める形）と実際の取得時刻を返す。取得不能なら nil。
     /// キャッシュが maxAge より古ければ claude を起動して更新を試みてから読み直す。
-    static func fetchUtilizationJSON(maxAge: TimeInterval) async -> Data? {
-        if let (data, age) = readCache(), age <= maxAge {
-            return data // 十分新しい（Claude Code側が更新済み）→ 起動不要
+    static func fetchUtilizationJSON(maxAge: TimeInterval) async -> (data: Data, fetchedAt: Date)? {
+        if let cached = readCache(), cached.age <= maxAge {
+            return (cached.data, Date().addingTimeInterval(-cached.age)) // 十分新しい → 起動不要
         }
         await refreshViaClaude()
-        return readCache()?.data // 更新に失敗しても、古いキャッシュがあれば使う
+        // 更新に失敗しても古いキャッシュがあれば使う（取得時刻は正直に返し、UIの「更新」表示に反映させる）
+        guard let cached = readCache() else { return nil }
+        return (cached.data, Date().addingTimeInterval(-cached.age))
     }
 
-    /// claude バイナリの実体パス（固定の配置場所のみを探す。ログインシェルは使わない）。
+    /// claude バイナリの実体パス（既知の配置場所を直接探す。ログインシェルは使わない）。
     /// ログインシェル(.zshrc)経由だとフォルダ/リムーバブルディスクのTCC確認が出るため直接叩く。
+    /// CLI検出（LoginHelper）と実行（本ブリッジ・バージョン検出）で共有する唯一の探索ロジック。
     static func claudeBinaryPath() -> String? {
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser.path
-        let candidates = [
+        var candidates = [
             "/opt/homebrew/bin/claude",
             "/usr/local/bin/claude",
             home + "/.local/bin/claude",
             home + "/.claude/local/claude",
             home + "/.npm-global/bin/claude",
             home + "/.volta/bin/claude",
+            home + "/.asdf/shims/claude",
         ]
+        // nvm: バージョンディレクトリ配下を走査（新しい順）
+        let nvmRoot = home + "/.nvm/versions/node"
+        if let versions = try? fm.contentsOfDirectory(atPath: nvmRoot) {
+            candidates += versions.sorted(by: >).map { "\(nvmRoot)/\($0)/bin/claude" }
+        }
         return candidates.first { fm.isExecutableFile(atPath: $0) }
     }
 

@@ -46,6 +46,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     var revivalTask: Task<Void, Never>?
     var resetPopRetry: Task<Void, Never>?        // ドラッグ中に来たリセット破裂の再試行
     var bubbleTrackedResetsAt: Date?             // リセット境界越え検知用に追跡中のリセット時刻
+    var resetRefreshTask: Task<Void, Never>?     // リセット時刻に使用量再取得を予約（破裂の即時発火用）
     private var clickMonitors: [Any] = []
 
     // 浮遊状態（アンカー周辺を、無限リピートの加算アニメーションで漂う）

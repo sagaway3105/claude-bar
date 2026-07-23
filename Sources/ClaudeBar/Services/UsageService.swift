@@ -56,7 +56,6 @@ final class UsageService {
     func startPolling() {
         pollTask?.cancel()
         pollTask = Task {
-            await detectCLIVersion()
             while !Task.isCancelled {
                 await refresh()
                 let minutes = max(1, settings.pollIntervalMinutes)
@@ -84,9 +83,9 @@ final class UsageService {
         // 主経路: キーチェーンに触れずローカルキャッシュ+claudeで取得（ダイアログが出ない）。
         // キャッシュが更新間隔より古ければ claude -p "/usage" で更新させる。
         let maxAge = TimeInterval(max(1, settings.pollIntervalMinutes) * 60)
-        if let data = await ClaudeUsageBridge.fetchUtilizationJSON(maxAge: maxAge),
-           let parsed = try? UsageParser.parse(data) {
-            apply(parsed.snapshot, fableLabel: parsed.fableLabel)
+        if let fetched = await ClaudeUsageBridge.fetchUtilizationJSON(maxAge: maxAge),
+           let parsed = try? UsageParser.parse(fetched.data) {
+            apply(parsed.snapshot, fableLabel: parsed.fableLabel, asOf: fetched.fetchedAt)
             return
         }
         // フォールバック: 従来のキーチェーン+API（claude未導入・未ログインなどのレアケース）
@@ -94,6 +93,7 @@ final class UsageService {
     }
 
     private func refreshViaKeychainAPI() async {
+        await detectCLIVersionIfNeeded()
         do {
             let creds = try CredentialsStore.load()
             var request = URLRequest(url: endpoint)
@@ -150,11 +150,12 @@ final class UsageService {
         }
     }
 
-    func apply(_ snapshot: UsageSnapshot, fableLabel: String?) {
+    /// asOf: データの実際の取得時刻（キャッシュ由来の場合は過去になる。「◯時◯分 更新」表示を正直に保つ）
+    func apply(_ snapshot: UsageSnapshot, fableLabel: String?, asOf: Date = Date()) {
         let old = state.usage
         state.usage = snapshot
         if let fableLabel { state.fableLabel = fableLabel }
-        state.lastUpdated = Date()
+        state.lastUpdated = asOf
         state.errorMessage = nil
         state.needsLogin = false
         cooldownUntil = nil
@@ -182,14 +183,20 @@ final class UsageService {
         apply(snapshot, fableLabel: nil)
     }
 
-    // MARK: - Claude CLIバージョン検出（User-Agent用）
+    // MARK: - Claude CLIバージョン検出（フォールバックAPIのUser-Agent用）
 
-    private func detectCLIVersion() async {
-        guard !isFake else { return }
+    private var didDetectCLIVersion = false
+
+    /// フォールバック経路を初めて使う時だけ検出する。バイナリ直接起動
+    /// （ログインシェル経由は.zshrc走査がTCC確認を誘発するため使わない）
+    private func detectCLIVersionIfNeeded() async {
+        guard !didDetectCLIVersion, !isFake,
+              let claudePath = ClaudeUsageBridge.claudeBinaryPath() else { return }
+        didDetectCLIVersion = true
         let version: String? = await Task.detached {
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-lc", "claude --version 2>/dev/null"]
+            process.executableURL = URL(fileURLWithPath: claudePath)
+            process.arguments = ["--version"]
             let pipe = Pipe()
             process.standardOutput = pipe
             process.standardError = Pipe()

@@ -79,6 +79,7 @@ extension PanelController {
         isPopping = false
         state.bubbleActive = true
         bubbleTrackedResetsAt = bubbleUsageWindow?.resetsAt // リセット境界検知のベースライン
+        scheduleResetRefresh()
 
         let size = bubbleWindowSize
         p.setFrame(
@@ -139,6 +140,7 @@ extension PanelController {
         state.bubbleActive = false
         revivalTask?.cancel()
         resetPopRetry?.cancel()
+        resetRefreshTask?.cancel()
         guard let p = bubblePanel, p.isVisible, let assembly = bubbleAssembly else { return }
         stopFloating()
         stopMouseTracking()
@@ -477,18 +479,36 @@ extension PanelController {
     }
 
     /// 使用量更新のたびに呼ばれる。表示中メトリクスがリセット境界を越えていたら破裂演出を起こす。
-    /// （ポーリング間隔ぶん遅れる可能性はあるが、スリープ跨ぎでも取りこぼさない確実な検知）
+    /// （検知はデータ駆動で確実に、発火の即時性は scheduleResetRefresh のタイマーで担保する）
     func onUsageUpdated() {
         guard state.bubbleActive, !isPopping else {
             bubbleTrackedResetsAt = bubbleUsageWindow?.resetsAt
             return
         }
         let newResets = bubbleUsageWindow?.resetsAt
-        defer { bubbleTrackedResetsAt = newResets }
+        defer {
+            bubbleTrackedResetsAt = newResets
+            scheduleResetRefresh()
+        }
         guard let prev = bubbleTrackedResetsAt, let newResets else { return }
         // 追跡中だったリセット時刻を過ぎ、ウィンドウが新しい期間へ進んだ = リセット発生
         if newResets > prev.addingTimeInterval(60), prev.timeIntervalSinceNow < 60 {
             popForReset()
+        }
+    }
+
+    /// 表示中メトリクスのリセット時刻+90秒に使用量の再取得を予約する。
+    /// 取得結果で onUsageUpdated が境界越えを検知し、ポーリングを待たず数分以内に破裂→再生成が始まる
+    private func scheduleResetRefresh() {
+        resetRefreshTask?.cancel()
+        guard state.bubbleActive,
+              let resets = bubbleUsageWindow?.resetsAt,
+              resets.timeIntervalSinceNow > 0 else { return }
+        let delay = resets.timeIntervalSinceNow + 90
+        resetRefreshTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, !Task.isCancelled else { return }
+            await self.usageService.refresh()
         }
     }
 
@@ -538,6 +558,7 @@ extension PanelController {
         state.bubbleActive = false
         revivalTask?.cancel()
         resetPopRetry?.cancel()
+        resetRefreshTask?.cancel()
         stopFloating()
         stopMouseTracking()
         removeBubbleMouseMonitor()
