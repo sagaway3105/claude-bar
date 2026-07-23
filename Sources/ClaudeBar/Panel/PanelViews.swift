@@ -218,7 +218,7 @@ struct UsagePanelView: View {
                 IconButton(systemName: "arrow.clockwise", help: "今すぐ更新") { actions.refresh() }
                 IconButton(systemName: "gearshape.fill", help: "設定") { actions.settings() }
                 IconButton(
-                    systemName: "pin.fill",
+                    systemName: "pin",
                     help: state.mode == .floating ? "メニューバー直下に戻す" : "オーバーレイモード（常に手前に表示）",
                     activeState: state.mode == .floating,
                     activeTint: baseTint
