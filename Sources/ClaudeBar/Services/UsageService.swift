@@ -81,6 +81,19 @@ final class UsageService {
         isRefreshing = true
         defer { isRefreshing = false }
 
+        // 主経路: キーチェーンに触れずローカルキャッシュ+claudeで取得（ダイアログが出ない）。
+        // キャッシュが更新間隔より古ければ claude -p "/usage" で更新させる。
+        let maxAge = TimeInterval(max(1, settings.pollIntervalMinutes) * 60)
+        if let data = await ClaudeUsageBridge.fetchUtilizationJSON(maxAge: maxAge),
+           let parsed = try? UsageParser.parse(data) {
+            apply(parsed.snapshot, fableLabel: parsed.fableLabel)
+            return
+        }
+        // フォールバック: 従来のキーチェーン+API（claude未導入・未ログインなどのレアケース）
+        await refreshViaKeychainAPI()
+    }
+
+    private func refreshViaKeychainAPI() async {
         do {
             let creds = try CredentialsStore.load()
             var request = URLRequest(url: endpoint)
