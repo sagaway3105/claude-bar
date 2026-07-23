@@ -22,6 +22,22 @@ enum ClaudeUsageBridge {
         return readCache()?.data // 更新に失敗しても、古いキャッシュがあれば使う
     }
 
+    /// claude バイナリの実体パス（固定の配置場所のみを探す。ログインシェルは使わない）。
+    /// ログインシェル(.zshrc)経由だとフォルダ/リムーバブルディスクのTCC確認が出るため直接叩く。
+    static func claudeBinaryPath() -> String? {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser.path
+        let candidates = [
+            "/opt/homebrew/bin/claude",
+            "/usr/local/bin/claude",
+            home + "/.local/bin/claude",
+            home + "/.claude/local/claude",
+            home + "/.npm-global/bin/claude",
+            home + "/.volta/bin/claude",
+        ]
+        return candidates.first { fm.isExecutableFile(atPath: $0) }
+    }
+
     // MARK: - キャッシュ読み取り（ダイアログなし）
 
     private static func readCache() -> (data: Data, age: TimeInterval)? {
@@ -38,16 +54,19 @@ enum ClaudeUsageBridge {
 
     // MARK: - Claude Codeに更新させる（トークン消費なし・ダイアログなし）
 
-    /// ログインシェル経由で `claude -p "/usage"` を実行し cachedUsageUtilization を更新させる。
-    /// ハングに備えて最長15秒で打ち切る。
+    /// claude バイナリを直接実行して `/usage` を走らせ cachedUsageUtilization を更新させる。
+    /// ハングに備えて最長15秒で打ち切る。作業ディレクトリはホーム直下（保護対象外）にして
+    /// Desktop/Documents/リムーバブルディスク等のTCC確認を誘発しないようにする。
     private static func refreshViaClaude() async {
+        guard let claudePath = claudeBinaryPath() else { return } // 未検出→キーチェーン経路へ
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             DispatchQueue.global(qos: .utility).async {
                 let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+                process.executableURL = URL(fileURLWithPath: claudePath)
                 // --safe-mode: hooks/プラグインをスキップ（認証は正常動作）
                 // --no-session-persistence: セッション履歴を汚さない
-                process.arguments = ["-lc", "claude --safe-mode -p '/usage' --no-session-persistence"]
+                process.arguments = ["--safe-mode", "-p", "/usage", "--no-session-persistence"]
+                process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
                 process.standardOutput = Pipe()
                 process.standardError = Pipe()
                 let watchdog = DispatchWorkItem {
@@ -58,7 +77,7 @@ enum ClaudeUsageBridge {
                     try process.run()
                     process.waitUntilExit()
                 } catch {
-                    // claude未導入など → 呼び出し側がキーチェーン経路へフォールバック
+                    // 実行失敗 → 呼び出し側がキーチェーン経路へフォールバック
                 }
                 watchdog.cancel()
                 continuation.resume()
