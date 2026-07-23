@@ -143,7 +143,8 @@ final class CredentialsStoreTests: XCTestCase {
         }
     }
 
-    func testParseExpiredToken() {
+    // 失効判定はキャッシュ層(load)が担うため、parseは期限切れでも失効日時付きで返す
+    func testParseExpiredTokenReturnsPastExpiry() throws {
         let json = """
         {
           "claudeAiOauth": {
@@ -153,8 +154,9 @@ final class CredentialsStoreTests: XCTestCase {
           }
         }
         """.data(using: .utf8)!
-        XCTAssertThrowsError(try CredentialsStore.parse(json)) { error in
-            XCTAssertEqual(error as? CredentialsError, .expired)
-        }
+        let creds = try CredentialsStore.parse(json)
+        XCTAssertEqual(creds.accessToken, "sk-ant-oat01-xxxx")
+        let expiresAt = try XCTUnwrap(creds.expiresAt)
+        XCTAssertLessThan(expiresAt, Date())
     }
 }

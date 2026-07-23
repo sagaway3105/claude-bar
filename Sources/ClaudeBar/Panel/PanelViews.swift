@@ -287,7 +287,7 @@ struct LoginSetupTile: View {
         .modifier(SectionTile())
         .task {
             // パネルを開くたびに検出し直す（①実行後に開き直せば②だけの表示になる）
-            cliInstalled = LoginHelper.claudeCLIInstalled
+            cliInstalled = await LoginHelper.detectCLIInstalled()
         }
     }
 }

@@ -7,7 +7,7 @@ import AppKit
 enum LoginHelper {
     static let installCommand = "npm install -g @anthropic-ai/claude-code"
 
-    /// Claude Code CLIがインストール済みか（一般的な配置場所を確認）
+    /// Claude Code CLIがインストール済みか（固定パスの即時判定）
     static var claudeCLIInstalled: Bool {
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser.path
@@ -16,7 +16,29 @@ enum LoginHelper {
             "/usr/local/bin/claude",
             home + "/.local/bin/claude",
             home + "/.npm-global/bin/claude",
+            home + "/.claude/local/claude",
+            home + "/.volta/bin/claude",
+            home + "/.asdf/shims/claude",
         ].contains { fm.isExecutableFile(atPath: $0) }
+    }
+
+    /// 固定パス外のインストール（nvm等）も拾うため、ログインシェルのPATHでも検出する
+    static func detectCLIInstalled() async -> Bool {
+        if claudeCLIInstalled { return true }
+        return await Task.detached {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-lc", "command -v claude >/dev/null 2>&1"]
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            do {
+                try process.run()
+                process.waitUntilExit()
+                return process.terminationStatus == 0
+            } catch {
+                return false
+            }
+        }.value
     }
 
     /// npmインストールコマンドをクリップボードへ

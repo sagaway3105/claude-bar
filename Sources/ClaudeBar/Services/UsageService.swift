@@ -110,16 +110,28 @@ final class UsageService {
         } catch let error as UsageParser.ParseError {
             _ = error
             state.errorMessage = UsageError.badResponse.localizedDescription
+        } catch let error as CredentialsError {
+            state.errorMessage = error.localizedDescription
+            switch error {
+            case .notFound, .mcpOnly, .missingProfileScope:
+                state.needsLogin = true
+            case .expired, .unreadable:
+                // 連携済みでも起きる一時状態。連携タイルではなく一行メッセージに留める
+                break
+            }
+        } catch let error as UsageError {
+            state.errorMessage = error.localizedDescription
+            switch error {
+            case .forbidden:
+                state.needsLogin = true
+            case .unauthorized:
+                // キャッシュ済みトークンが拒否された → 次回ポーリングで元項目を読み直す
+                CredentialsStore.invalidateCache()
+            default:
+                break
+            }
         } catch {
             state.errorMessage = error.localizedDescription
-            if error is CredentialsError {
-                state.needsLogin = true
-            } else if let usageError = error as? UsageError {
-                switch usageError {
-                case .unauthorized, .forbidden: state.needsLogin = true
-                default: break
-                }
-            }
         }
     }
 
