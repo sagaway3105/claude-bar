@@ -22,23 +22,6 @@ struct SettingsView: View {
                 }
                 Toggle("バーの色をアクセントカラーに合わせる", isOn: $settings.useSystemAccent)
             }
-            Section("アップデート") {
-                Toggle("アップデートを自動で確認", isOn: $settings.autoUpdate)
-                    .disabled(updater?.isAvailable != true)
-                    .onChange(of: settings.autoUpdate) { _, on in
-                        updater?.automaticallyChecksForUpdates = on
-                    }
-                Button("今すぐアップデートを確認") { updater?.checkForUpdates() }
-                    .disabled(updater?.isAvailable != true)
-                if updater?.isAvailable != true {
-                    Text(".appとして起動した場合のみ利用できます")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Section("通知") {
-                Toggle("80% / 95% 到達時に通知", isOn: $settings.notifyThresholds)
-            }
             Section("バブル") {
                 Picker("表示する使用量", selection: $settings.bubbleMetric) {
                     Text("現在のセッション").tag(BubbleMetric.session)
@@ -47,7 +30,23 @@ struct SettingsView: View {
                 }
                 Toggle("割れた後、リセット時に復活", isOn: $settings.reviveBubble)
             }
-            Section {
+            Section("通知") {
+                Toggle("80% / 95% 到達時に通知", isOn: $settings.notifyThresholds)
+            }
+            Section("システム") {
+                Toggle("自動でアップデート（再起動時に適用）", isOn: $settings.autoUpdate)
+                    .disabled(updater?.isAvailable != true)
+                    .onChange(of: settings.autoUpdate) { _, on in
+                        updater?.automaticallyChecksForUpdates = on
+                        updater?.automaticallyDownloadsUpdates = on
+                    }
+                Button("今すぐアップデートを確認") { updater?.checkForUpdates() }
+                    .disabled(updater?.isAvailable != true)
+                if updater?.isAvailable != true {
+                    Text(".appとして起動した場合のみ利用できます")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 LabeledContent("バージョン", value: Self.version)
             }
         }

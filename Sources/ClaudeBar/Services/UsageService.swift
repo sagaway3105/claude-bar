@@ -30,8 +30,10 @@ enum UsageError: LocalizedError {
 final class UsageService {
     private let state: AppState
     private let settings: SettingsStore
-    private let history = UsageHistory()
     private let notifier: NotificationService
+
+    /// 使用量スナップショット適用後に呼ばれる（バブルのリセット破裂検知フック）
+    var onUsageApplied: (() -> Void)?
     private var pollTask: Task<Void, Never>?
     private var cooldownUntil: Date?
     private var isRefreshing = false
@@ -144,18 +146,12 @@ final class UsageService {
         state.needsLogin = false
         cooldownUntil = nil
 
-        if let weekly = snapshot.weeklyAll?.utilization {
-            history.add(weekly: weekly)
-        }
-        state.weeklyForecast = history.forecast(
-            current: snapshot.weeklyAll?.utilization,
-            resetsAt: snapshot.weeklyAll?.resetsAt
-        )
         notifier.evaluate(
             old: old, new: snapshot,
             fableLabel: state.fableLabel,
             enabled: settings.notifyThresholds
         )
+        onUsageApplied?()
     }
 
     /// デバッグ注入（CLAUDEBAR_FAKE=1でのUI検証用）

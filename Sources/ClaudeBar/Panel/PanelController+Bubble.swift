@@ -75,8 +75,10 @@ extension PanelController {
         let p = ensureBubblePanel()
         bubbleHideGeneration += 1 // 進行中の遅延orderOutを無効化
         revivalTask?.cancel()
+        resetPopRetry?.cancel()
         isPopping = false
         state.bubbleActive = true
+        bubbleTrackedResetsAt = bubbleUsageWindow?.resetsAt // リセット境界検知のベースライン
 
         let size = bubbleWindowSize
         p.setFrame(
@@ -136,6 +138,7 @@ extension PanelController {
     func dismissBubble() {
         state.bubbleActive = false
         revivalTask?.cancel()
+        resetPopRetry?.cancel()
         guard let p = bubblePanel, p.isVisible, let assembly = bubbleAssembly else { return }
         stopFloating()
         stopMouseTracking()
@@ -407,6 +410,20 @@ extension PanelController {
     // MARK: - 割れる（100%）と復活
 
     func popBubble() {
+        startPop { [weak self] in
+            guard let self else { return }
+            self.state.bubbleActive = false
+            self.stopMouseTracking()
+            self.removeBubbleMouseMonitor()
+            self.bubblePanel?.orderOut(nil)
+            self.bubbleAssembly?.alphaValue = 1
+            self.scheduleRevivalIfNeeded()
+        }
+    }
+
+    /// 破裂の共通演出（音・触覚・バースト・フェードアウト）。0.8秒後に completion を呼ぶ。
+    /// completion は「消して復活予約」（手動破裂）か「同じ場所に生まれ直す」（リセット破裂）で分岐する。
+    private func startPop(then completion: @escaping () -> Void) {
         guard state.bubbleActive, !isPopping, let assembly = bubbleAssembly else { return }
         isPopping = true
         stopFloating()
@@ -432,12 +449,46 @@ extension PanelController {
             guard let self else { return }
             self.isPopping = false
             guard self.bubbleHideGeneration == generation else { return }
-            self.state.bubbleActive = false
-            self.stopMouseTracking()
-            self.removeBubbleMouseMonitor()
-            self.bubblePanel?.orderOut(nil)
-            self.bubbleAssembly?.alphaValue = 1
-            self.scheduleRevivalIfNeeded()
+            completion()
+        }
+    }
+
+    /// 表示中メトリクスの制限がリセットされた時: 弾けてから同じ場所に新しいバブルが生まれる。
+    /// 手動破裂と違い「割れた後リセット時に復活」設定に依存しない（生きているバブルの生まれ変わり）。
+    func popForReset() {
+        guard state.bubbleActive, !isPopping else { return }
+        // 掴んでいる最中は消さず、放してから演出する
+        if dragActive {
+            resetPopRetry?.cancel()
+            resetPopRetry = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                guard let self, !Task.isCancelled else { return }
+                self.popForReset()
+            }
+            return
+        }
+        let center = bubbleScreenFrame.map { NSPoint(x: $0.midX, y: $0.midY) }
+            ?? lastBubbleCenter ?? defaultBubblePoint()
+        bubbleTapCount = 0
+        startPop { [weak self] in
+            // 破裂しきってから、更新後の数字（0%付近）で同じ場所にポップイン
+            self?.showBubble(at: center, poppingIn: true)
+        }
+    }
+
+    /// 使用量更新のたびに呼ばれる。表示中メトリクスがリセット境界を越えていたら破裂演出を起こす。
+    /// （ポーリング間隔ぶん遅れる可能性はあるが、スリープ跨ぎでも取りこぼさない確実な検知）
+    func onUsageUpdated() {
+        guard state.bubbleActive, !isPopping else {
+            bubbleTrackedResetsAt = bubbleUsageWindow?.resetsAt
+            return
+        }
+        let newResets = bubbleUsageWindow?.resetsAt
+        defer { bubbleTrackedResetsAt = newResets }
+        guard let prev = bubbleTrackedResetsAt, let newResets else { return }
+        // 追跡中だったリセット時刻を過ぎ、ウィンドウが新しい期間へ進んだ = リセット発生
+        if newResets > prev.addingTimeInterval(60), prev.timeIntervalSinceNow < 60 {
+            popForReset()
         }
     }
 
@@ -486,6 +537,7 @@ extension PanelController {
         guard state.bubbleActive, let p = bubblePanel, let assembly = bubbleAssembly else { return }
         state.bubbleActive = false
         revivalTask?.cancel()
+        resetPopRetry?.cancel()
         stopFloating()
         stopMouseTracking()
         removeBubbleMouseMonitor()

@@ -49,7 +49,7 @@ final class StatusItemController: NSObject {
         return window.convertToScreen(button.convert(button.bounds, to: nil))
     }
 
-    /// デバッグ用: クリックをシミュレート
+    /// クリックをシミュレート（デバッグ・初回オンボーディングで使用）
     func performClick() {
         guard let button = statusItem.button else { return }
         panelController.toggle(relativeTo: button)

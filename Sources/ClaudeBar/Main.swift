@@ -48,6 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController.onOpenSettings = { [weak self] in
             self?.settingsController.show()
         }
+        // 使用量更新のたびにバブルへ通知（表示中メトリクスのリセットで破裂→再生成させる）
+        usageService.onUsageApplied = { [weak self] in
+            self?.panelController.onUsageUpdated()
+        }
 
         activityMonitor = ActivityMonitor { [weak self] in
             DispatchQueue.main.async {
@@ -61,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updater.start()
         if updater.isAvailable {
             updater.automaticallyChecksForUpdates = settings.autoUpdate
+            updater.automaticallyDownloadsUpdates = settings.autoUpdate
         }
 
         debugBridge = DebugBridge(
@@ -70,5 +75,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusController: statusController,
             settingsController: settingsController
         )
+
+        // 初回起動: 機能説明 → パネルを一度だけ自動展開
+        OnboardingDialog.showIfNeeded { [weak self] in
+            self?.statusController.performClick()
+        }
     }
 }

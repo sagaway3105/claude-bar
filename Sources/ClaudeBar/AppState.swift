@@ -36,18 +36,12 @@ enum PanelMode {
     case floating // 引き剥がした（またはバブルから展開した）フローティングパネル
 }
 
-enum WeeklyForecast: Equatable {
-    case safe
-    case willHit(Date)
-}
-
 @MainActor
 @Observable
 final class AppState {
     var usage: UsageSnapshot?
     var lastUpdated: Date?
     var errorMessage: String?
-    var weeklyForecast: WeeklyForecast?
 
     /// 認証情報が無い/期限切れなどで、ログイン導線を出すべき状態
     var needsLogin = false

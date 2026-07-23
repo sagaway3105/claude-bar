@@ -71,20 +71,21 @@ struct IridescentRim<S: InsettableShape>: View {
 // MARK: - OS適応ガラス
 // macOS 26 = Liquid Glass（純正メニューと同じ質感）/ それ以前 = 従来のすりガラス(Material)
 
-/// パネル背景: 26はLiquid Glass+乳白ティント、旧OSはultraThinMaterial+同じティント
+/// パネル背景: 26はLiquid Glass+乳白ティント、旧OSはultraThinMaterial+同じティント。
+/// ダークモードではwindowBackgroundColorがほぼ黒でガラスが純正パネルより暗く濁るため、
+/// ティントを付けず素のガラスにする（純正のサウンドパネル等と同じ見え方）
 struct AdaptivePanelGlass: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+
     func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content.glassEffect(
-                .regular.tint(Color(nsColor: .windowBackgroundColor).opacity(0.45)),
-                in: RoundedRectangle(cornerRadius: 18)
-            )
+        let tint = Color(nsColor: .windowBackgroundColor).opacity(scheme == .dark ? 0 : 0.45)
+        if #available(macOS 26.0, *), !forceLegacyUI {
+            content.glassEffect(.regular.tint(tint), in: RoundedRectangle(cornerRadius: 18))
         } else {
             content.background(
                 ZStack {
                     RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(Color(nsColor: .windowBackgroundColor).opacity(0.45))
+                    RoundedRectangle(cornerRadius: 18).fill(tint)
                 }
             )
         }
@@ -95,7 +96,7 @@ struct AdaptivePanelGlass: ViewModifier {
 /// （ハイライト・コースティクス・虹色リムは自前描画なので全OS共通）
 struct AdaptiveBubbleGlass: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(macOS 26.0, *) {
+        if #available(macOS 26.0, *), !forceLegacyUI {
             content.glassEffect(.clear, in: Circle())
         } else {
             content.background(Circle().fill(.ultraThinMaterial))
@@ -199,10 +200,6 @@ struct UsagePanelView: View {
                 UsageGaugeView(title: "すべてのモデル", window: state.usage?.weeklyAll, baseTint: baseTint)
                 UsageGaugeView(title: state.fableLabel, window: state.usage?.weeklyFable, baseTint: baseTint)
 
-                // ペース予測は上限に達しそうな時だけ警告として表示
-                if case .willHit(let eta) = state.weeklyForecast {
-                    ForecastRow(eta: eta)
-                }
                 if let extra = state.usage?.extra, extra.isEnabled {
                     ExtraUsageRow(extra: extra)
                 }
@@ -289,26 +286,6 @@ struct LoginSetupTile: View {
             // パネルを開くたびに検出し直す（①実行後に開き直せば②だけの表示になる）
             cliInstalled = await LoginHelper.detectCLIInstalled()
         }
-    }
-}
-
-struct ForecastRow: View {
-    let eta: Date
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "exclamationmark.triangle.fill")
-            Text("このペースだと \(Self.format(eta)) 頃に週間上限")
-        }
-        .font(.caption2)
-        .foregroundStyle(.orange)
-    }
-
-    private static func format(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "M/d H:mm"
-        return formatter.string(from: date)
     }
 }
 

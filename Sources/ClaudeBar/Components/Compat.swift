@@ -4,12 +4,16 @@ import SwiftUI
 // macOS 14互換シム。15+の専用APIを使う箇所はここを経由する。
 // （glassEffectの26分岐は PanelViews の AdaptivePanelGlass / AdaptiveBubbleGlass 参照）
 
+/// 旧OS分岐の検証用: CLAUDEBAR_FORCE_LEGACY=1 で全ての新API分岐を旧OS側に倒す
+/// （新しいmacOS上ではフォールバックが実行されず目視確認できないため）
+let forceLegacyUI = ProcessInfo.processInfo.environment["CLAUDEBAR_FORCE_LEGACY"] == "1"
+
 /// サイズ監視: 15+は onGeometryChange、14は GeometryReader + PreferenceKey
 struct SizeReader: ViewModifier {
     var onChange: (CGSize) -> Void
 
     func body(content: Content) -> some View {
-        if #available(macOS 15.0, *) {
+        if #available(macOS 15.0, *), !forceLegacyUI {
             content.onGeometryChange(for: CGSize.self) { proxy in
                 proxy.size
             } action: { size in
@@ -44,7 +48,7 @@ extension View {
 /// （SwiftUIのDragGestureは非アクティブ化パネルで不安定なため使わない）
 struct GripDrag: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(macOS 15.0, *) {
+        if #available(macOS 15.0, *), !forceLegacyUI {
             content.gesture(WindowDragGesture())
         } else {
             content.overlay(WindowDragHandle())

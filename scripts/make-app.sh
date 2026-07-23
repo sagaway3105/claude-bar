@@ -50,6 +50,8 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<string>${VERSION}</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHighResolutionCapable</key>

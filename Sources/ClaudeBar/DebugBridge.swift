@@ -76,8 +76,12 @@ final class DebugBridge {
             panelController.uiActions.toOverlay()
         case "checkupdate":
             panelController.updater?.checkForUpdates()
+        case "bgupdate":
+            panelController.updater?.checkForUpdatesInBackground()
         case "pop":
             panelController.popBubble()
+        case "resetpop":
+            panelController.popForReset()
         case "hide":
             panelController.hide()
         case "settings":

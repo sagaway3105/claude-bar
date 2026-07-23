@@ -44,6 +44,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     var lastPanelSize = NSSize(width: 240, height: 380)
     var lastBubbleCenter: NSPoint?
     var revivalTask: Task<Void, Never>?
+    var resetPopRetry: Task<Void, Never>?        // ドラッグ中に来たリセット破裂の再試行
+    var bubbleTrackedResetsAt: Date?             // リセット境界越え検知用に追跡中のリセット時刻
     private var clickMonitors: [Any] = []
 
     // 浮遊状態（アンカー周辺を、無限リピートの加算アニメーションで漂う）
