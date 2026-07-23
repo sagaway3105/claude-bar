@@ -27,6 +27,7 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
     /// 詳細を知りたい人向けにリリースページへのテキストリンクだけ添える
     private func runUpdateAlert(detailsURL: URL?) -> SPUUserUpdateChoice {
         let alert = NSAlert()
+        if let icon = Self.appIcon { alert.icon = icon }
         alert.messageText = "新しいバージョンのClaudeBarがご利用できます！"
         if let detailsURL {
             alert.accessoryView = Self.makeDetailsLink(to: detailsURL)
@@ -36,6 +37,15 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
         NSApp.activate(ignoringOtherApps: true)
         return alert.runModal() == .alertFirstButtonReturn ? .install : .dismiss
     }
+
+    /// バンドルのアプリアイコン（生バイナリ実行等でもフォルダアイコンにしない）
+    private static let appIcon: NSImage? = {
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOf: url) {
+            return icon
+        }
+        return NSApp.applicationIconImage
+    }()
 
     /// 「詳しいアップデート内容を見る」リンク（クリックでブラウザが開く。ダイアログは開いたまま）
     private static func makeDetailsLink(to url: URL) -> NSView {
@@ -61,6 +71,7 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
     func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) {
         if userInitiated {
             let alert = NSAlert()
+            if let icon = Self.appIcon { alert.icon = icon }
             alert.messageText = "最新バージョンです"
             alert.informativeText = "アップデートはありません。"
             alert.addButton(withTitle: "OK")
@@ -72,6 +83,7 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
     func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {
         if userInitiated {
             let alert = NSAlert()
+            if let icon = Self.appIcon { alert.icon = icon }
             alert.alertStyle = .warning
             alert.messageText = "アップデートを確認できませんでした"
             alert.informativeText = error.localizedDescription
