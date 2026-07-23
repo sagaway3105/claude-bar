@@ -88,9 +88,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         state.usage?.window(for: settings.bubbleMetric)
     }
 
-    /// 使用量に応じたバブルの拡大率: 10%ごとに+4%、100%で1.4倍（風船のように膨らむ）
+    /// 使用量に応じたバブルの拡大率: 10%ごとに+2%、100%で1.2倍（風船のように膨らむ）
     static func bubbleScaleFactor(for utilization: Double) -> CGFloat {
-        1 + 0.04 * CGFloat((min(max(utilization, 0), 100) / 10).rounded(.down))
+        1 + 0.02 * CGFloat((min(max(utilization, 0), 100) / 10).rounded(.down))
     }
 
     /// 現在の使用量に応じたバブルの直径
