@@ -32,55 +32,69 @@ struct Credentials {
 /// Claude CodeのOAuth認証情報を読み取り専用で流用する。
 /// refreshはClaude Code本体に任せる（自前でrotateすると本体側のrefresh tokenが無効になるため）。
 ///
-/// 秘密データの読み取りは `/usr/bin/security` サブプロセスで行う。Claude Codeの項目は
+/// 秘密データの読み取りは `/usr/bin/security` サブプロセスのみで行う。Claude Codeの項目は
 /// ACLパーティションが 'apple-tool:' のため、Apple署名のsecurityコマンドはダイアログなしで
-/// 読める（サードパーティアプリがSecurity.frameworkで読むと抑制不能の許可ダイアログが出る。
-/// Raycast ccusage拡張等と同方式・2026-07-27実機検証済み）。このファイルでは
-/// SecItemCopyMatchingによる秘密データ読み取りを絶対に行わないこと（ダイアログの原因になる）。
+/// 読める（Raycast ccusage拡張等と同方式・2026-07-27実機検証済み）。
 ///
-/// 読めたトークンはClaudeBar自身のKeychain項目（ACLは自分持ち＝ダイアログなし）に
-/// キャッシュし、元項目の更新日時(mdat・属性のみの照会はダイアログなし)が変わるまで
-/// サブプロセス起動を省く。
+/// このファイルでは SecItemCopyMatching による秘密データ読み取りを絶対に行わないこと。
+/// アプリ側の署名とKeychain項目のACLが少しでも食い違うと抑制不能の許可ダイアログが出る
+/// （自前キャッシュ項目ですらデバッグビルドとの署名不一致でダイアログ源になった実績あり）。
+/// トークンのキャッシュはメモリのみ（元項目のmdat=属性照会・無音、が変わるまで再利用）。
 enum CredentialsStore {
     private static let keychainService = "Claude Code-credentials"
-    private static let cacheService = "com.atsushisagae.ClaudeBar.token-cache"
+    private static let legacyCacheService = "com.atsushisagae.ClaudeBar.token-cache"
 
-    /// デバッグビルド（ad-hoc署名）は署名がビルドごとに変わり、過去のビルドが作った
-    /// 自前キャッシュ項目とACL不一致になって許可ダイアログが出るため、キャッシュ項目を使わない
-    /// （毎回security CLIで読む。リリースビルドはDeveloper ID署名固定なのでキャッシュ有効）
-    #if DEBUG
-    private static let useKeychainCache = false
-    #else
-    private static let useKeychainCache = true
-    #endif
+    /// プロセス内キャッシュ（sourceMdatが一致する間はsecurity CLIの再実行を省く）
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var memoryCache: (sourceMdat: Double, creds: Credentials)?
+
+    /// 旧バージョンが作ったKeychainキャッシュ項目の掃除。ACL不一致の許可ダイアログ源になるため
+    /// v1.5.1で廃止した。削除のみ（読み取りしない）なのでダイアログは出ない
+    nonisolated(unsafe) private static let legacyCacheCleanup: Void = {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: legacyCacheService,
+        ]
+        _ = SecItemDelete(query as CFDictionary)
+    }()
 
     static func load() throws -> Credentials {
+        _ = legacyCacheCleanup
         guard let mdat = sourceModificationDate() else {
             // Keychain項目なし → ファイル運用（読み取りにダイアログは出ない）
             guard let data = fileData() else { throw CredentialsError.notFound }
             return try fresh(parse(data))
         }
-        if let cached = loadCache(), cached.sourceMdat == mdat.timeIntervalSince1970 {
-            // 元項目が書き換わっていない間はキャッシュだけで判断し、秘密データに触れない
-            return try fresh(Credentials(accessToken: cached.accessToken, expiresAt: cached.expiresAt))
+        // 元項目が書き換わっていない間はメモリキャッシュを使い、サブプロセス起動を省く
+        if let cached = cachedCreds(sourceMdat: mdat.timeIntervalSince1970) {
+            return try fresh(cached)
         }
         guard let data = securityCLIData() ?? fileData() else {
             throw CredentialsError.notFound
         }
         let creds = try parse(data)
-        saveCache(Cache(accessToken: creds.accessToken,
-                        expiresAt: creds.expiresAt,
-                        sourceMdat: mdat.timeIntervalSince1970))
+        storeCache(creds, sourceMdat: mdat.timeIntervalSince1970)
         return try fresh(creds)
     }
 
     /// トークンがAPIに拒否された（401）ときに呼ぶ。次回loadで元項目を読み直す
     static func invalidateCache() {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: cacheService,
-        ]
-        _ = SecItemDelete(query as CFDictionary)
+        cacheLock.lock()
+        memoryCache = nil
+        cacheLock.unlock()
+    }
+
+    private static func cachedCreds(sourceMdat: Double) -> Credentials? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        guard let cached = memoryCache, cached.sourceMdat == sourceMdat else { return nil }
+        return cached.creds
+    }
+
+    private static func storeCache(_ creds: Credentials, sourceMdat: Double) {
+        cacheLock.lock()
+        memoryCache = (sourceMdat, creds)
+        cacheLock.unlock()
     }
 
     private static func fresh(_ creds: Credentials) throws -> Credentials {
@@ -154,40 +168,5 @@ enum CredentialsStore {
         // expiresAt はエポックミリ秒。失効判定はキャッシュと合わせてload側で行う
         let expiresAt = (oauth["expiresAt"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
         return Credentials(accessToken: token, expiresAt: expiresAt)
-    }
-
-    // MARK: - 自前キャッシュ項目
-
-    private struct Cache: Codable {
-        var accessToken: String
-        var expiresAt: Date?
-        var sourceMdat: Double
-    }
-
-    private static func loadCache() -> Cache? {
-        guard useKeychainCache else { return nil }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: cacheService,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return nil }
-        return try? JSONDecoder().decode(Cache.self, from: data)
-    }
-
-    private static func saveCache(_ cache: Cache) {
-        guard useKeychainCache, let data = try? JSONEncoder().encode(cache) else { return }
-        invalidateCache()
-        let attributes: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: cacheService,
-            kSecAttrAccount as String: NSUserName(),
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
-        ]
-        _ = SecItemAdd(attributes as CFDictionary, nil)
     }
 }
