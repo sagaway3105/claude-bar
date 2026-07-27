@@ -30,8 +30,7 @@ extension PanelController {
         let size = hosting.fittingSize
         guard size.width > 10, size.height > 10 else { return }
 
-        // バブルの右横・縦中央（バブルは漂うが、HUDは出た位置に固定して読みやすさ優先）。
-        // 右に入らなければ左横へ。最後に画面内へクランプ
+        // バブルの右横・縦中央。右に入らなければ左横へ。最後に画面内へクランプ
         let gap: CGFloat = 12
         var origin = NSPoint(x: bubbleFrame.maxX + gap, y: bubbleFrame.midY - size.height / 2)
         if let vf = (bubblePanel?.screen ?? NSScreen.main)?.visibleFrame {
@@ -42,8 +41,12 @@ extension PanelController {
             origin.y = min(max(origin.y, vf.minY + 8), vf.maxY - size.height - 8)
         }
 
+        // バブルと同じ構造: ウィンドウは固定で、内側のアセンブリだけが漂う
+        // （浮遊振幅 x±8.5 / y±9.5pt を包める余白を持たせる）
+        let margin: CGFloat = 12
         let w = NSWindow(
-            contentRect: NSRect(origin: origin, size: size),
+            contentRect: NSRect(x: origin.x - margin, y: origin.y - margin,
+                                width: size.width + margin * 2, height: size.height + margin * 2),
             styleMask: .borderless, backing: .buffered, defer: false
         )
         w.backgroundColor = .clear
@@ -53,15 +56,41 @@ extension PanelController {
         w.level = .floating
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         w.isReleasedWhenClosed = false
-        w.contentView = hosting
+
+        let container = NSView(frame: NSRect(origin: .zero, size: w.frame.size))
+        container.wantsLayer = true
+        let assembly = NSView(frame: NSRect(x: margin, y: margin, width: size.width, height: size.height))
+        assembly.wantsLayer = true
+        hosting.frame = assembly.bounds
+        hosting.autoresizingMask = []
+        assembly.addSubview(hosting)
+        container.addSubview(assembly)
+        w.contentView = container
+
         w.alphaValue = 0
         w.orderFrontRegardless()
         hoverHUDWindow = w
+        syncHUDFloating(with: assembly)
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.16
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             w.animator().alphaValue = 1
         }
+    }
+
+    /// バブルの浮遊アニメーションを同位相でHUDへコピーし、バブルと一緒に漂わせる。
+    /// animation(forKey:)のコピーにはbeginTimeが解決済みで入っているため、
+    /// そのまま追加するだけで位相が揃う（両レイヤーとも標準タイムスペース）
+    private func syncHUDFloating(with view: NSView) {
+        guard let bubbleLayer = bubbleAssembly?.layer, let layer = view.layer else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for key in ["float-x1", "float-x2", "float-y1", "float-y2"] {
+            guard let source = bubbleLayer.animation(forKey: key),
+                  let copy = source.copy() as? CAAnimation else { continue }
+            layer.add(copy, forKey: key)
+        }
+        CATransaction.commit()
     }
 
     func hideHoverHUD() {

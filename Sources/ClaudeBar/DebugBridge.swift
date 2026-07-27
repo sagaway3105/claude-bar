@@ -159,6 +159,14 @@ final class DebugBridge {
         if let h = panelController.contentHosting {
             info["hosting"] = [h.frame.origin.x, h.frame.origin.y, h.frame.width, h.frame.height]
         }
+        if let bubble = panelController.bubbleAssembly, let pres = bubble.layer?.presentation() {
+            info["bubblePresentation"] = [pres.position.x, pres.position.y]
+        }
+        if let hud = panelController.hoverHUDWindow,
+           let hudAssembly = hud.contentView?.subviews.first,
+           let pres = hudAssembly.layer?.presentation() {
+            info["hudPresentation"] = [pres.position.x, pres.position.y]
+        }
         if let screen = NSScreen.main {
             info["screen"] = [screen.frame.width, screen.frame.height]
         }
