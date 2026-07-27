@@ -48,6 +48,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent("バージョン", value: Self.version)
+                Button("ClaudeBarを終了", role: .destructive) { NSApp.terminate(nil) }
             }
         }
         .formStyle(.grouped)
