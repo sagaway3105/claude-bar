@@ -65,6 +65,10 @@ final class PanelController: NSObject, NSWindowDelegate {
     var bubbleTapCount = 0
     var bubbleTapResetTask: Task<Void, Never>?
 
+    // ホバーHUD（バブルにマウスを載せると全メトリクスを一覧表示する小窓）
+    var hoverHUDWindow: NSWindow?
+    var hoverHUDShowTask: Task<Void, Never>?
+
     // レイアウト定数
     let panelWidth: CGFloat = 300
     let panelWindowHeight: CGFloat = 460 // 固定（内容はSwiftUIが上詰めで描き、余りは完全透明）
@@ -195,7 +199,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         PanelActions(
             refresh: { [weak self] in
                 guard let self else { return }
-                Task { await self.usageService.refresh() }
+                // 手動更新は鮮度判定を厳しくして必ず取りに行く
+                Task { await self.usageService.refresh(force: true) }
             },
             quit: { NSApp.terminate(nil) },
             toBubble: { [weak self] in self?.toggleBubble() },

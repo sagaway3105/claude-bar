@@ -247,6 +247,14 @@ extension PanelController {
             lastHoverBounceAt = Date()
             bounceBubble() // ポヨン
         }
+        // ホバーHUD: 乗ったら遅延表示を予約、離れたら消す
+        if inside != wasHoveringBubble {
+            if inside, !dragActive {
+                scheduleHoverHUD()
+            } else {
+                hideHoverHUD()
+            }
+        }
         wasHoveringBubble = inside
     }
 
@@ -275,6 +283,7 @@ extension PanelController {
     }
 
     func stopMouseTracking() {
+        hideHoverHUD()
         mouseTrackTimer?.invalidate()
         mouseTrackTimer = nil
         if let activity = napActivity {
@@ -359,6 +368,7 @@ extension PanelController {
             dragMoved = false
             dragStartMouse = NSEvent.mouseLocation
             dragStartAnchor = p.frame.origin // バブルではウィンドウ自体を動かす
+            hideHoverHUD() // 掴んでいる間はHUDを消す
             return true
         case .leftMouseDragged:
             guard dragActive, let start = dragStartAnchor else { return false }
@@ -384,6 +394,7 @@ extension PanelController {
                     snapBackToMenuBar(buttonFrame: buttonFrame)
                 }
             }
+            scheduleHoverHUD() // まだバブル上にいれば少し後にHUDを出し直す
             return true
         default:
             return false
@@ -429,6 +440,7 @@ extension PanelController {
         guard state.bubbleActive, !isPopping, let assembly = bubbleAssembly else { return }
         isPopping = true
         stopFloating()
+        hideHoverHUD()
         if let onScreen = bubbleScreenFrame {
             lastBubbleCenter = NSPoint(x: onScreen.midX, y: onScreen.midY)
         }
