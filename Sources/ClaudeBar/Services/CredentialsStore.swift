@@ -32,14 +32,27 @@ struct Credentials {
 /// Claude CodeのOAuth認証情報を読み取り専用で流用する。
 /// refreshはClaude Code本体に任せる（自前でrotateすると本体側のrefresh tokenが無効になるため）。
 ///
-/// 元項目の秘密データを読むとmacOSの許可ダイアログが出うる。「常に許可」しても
-/// Claude Codeがトークン更新で項目を書き換えるとACLごと無効になり再表示されるため、
+/// 秘密データの読み取りは `/usr/bin/security` サブプロセスで行う。Claude Codeの項目は
+/// ACLパーティションが 'apple-tool:' のため、Apple署名のsecurityコマンドはダイアログなしで
+/// 読める（サードパーティアプリがSecurity.frameworkで読むと抑制不能の許可ダイアログが出る。
+/// Raycast ccusage拡張等と同方式・2026-07-27実機検証済み）。このファイルでは
+/// SecItemCopyMatchingによる秘密データ読み取りを絶対に行わないこと（ダイアログの原因になる）。
+///
 /// 読めたトークンはClaudeBar自身のKeychain項目（ACLは自分持ち＝ダイアログなし）に
-/// キャッシュし、失効するまで元項目には触れない。元項目の更新日時(mdat)は属性のみの
-/// 照会でダイアログなしに取れるので、書き換え検知に使う。
+/// キャッシュし、元項目の更新日時(mdat・属性のみの照会はダイアログなし)が変わるまで
+/// サブプロセス起動を省く。
 enum CredentialsStore {
     private static let keychainService = "Claude Code-credentials"
     private static let cacheService = "com.atsushisagae.ClaudeBar.token-cache"
+
+    /// デバッグビルド（ad-hoc署名）は署名がビルドごとに変わり、過去のビルドが作った
+    /// 自前キャッシュ項目とACL不一致になって許可ダイアログが出るため、キャッシュ項目を使わない
+    /// （毎回security CLIで読む。リリースビルドはDeveloper ID署名固定なのでキャッシュ有効）
+    #if DEBUG
+    private static let useKeychainCache = false
+    #else
+    private static let useKeychainCache = true
+    #endif
 
     static func load() throws -> Credentials {
         guard let mdat = sourceModificationDate() else {
@@ -51,7 +64,7 @@ enum CredentialsStore {
             // 元項目が書き換わっていない間はキャッシュだけで判断し、秘密データに触れない
             return try fresh(Credentials(accessToken: cached.accessToken, expiresAt: cached.expiresAt))
         }
-        guard let data = keychainData() ?? fileData() else {
+        guard let data = securityCLIData() ?? fileData() else {
             throw CredentialsError.notFound
         }
         let creds = try parse(data)
@@ -91,17 +104,30 @@ enum CredentialsStore {
         return attrs[kSecAttrModificationDate as String] as? Date
     }
 
-    private static func keychainData() -> Data? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess else { return nil }
-        return item as? Data
+    /// Apple署名の /usr/bin/security で秘密データを読む（'apple-tool:'パーティション許可により
+    /// ダイアログなし）。macOSでsecurityがハングする既知事例に備え3秒で打ち切る
+    private static func securityCLIData() -> Data? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-s", keychainService, "-w"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        let watchdog = DispatchWorkItem {
+            if process.isRunning { process.terminate() }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3, execute: watchdog)
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        process.waitUntilExit()
+        watchdog.cancel()
+        guard process.terminationStatus == 0 else { return nil }
+        var data = pipe.fileHandleForReading.readDataToEndOfFile()
+        if data.last == 0x0A { data.removeLast() } // 末尾改行
+        return data.isEmpty ? nil : data
     }
 
     private static func fileData() -> Data? {
@@ -139,6 +165,7 @@ enum CredentialsStore {
     }
 
     private static func loadCache() -> Cache? {
+        guard useKeychainCache else { return nil }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: cacheService,
@@ -152,14 +179,14 @@ enum CredentialsStore {
     }
 
     private static func saveCache(_ cache: Cache) {
-        guard let data = try? JSONEncoder().encode(cache) else { return }
+        guard useKeychainCache, let data = try? JSONEncoder().encode(cache) else { return }
         invalidateCache()
         let attributes: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: cacheService,
             kSecAttrAccount as String: NSUserName(),
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
         ]
         _ = SecItemAdd(attributes as CFDictionary, nil)
     }

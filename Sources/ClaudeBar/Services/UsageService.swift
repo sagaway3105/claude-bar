@@ -41,8 +41,12 @@ final class UsageService {
     private let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private let rateLimitCooldown: TimeInterval = 300
 
-    /// UIテスト用: ネットワークに触らずデバッグ注入だけを受け付ける
+    #if DEBUG
+    /// UIテスト用: ネットワークに触らずデバッグ注入だけを受け付ける（デバッグビルド限定）
     private let isFake = ProcessInfo.processInfo.environment["CLAUDEBAR_FAKE"] == "1"
+    #else
+    private let isFake = false
+    #endif
 
     /// User-Agent用。claude-code/<version> を送らないと厳しいレート制限バケットに入る
     private var cliVersion = "2.1.0"
@@ -58,8 +62,15 @@ final class UsageService {
         pollTask = Task {
             while !Task.isCancelled {
                 await refresh()
-                let minutes = max(1, settings.pollIntervalMinutes)
-                try? await Task.sleep(for: .seconds(minutes * 60))
+                // 設定の更新間隔変更が数秒で効くよう、目標時間まで短い刻みで待つ
+                var waited: TimeInterval = 0
+                while !Task.isCancelled {
+                    let target = TimeInterval(max(1, settings.pollIntervalMinutes) * 60)
+                    if waited >= target { break }
+                    let step = min(10, target - waited)
+                    try? await Task.sleep(for: .seconds(step))
+                    waited += step
+                }
             }
         }
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -74,28 +85,33 @@ final class UsageService {
         Task { await refresh() }
     }
 
-    func refresh() async {
+    /// force: 手動更新（↻・右クリック）。フォールバック経路の鮮度判定を厳しくする
+    func refresh(force: Bool = false) async {
         guard !isFake, !isRefreshing else { return }
-        if let until = cooldownUntil, until > Date() { return }
         isRefreshing = true
         defer { isRefreshing = false }
 
-        // 主経路: キーチェーンに触れずローカルキャッシュ+claudeで取得（ダイアログが出ない）。
-        // キャッシュが更新間隔より古ければ claude -p "/usage" で更新させる。
-        let maxAge = TimeInterval(max(1, settings.pollIntervalMinutes) * 60)
+        // 主経路: API直叩き（トークンはsecurity CLI経由＝ダイアログなし）。
+        // サーバーの現在値がそのまま来るので、設定した更新間隔どおりの鮮度になる
+        if await refreshViaKeychainAPI() { return }
+
+        // フォールバック: Claude Codeのローカルキャッシュ+claude起動
+        // （オフライン・レート制限クールダウン中・トークン不在などのケース）
+        let maxAge: TimeInterval = force ? 15 : TimeInterval(max(1, settings.pollIntervalMinutes) * 60)
         if let fetched = await ClaudeUsageBridge.fetchUtilizationJSON(maxAge: maxAge),
            let parsed = try? UsageParser.parse(fetched.data) {
             apply(parsed.snapshot, fableLabel: parsed.fableLabel, asOf: fetched.fetchedAt)
-            return
         }
-        // フォールバック: 従来のキーチェーン+API（claude未導入・未ログインなどのレアケース）
-        await refreshViaKeychainAPI()
     }
 
-    private func refreshViaKeychainAPI() async {
+    /// API直叩き（主経路）。成功して適用できたらtrue。
+    /// 失敗時はエラー状態を設定してfalseを返す（フォールバックが成功すればapplyが上書きする）
+    private func refreshViaKeychainAPI() async -> Bool {
+        if let until = cooldownUntil, until > Date() { return false }
         await detectCLIVersionIfNeeded()
         do {
-            let creds = try CredentialsStore.load()
+            // securityサブプロセス（最長3秒）でメインスレッドを塞がない
+            let creds = try await Task.detached { try CredentialsStore.load() }.value
             var request = URLRequest(url: endpoint)
             request.timeoutInterval = 30
             request.setValue("Bearer \(creds.accessToken)", forHTTPHeaderField: "Authorization")
@@ -109,7 +125,9 @@ final class UsageService {
             switch http.statusCode {
             case 200:
                 let (snapshot, fableLabel) = try UsageParser.parse(data)
+                cooldownUntil = nil
                 apply(snapshot, fableLabel: fableLabel)
+                return true
             case 401:
                 throw UsageError.unauthorized
             case 403:
@@ -148,6 +166,7 @@ final class UsageService {
         } catch {
             state.errorMessage = error.localizedDescription
         }
+        return false
     }
 
     /// asOf: データの実際の取得時刻（キャッシュ由来の場合は過去になる。「◯時◯分 更新」表示を正直に保つ）
@@ -158,7 +177,6 @@ final class UsageService {
         state.lastUpdated = asOf
         state.errorMessage = nil
         state.needsLogin = false
-        cooldownUntil = nil
 
         notifier.evaluate(
             old: old, new: snapshot,
@@ -168,6 +186,7 @@ final class UsageService {
         onUsageApplied?()
     }
 
+    #if DEBUG
     /// デバッグ注入（CLAUDEBAR_FAKE=1でのUI検証用）
     func applyFake(session: Double?, weekly: Double?, fable: Double?) {
         var snapshot = UsageSnapshot()
@@ -182,6 +201,7 @@ final class UsageService {
         }
         apply(snapshot, fableLabel: nil)
     }
+    #endif
 
     // MARK: - Claude CLIバージョン検出（フォールバックAPIのUser-Agent用）
 

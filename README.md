@@ -83,13 +83,13 @@ swift run
 swift test
 ```
 
-使用量はClaude Codeのローカルキャッシュ経由で取得するため、キーチェーンの許可ダイアログは表示されません（Claude Code未導入・未ログイン環境でのみ、フォールバックとしてKeychain読み取りの許可を求めることがあります）。
+使用量はOAuthトークンを使って照会APIから直接取得します。トークンの読み取りはApple署名の`/usr/bin/security`コマンド経由なので、キーチェーンの許可ダイアログは表示されません。取得できない場合はClaude Codeのローカルキャッシュへ静かにフォールバックします。
 
 ## 仕組み
 
 | 何を | どうやって |
 |---|---|
-| 使用量% | Claude Codeがローカルに保存する使用量キャッシュ（`~/.claude.json` の `cachedUsageUtilization`）を読み取り、更新間隔より古い場合は `claude --safe-mode -p "/usage"` を直接起動してClaude Code自身に更新させる（キーチェーン不要・トークン消費なし）。Claude Code未導入時のみOAuthトークン（Keychain）+`GET /api/oauth/usage` にフォールバック |
+| 使用量% | Claude CodeのOAuthトークンを `/usr/bin/security` サブプロセスで読み取り（Apple署名ツールはキーチェーン項目の `'apple-tool:'` パーティション許可により**ダイアログなし**で読める）、`GET /api/oauth/usage` を設定した更新間隔でポーリング（トークン消費なし）。失敗時は `~/.claude.json` の `cachedUsageUtilization` + `claude --safe-mode -p "/usage"` 起動にフォールバック |
 | 消費中の検知 | `~/.claude/projects/**/*.jsonl`（セッショントランスクリプト）への書き込みをFSEventsで監視 |
 | トークン更新 | フォールバック時も自前ではrefreshしない。期限切れ時はClaude Code本体を使うと自動更新される |
 
