@@ -8,6 +8,10 @@ VERSION="${1:?使い方: ./scripts/release.sh <バージョン>  例: ./scripts/
 
 VERSION="$VERSION" ./scripts/make-app.sh
 
+# 署名の完全性チェック（壊れた署名のまま配布しない）
+codesign --verify --deep --strict build/ClaudeBar.app
+echo "✅ codesign検証OK"
+
 ZIP="build/ClaudeBar-v${VERSION}.zip"
 rm -f "$ZIP"
 # ditto はシンボリックリンクやメタデータを保った macOS 標準の zip 化手段
@@ -21,6 +25,8 @@ if [[ "$SIGN_INFO" == *"Developer ID"* ]] &&
   echo "📤 Appleへ公証を申請中（数分かかります）..."
   xcrun notarytool submit "$ZIP" --keychain-profile claudebar-notary --wait
   xcrun stapler staple build/ClaudeBar.app
+  # Gatekeeper実機相当の受け入れ確認（notarized判定にならなければここで止める）
+  spctl --assess --type exec -vv build/ClaudeBar.app
   # ステープル済みアプリでzipを作り直す
   rm -f "$ZIP"
   ditto -c -k --keepParent build/ClaudeBar.app "$ZIP"

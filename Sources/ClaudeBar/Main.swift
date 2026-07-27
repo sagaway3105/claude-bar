@@ -26,7 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusController: StatusItemController!
     private var settingsController: SettingsWindowController!
     private var updater: UpdaterService!
+    #if DEBUG
     private var debugBridge: DebugBridge?
+    #endif
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -68,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updater.automaticallyDownloadsUpdates = settings.autoUpdate
         }
 
+        #if DEBUG
         debugBridge = DebugBridge(
             state: state,
             usageService: usageService,
@@ -75,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusController: statusController,
             settingsController: settingsController
         )
+        #endif
 
         // 初回起動: 機能説明 → パネルを一度だけ自動展開
         OnboardingDialog.showIfNeeded { [weak self] in

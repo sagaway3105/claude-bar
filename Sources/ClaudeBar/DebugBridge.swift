@@ -1,7 +1,8 @@
+#if DEBUG
 import AppKit
 import Foundation
 
-/// UI検証用のコマンドブリッジ。
+/// UI検証用のコマンドブリッジ。デバッグビルド限定（リリースには含めない）。
 /// CLAUDEBAR_DEBUG=1 かつ CLAUDEBAR_CMDFILE=<path> で起動した時のみ有効。
 /// コマンドファイルに1行ずつ書き込むと実行される:
 ///   click / bubble / expand / pop / hide / settings / quit
@@ -80,6 +81,10 @@ final class DebugBridge {
             panelController.updater?.checkForUpdatesInBackground()
         case "pop":
             panelController.popBubble()
+        case "hud":
+            panelController.showHoverHUD()
+        case "hudoff":
+            panelController.hideHoverHUD()
         case "resetpop":
             panelController.popForReset()
         case "hide":
@@ -157,6 +162,10 @@ final class DebugBridge {
         if let screen = NSScreen.main {
             info["screen"] = [screen.frame.width, screen.frame.height]
         }
+        // 全ディスプレイのグローバル座標（マルチディスプレイでの座標変換用）
+        info["screens"] = NSScreen.screens.map {
+            [$0.frame.origin.x, $0.frame.origin.y, $0.frame.width, $0.frame.height]
+        }
         info["statusBarThickness"] = NSStatusBar.system.thickness
         if statusController.buttonScreenFrame != nil, let bw = NSApp.windows.first(where: { $0.className.contains("StatusBar") }) {
             info["statusWindow"] = [bw.frame.origin.x, bw.frame.origin.y, bw.frame.width, bw.frame.height]
@@ -169,3 +178,4 @@ final class DebugBridge {
         }
     }
 }
+#endif

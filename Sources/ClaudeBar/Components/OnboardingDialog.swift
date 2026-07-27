@@ -6,8 +6,10 @@ enum OnboardingDialog {
     private static let shownKey = "onboardingShown"
 
     static func showIfNeeded(then openPanel: @escaping () -> Void) {
+        #if DEBUG
         // UIテスト（デバッグ注入）時はモーダルで操作を塞がない
         guard ProcessInfo.processInfo.environment["CLAUDEBAR_FAKE"] != "1" else { return }
+        #endif
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: shownKey) else { return }
         defaults.set(true, forKey: shownKey)
