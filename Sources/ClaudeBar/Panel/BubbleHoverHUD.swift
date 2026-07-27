@@ -23,7 +23,10 @@ extension PanelController {
 
     func showHoverHUD() {
         guard state.bubbleActive, !isPopping, !dragActive, hoverHUDWindow == nil,
-              let bubbleFrame = bubbleScreenFrame else { return }
+              let p = bubblePanel, let bubbleAssembly else { return }
+        // 位置の基準は漂いの中心（モデル座標）。presentation（見た目の位置）を使うと
+        // 表示した瞬間の漂いオフセットが焼き込まれ、タイミングによって上下にズレる
+        let bubbleFrame = p.convertToScreen(bubbleAssembly.frame)
         let hosting = NSHostingView(
             rootView: BubbleHoverHUDView(state: state, settings: settings)
         )
@@ -161,7 +164,7 @@ struct BubbleHoverHUDView: View {
                     .foregroundStyle(.tertiary)
             }
             Text(window.map { "\(Int($0.utilization.rounded()))%" } ?? "–%")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 12, weight: .medium))
                 .monospacedDigit()
                 .foregroundStyle(valueStyle(window))
                 .frame(minWidth: 32, alignment: .trailing)
