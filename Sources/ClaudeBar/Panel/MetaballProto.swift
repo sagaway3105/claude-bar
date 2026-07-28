@@ -40,11 +40,12 @@ struct MetaballProtoView: View {
     var config: ProtoConfig
 
     // ホーム位置。上からセッション→Fable→週間（重要度順）だが、真っ直ぐ縦には並べず
-    // 左右へ振ったジグザグにして塊をなるべく小さくまとめる。隣同士はわずかに重なる距離
+    // 左右へ振ったジグザグにして塊をなるべく小さくまとめる。隣同士は縁が数pt空いた近接
+    // （Appleは「Liquid Glass要素を重ねるな」と明示。融合は重なりでなく近接で起きる）
     private let homes: [CGPoint] = [
-        CGPoint(x: 150, y: 104), // セッション（最上・最大・やや左）
-        CGPoint(x: 194, y: 156), // Fable（右へ振る）
-        CGPoint(x: 154, y: 200), // 週間（最下・最小・左へ戻す）
+        CGPoint(x: 150, y: 100), // セッション（最上・最大・やや左）
+        CGPoint(x: 198, y: 158), // Fable（右へ振る）
+        CGPoint(x: 156, y: 206), // 週間（最下・最小・左へ戻す）
     ]
     private let radii: [CGFloat] = [38, 32, 27]
     private let tints: [Color] = [.claudeOrange, .orange, .cyan]

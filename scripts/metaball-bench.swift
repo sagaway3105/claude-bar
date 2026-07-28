@@ -52,9 +52,9 @@ struct BenchView: View {
     var config: BenchConfig
 
     private let homes: [CGPoint] = [
-        CGPoint(x: 150, y: 104),
-        CGPoint(x: 194, y: 156),
-        CGPoint(x: 154, y: 200),
+        CGPoint(x: 150, y: 100),
+        CGPoint(x: 198, y: 158),
+        CGPoint(x: 156, y: 206),
     ]
     private let radii: [CGFloat] = [38, 32, 27]
 
