@@ -73,7 +73,17 @@ final class PanelController: NSObject, NSWindowDelegate {
     let panelWidth: CGFloat = 300
     let panelWindowHeight: CGFloat = 460 // 固定（内容はSwiftUIが上詰めで描き、余りは完全透明）
     let bubbleDiameter: CGFloat = 76
-    let bubbleWindowSize: CGFloat = 150 // 最大バブル(76*1.4)+浮遊・伸縮マージン
+    let singleBubbleWindowSize: CGFloat = 150 // 最大バブル(76*1.4)+浮遊・伸縮マージン
+
+    /// バブルウィンドウの大きさ（3つ表示モードでは塊が収まる大きさになる）
+    var bubbleWindowFrameSize: NSSize {
+        settings.isTripleBubble
+            ? NSSize(width: TripleBubbleView.windowSize.width, height: TripleBubbleView.windowSize.height)
+            : NSSize(width: singleBubbleWindowSize, height: singleBubbleWindowSize)
+    }
+
+    /// トリプルバブルの配置・個別ドラッグ状態
+    let tripleCluster = TripleBubbleCluster()
     let detachThreshold: CGFloat = 30
     let snapMargin: CGFloat = 60
     let bubbleLaunchDistance: CGFloat = 110 // 🫧ボタンでパネル横へ「ポーン」と飛ぶ距離

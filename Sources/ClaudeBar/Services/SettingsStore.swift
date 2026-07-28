@@ -34,6 +34,14 @@ final class SettingsStore {
         didSet { persist(bubbleMetric.rawValue, "bubbleMetric") }
     }
 
+    /// バブルの表示個数。3ならセッション+Fable+週間を同時に浮かべる（bubbleMetricは無効）
+    var bubbleCount: Int {
+        didSet { persist(bubbleCount, "bubbleCount") }
+    }
+
+    /// 3つ表示モードか
+    var isTripleBubble: Bool { bubbleCount == 3 }
+
     /// バーの色をmacOSのアクセントカラーに合わせる（falseならClaudeオレンジ）
     var useSystemAccent: Bool {
         didSet { persist(useSystemAccent, "useSystemAccent") }
@@ -54,6 +62,7 @@ final class SettingsStore {
             "pollIntervalMinutes": 2,
             "reviveBubble": true,
             "bubbleMetric": BubbleMetric.session.rawValue,
+            "bubbleCount": 1,
             "useSystemAccent": true,
             "autoUpdate": true,
         ])
@@ -61,6 +70,7 @@ final class SettingsStore {
         pollIntervalMinutes = Self.defaults.integer(forKey: "pollIntervalMinutes")
         reviveBubble = Self.defaults.bool(forKey: "reviveBubble")
         bubbleMetric = BubbleMetric(rawValue: Self.defaults.string(forKey: "bubbleMetric") ?? "") ?? .session
+        bubbleCount = Self.defaults.integer(forKey: "bubbleCount") == 3 ? 3 : 1
         useSystemAccent = Self.defaults.bool(forKey: "useSystemAccent")
         autoUpdate = Self.defaults.bool(forKey: "autoUpdate")
         launchAtLogin = false

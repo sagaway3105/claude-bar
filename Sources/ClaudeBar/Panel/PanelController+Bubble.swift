@@ -4,7 +4,7 @@ import SwiftUI
 
 /// バブル（浮遊モード）固有の挙動。
 ///
-/// バブルは専用の150pt透明ウィンドウで、その中のアセンブリ（ガラス+内容76-106pt）だけを
+/// バブルは専用の透明ウィンドウ（1つ表示=150pt / 3つ表示=300x320pt）で、その中のアセンブリだけを
 /// レンダーサーバ側の無限アニメーションで漂わせる（ウィンドウ自体は動かさないので滑らか）。
 /// パネルとは独立したウィンドウなので、パネルを開いたままバブルを共存できる。
 /// 操作はAppKitのローカルモニタで判定: クリック=ポヨン(連打で破裂) / ドラッグ=ウィンドウ移動 /
@@ -16,11 +16,11 @@ extension PanelController {
     func ensureBubblePanel() -> NSPanel {
         if let bubblePanel { return bubblePanel }
 
-        let size = bubbleWindowSize
+        let size = bubbleWindowFrameSize
         // 影なし: アセンブリ移動のたびに影を再計算させない
-        let p = makeOverlayPanel(size: NSSize(width: size, height: size), level: .floating, hasShadow: false)
+        let p = makeOverlayPanel(size: size, level: .floating, hasShadow: false)
 
-        let container = PassthroughContainerView(frame: NSRect(x: 0, y: 0, width: size, height: size))
+        let container = PassthroughContainerView(frame: NSRect(origin: .zero, size: size))
         container.wantsLayer = true
         container.pinsChildrenToBounds = false // アセンブリは中で自由に漂う
 
@@ -29,7 +29,7 @@ extension PanelController {
         assembly.autoresizingMask = []
 
         let hosting = NSHostingView(
-            rootView: BubbleRootView(state: state, settings: settings, actions: uiActions)
+            rootView: BubbleRootView(state: state, settings: settings, cluster: tripleCluster, actions: uiActions)
         )
         hosting.sizingOptions = [] // SwiftUIの固定サイズを必須制約にしない（ウィンドウ収縮防止）
         hosting.frame = assembly.bounds
@@ -81,17 +81,23 @@ extension PanelController {
         bubbleTrackedResetsAt = bubbleUsageWindow?.resetsAt // リセット境界検知のベースライン
         scheduleResetRefresh()
 
-        let size = bubbleWindowSize
+        let size = bubbleWindowFrameSize
         p.setFrame(
-            NSRect(x: point.x - size / 2, y: point.y - size / 2, width: size, height: size),
+            NSRect(x: point.x - size.width / 2, y: point.y - size.height / 2,
+                   width: size.width, height: size.height),
             display: true
         )
         guard let assembly = bubbleAssembly else { return }
         assembly.layer?.removeAllAnimations()
-        let diameter = currentBubbleDiameter
-        let margin = (size - diameter) / 2
         wasHoveringBubble = false
-        assembly.frame = NSRect(x: margin, y: margin, width: diameter, height: diameter)
+        if settings.isTripleBubble {
+            // 3つ表示: 塊はウィンドウ全体。漂いはSwiftUI側の宣言的アニメーションが担当する
+            assembly.frame = NSRect(origin: .zero, size: size)
+        } else {
+            let diameter = currentBubbleDiameter
+            let margin = (size.width - diameter) / 2
+            assembly.frame = NSRect(x: margin, y: margin, width: diameter, height: diameter)
+        }
         assembly.alphaValue = 1
         bubbleHosting?.frame = assembly.bounds
 
@@ -112,7 +118,7 @@ extension PanelController {
             let finalOrigin = p.frame.origin
             assembly.frame = NSRect(x: target.midX - 4, y: target.midY - 4, width: 8, height: 8)
             if let launchFrom {
-                p.setFrameOrigin(NSPoint(x: launchFrom.x - size / 2, y: launchFrom.y - size / 2))
+                p.setFrameOrigin(NSPoint(x: launchFrom.x - size.width / 2, y: launchFrom.y - size.height / 2))
             }
             assembly.alphaValue = 0
             p.orderFrontRegardless()
@@ -214,15 +220,16 @@ extension PanelController {
     /// ウィンドウ(150pt)ではなく「見えているバブルの縁」が画面の縁に届く基準:
     /// 左右・下は画面端（下はDockの上端）に接するまで、上はメニューバーを覆えるまで。
     func updateFloatBounds(around point: NSPoint) {
-        let size = bubbleWindowSize
-        let margin = (size - currentBubbleDiameter) / 2
+        let size = bubbleWindowFrameSize
+        // 3つ表示では塊がウィンドウをほぼ埋めるのでマージンは取らない
+        let margin = settings.isTripleBubble ? 0 : (size.width - currentBubbleDiameter) / 2
         let screen = NSScreen.screens.first { $0.frame.contains(point) } ?? bubblePanel?.screen ?? NSScreen.main
         guard let vf = screen?.visibleFrame, let sf = screen?.frame else { return }
         floatBounds = NSRect(
             x: sf.minX - margin,
             y: vf.minY - margin,
-            width: max(0, sf.width - size + margin * 2),
-            height: max(0, (sf.maxY - size + margin) - (vf.minY - margin))
+            width: max(0, sf.width - size.width + margin * 2),
+            height: max(0, (sf.maxY - size.height + margin) - (vf.minY - margin))
         )
     }
 
@@ -260,7 +267,7 @@ extension PanelController {
 
     /// 使用量が10%刻みを跨いだらバブルをぷにっと成長させる
     private func growBubbleIfNeeded() {
-        guard !dragActive, !isPopping,
+        guard !settings.isTripleBubble, !dragActive, !isPopping,
               let assembly = bubbleAssembly, let hosting = bubbleHosting else { return }
         let desired = currentBubbleDiameter
         guard abs(assembly.frame.width - desired) > 0.5 else { return }
@@ -358,12 +365,26 @@ extension PanelController {
         dragActive = false
     }
 
+    /// スクリーン座標 → SwiftUIのビュー座標（左上原点）
+    private func viewPoint(of screenPoint: NSPoint, in window: NSWindow) -> CGPoint {
+        let inWindow = window.convertPoint(fromScreen: screenPoint)
+        return CGPoint(x: inWindow.x, y: window.frame.height - inWindow.y)
+    }
+
     private func handleBubbleMouse(_ event: NSEvent) -> Bool {
         guard state.bubbleActive, let p = bubblePanel, event.window === p else { return false }
         switch event.type {
         case .leftMouseDown:
-            guard let frame = bubbleScreenFrame,
-                  frame.insetBy(dx: -4, dy: -4).contains(NSEvent.mouseLocation) else { return false }
+            if settings.isTripleBubble {
+                guard p.frame.contains(NSEvent.mouseLocation) else { return false }
+                // どの球を掴んだか（塊の余白なら塊ごと動かす）
+                tripleCluster.draggingSlot = tripleCluster.slot(
+                    at: viewPoint(of: NSEvent.mouseLocation, in: p), state: state
+                )
+            } else {
+                guard let frame = bubbleScreenFrame,
+                      frame.insetBy(dx: -4, dy: -4).contains(NSEvent.mouseLocation) else { return false }
+            }
             dragActive = true
             dragMoved = false
             dragStartMouse = NSEvent.mouseLocation
@@ -373,18 +394,34 @@ extension PanelController {
         case .leftMouseDragged:
             guard dragActive, let start = dragStartAnchor else { return false }
             let mouse = NSEvent.mouseLocation
-            let dx = mouse.x - dragStartMouse.x
-            let dy = mouse.y - dragStartMouse.y
+            var dx = mouse.x - dragStartMouse.x
+            var dy = mouse.y - dragStartMouse.y
             if hypot(dx, dy) > 3 { dragMoved = true }
+            if settings.isTripleBubble, let slot = tripleCluster.draggingSlot {
+                // 個別ドラッグ: リーシュ内はその球だけ動き、張り詰めた超過分で塊が付いてくる
+                // （ビュー座標はy下向きなので符号を反転して渡す）
+                let overflow = tripleCluster.dragBall(slot, by: CGSize(width: dx, height: -dy))
+                dx = overflow.width
+                dy = -overflow.height
+                if abs(dx) < 0.01, abs(dy) < 0.01 { return true }
+            }
             var origin = NSPoint(x: start.x + dx, y: start.y + dy)
             origin.x = min(max(origin.x, floatBounds.minX), floatBounds.maxX)
             origin.y = min(max(origin.y, floatBounds.minY), floatBounds.maxY)
             p.setFrameOrigin(origin)
+            // 塊が動いた分だけ基準を進め、リーシュの伸びと二重に効かないようにする
+            if settings.isTripleBubble, tripleCluster.draggingSlot != nil {
+                dragStartMouse = NSPoint(x: dragStartMouse.x + dx, y: dragStartMouse.y + dy)
+                dragStartAnchor = origin
+            }
             return true
         case .leftMouseUp:
             guard dragActive else { return false }
             dragActive = false
             dragStartAnchor = nil
+            if settings.isTripleBubble {
+                tripleCluster.releaseBall() // ゆるいばねでホーム配置へ戻る
+            }
             if !dragMoved {
                 registerBubbleTap() // クリック = ポヨン、連打で破裂!
             } else if let buttonFrame = statusButtonFrame?(), let onScreen = bubbleScreenFrame {

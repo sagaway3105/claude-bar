@@ -36,11 +36,18 @@ struct PanelRootView: View {
 struct BubbleRootView: View {
     var state: AppState
     var settings: SettingsStore
+    var cluster: TripleBubbleCluster
     var actions: PanelActions
 
     var body: some View {
-        BubbleView(state: state, settings: settings, actions: actions)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Group {
+            if settings.isTripleBubble {
+                TripleBubbleView(state: state, settings: settings, cluster: cluster, actions: actions)
+            } else {
+                BubbleView(state: state, settings: settings, actions: actions)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

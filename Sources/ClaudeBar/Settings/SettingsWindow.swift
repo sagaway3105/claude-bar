@@ -23,10 +23,20 @@ struct SettingsView: View {
                 Toggle("バーの色をアクセントカラーに合わせる", isOn: $settings.useSystemAccent)
             }
             Section("バブル") {
+                Picker("表示するバブル", selection: $settings.bubbleCount) {
+                    Text("1つ").tag(1)
+                    Text("3つ（セッション + Fable + 週間）").tag(3)
+                }
                 Picker("表示する使用量", selection: $settings.bubbleMetric) {
                     Text("現在のセッション").tag(BubbleMetric.session)
                     Text("週間（すべてのモデル）").tag(BubbleMetric.weekly)
                     Text("Fable（週間）").tag(BubbleMetric.fable)
+                }
+                .disabled(settings.isTripleBubble)
+                if settings.isTripleBubble {
+                    Text("3つ表示中は3種類すべてが並ぶため、選択は使いません")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Toggle("割れた後、リセット時に復活", isOn: $settings.reviveBubble)
             }
