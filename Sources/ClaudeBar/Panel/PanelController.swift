@@ -64,6 +64,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     var dragStartMouse = NSPoint.zero
     var bubbleTapCount = 0
     var bubbleTapResetTask: Task<Void, Never>?
+    /// 3つ表示で最後に掴んだ球（ポヨン/破裂の対象）
+    var lastTappedSlot: TripleBubbleCluster.Slot?
 
     // ホバーHUD（バブルにマウスを載せると全メトリクスを一覧表示する小窓）
     var hoverHUDWindow: NSWindow?

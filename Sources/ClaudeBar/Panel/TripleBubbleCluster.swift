@@ -62,6 +62,22 @@ final class TripleBubbleCluster {
     /// 掴んでいる球（nilなら未ドラッグ）
     var draggingSlot: Slot?
 
+    /// クリックのポヨン用スケール
+    var bounceScales: [CGFloat] = [1, 1, 1]
+
+    /// 割れて消えている球
+    var poppedSlots: Set<Int> = []
+
+    /// 表面張力で吸い付いている相手（ヒステリシス用）
+    private var snappedNeighbor: Slot?
+
+    /// 縁の距離がこれ以下になったら吸い付く
+    static let snapEnterGap: CGFloat = 8
+    /// 吸い付いた後の落ち着く縁の距離（重ねない: Appleの指針）
+    static let snapRestGap: CGFloat = 4
+    /// これ以上引き離すと離れる（吸着より大きくしてヒステリシスにする）
+    static let snapExitGap: CGFloat = 20
+
     func home(for slot: Slot) -> CGPoint { Self.homes[slot.index] }
 
     /// 使用量に応じた直径（現行バブルと同じ膨らみ方）
@@ -112,24 +128,94 @@ final class TripleBubbleCluster {
 
     /// 個別ドラッグ。リーシュを超えた分は返り値で返し、呼び出し側が塊（ウィンドウ）を動かす
     @discardableResult
-    func dragBall(_ slot: Slot, by delta: CGSize) -> CGSize {
-        let raw = CGSize(width: delta.width, height: delta.height)
+    func dragBall(_ slot: Slot, by delta: CGSize, state: AppState) -> CGSize {
+        let raw = delta
         let length = hypot(raw.width, raw.height)
-        guard length > Self.leashRadius else {
-            dragOffsets[slot.index] = raw
-            return .zero
+        var offset = raw
+        var overflow = CGSize.zero
+        if length > Self.leashRadius {
+            // リーシュが張り詰めた: 円周上で止め、超過分は塊の移動へ回す
+            let scale = Self.leashRadius / length
+            offset = CGSize(width: raw.width * scale, height: raw.height * scale)
+            overflow = CGSize(width: raw.width * (1 - scale), height: raw.height * (1 - scale))
         }
-        // リーシュが張り詰めた: 円周上で止め、超過分は塊の移動へ回す
-        let scale = Self.leashRadius / length
-        dragOffsets[slot.index] = CGSize(width: raw.width * scale, height: raw.height * scale)
-        return CGSize(width: raw.width * (1 - scale), height: raw.height * (1 - scale))
+        dragOffsets[slot.index] = snapped(slot, offset: offset, state: state)
+        return overflow
+    }
+
+    /// 表面張力の吸着。近づいたら縁が数pt空いた位置へ引き寄せ、
+    /// 一度くっついたら大きく引き離すまで離れない（ヒステリシス）
+    private func snapped(_ slot: Slot, offset: CGSize, state: AppState) -> CGSize {
+        let home = home(for: slot)
+        let center = CGPoint(x: home.x + offset.width, y: home.y + offset.height)
+        let myRadius = diameter(for: slot, state: state) / 2
+
+        for other in Slot.allCases where other != slot && !poppedSlots.contains(other.index) {
+            let otherHome = self.home(for: other)
+            let otherDrag = dragOffsets[other.index]
+            let otherCenter = CGPoint(x: otherHome.x + otherDrag.width, y: otherHome.y + otherDrag.height)
+            let sumRadius = myRadius + diameter(for: other, state: state) / 2
+            let distance = hypot(center.x - otherCenter.x, center.y - otherCenter.y)
+            let gap = distance - sumRadius
+
+            let isSnappedToThis = snappedNeighbor == other
+            let shouldSnap = isSnappedToThis ? gap < Self.snapExitGap : gap < Self.snapEnterGap
+            guard shouldSnap, distance > 0.01 else { continue }
+
+            if !isSnappedToThis {
+                snappedNeighbor = other
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            }
+            // 縁が snapRestGap 空いた位置へ吸い寄せる
+            let target = sumRadius + Self.snapRestGap
+            let ux = (center.x - otherCenter.x) / distance
+            let uy = (center.y - otherCenter.y) / distance
+            let snappedCenter = CGPoint(x: otherCenter.x + ux * target, y: otherCenter.y + uy * target)
+            return CGSize(width: snappedCenter.x - home.x, height: snappedCenter.y - home.y)
+        }
+        snappedNeighbor = nil
+        return offset
     }
 
     /// 放したらゆるいばねでホームへ戻る（「なんとなく」優先度配置に落ち着く）
     func releaseBall() {
         draggingSlot = nil
+        snappedNeighbor = nil
         withAnimation(.spring(response: 0.55, dampingFraction: 0.68)) {
             dragOffsets = [.zero, .zero, .zero]
         }
     }
+
+    // MARK: - 球ごとのポヨンと破裂
+
+    /// クリックのポヨン（強さは連打回数で変わる）
+    func bounce(_ slot: Slot, intensity: CGFloat = 1) {
+        withAnimation(.easeOut(duration: 0.11)) {
+            bounceScales[slot.index] = 1 + 0.13 * intensity
+        }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(0.11))
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.45)) {
+                self?.bounceScales[slot.index] = 1
+            }
+        }
+    }
+
+    /// その球だけ割れて消える（他の球は残る）
+    func pop(_ slot: Slot) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            poppedSlots.insert(slot.index)
+        }
+        bounceScales[slot.index] = 1
+    }
+
+    /// リセット後などに生まれ直す
+    func revive(_ slot: Slot) {
+        guard poppedSlots.contains(slot.index) else { return }
+        withAnimation(.bouncy(duration: 0.45)) {
+            poppedSlots.remove(slot.index)
+        }
+    }
+
+    var allPopped: Bool { poppedSlots.count == Slot.allCases.count }
 }

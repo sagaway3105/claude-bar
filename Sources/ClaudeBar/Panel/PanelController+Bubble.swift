@@ -365,6 +365,59 @@ extension PanelController {
         dragActive = false
     }
 
+    // MARK: - 3つ表示: 球ごとの破裂と復活
+
+    /// その球だけ割れる（他は残る）。全部割れたらウィンドウを畳む
+    func popTripleBall(_ slot: TripleBubbleCluster.Slot) {
+        guard !tripleCluster.poppedSlots.contains(slot.index) else { return }
+        NSSound(named: "Pop")?.play()
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        if let center = tripleBallScreenCenter(slot) {
+            let utilization = state.usage?.window(for: slot.metric)?.utilization ?? 0
+            showPopBurst(centeredOn: center, scale: Self.bubbleScaleFactor(for: utilization) * 0.8)
+        }
+        tripleCluster.pop(slot)
+        if tripleCluster.allPopped {
+            // 3つとも割れたらバブル自体を畳み、復活を予約する
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(0.6))
+                guard let self, self.tripleCluster.allPopped else { return }
+                self.state.bubbleActive = false
+                self.stopMouseTracking()
+                self.removeBubbleMouseMonitor()
+                self.bubblePanel?.orderOut(nil)
+            }
+        }
+    }
+
+    /// 球のスクリーン座標中心（破裂演出の位置決め用）
+    private func tripleBallScreenCenter(_ slot: TripleBubbleCluster.Slot) -> NSPoint? {
+        guard let p = bubblePanel else { return nil }
+        let home = tripleCluster.home(for: slot)
+        let drag = tripleCluster.dragOffsets[slot.index]
+        // ビュー座標(左上原点) → スクリーン座標(左下原点)
+        return NSPoint(
+            x: p.frame.origin.x + home.x + drag.width,
+            y: p.frame.origin.y + p.frame.height - (home.y + drag.height)
+        )
+    }
+
+    /// 使用量更新時、3つ表示の各球について100%破裂とリセット復活を判定する
+    func updateTripleBallsOnUsage() {
+        guard settings.isTripleBubble, state.bubbleActive else { return }
+        for slot in TripleBubbleCluster.Slot.allCases {
+            let window = state.usage?.window(for: slot.metric)
+            let utilization = window?.utilization ?? 0
+            if utilization >= 100, !tripleCluster.poppedSlots.contains(slot.index) {
+                popTripleBall(slot)
+            } else if utilization < 100, tripleCluster.poppedSlots.contains(slot.index),
+                      settings.reviveBubble {
+                // リセットで使用量が戻った → ぽわんっと生まれ直す
+                tripleCluster.revive(slot)
+            }
+        }
+    }
+
     /// スクリーン座標 → SwiftUIのビュー座標（左上原点）
     private func viewPoint(of screenPoint: NSPoint, in window: NSWindow) -> CGPoint {
         let inWindow = window.convertPoint(fromScreen: screenPoint)
@@ -381,6 +434,7 @@ extension PanelController {
                 tripleCluster.draggingSlot = tripleCluster.slot(
                     at: viewPoint(of: NSEvent.mouseLocation, in: p), state: state
                 )
+                lastTappedSlot = tripleCluster.draggingSlot
             } else {
                 guard let frame = bubbleScreenFrame,
                       frame.insetBy(dx: -4, dy: -4).contains(NSEvent.mouseLocation) else { return false }
@@ -400,7 +454,7 @@ extension PanelController {
             if settings.isTripleBubble, let slot = tripleCluster.draggingSlot {
                 // 個別ドラッグ: リーシュ内はその球だけ動き、張り詰めた超過分で塊が付いてくる
                 // （ビュー座標はy下向きなので符号を反転して渡す）
-                let overflow = tripleCluster.dragBall(slot, by: CGSize(width: dx, height: -dy))
+                let overflow = tripleCluster.dragBall(slot, by: CGSize(width: dx, height: -dy), state: state)
                 dx = overflow.width
                 dy = -overflow.height
                 if abs(dx) < 0.01, abs(dy) < 0.01 { return true }
@@ -442,6 +496,24 @@ extension PanelController {
     private func registerBubbleTap() {
         bubbleTapCount += 1
         bubbleTapResetTask?.cancel()
+
+        // 3つ表示では掴んでいた球だけが反応する（他の球は残る）
+        if settings.isTripleBubble {
+            guard let slot = lastTappedSlot else { bubbleTapCount = 0; return }
+            if bubbleTapCount >= 3 {
+                bubbleTapCount = 0
+                popTripleBall(slot)
+                return
+            }
+            tripleCluster.bounce(slot, intensity: bubbleTapCount == 1 ? 1.0 : 1.6)
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+            bubbleTapResetTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1.1))
+                guard !Task.isCancelled else { return }
+                self?.bubbleTapCount = 0
+            }
+            return
+        }
 
         if bubbleTapCount >= 3 {
             bubbleTapCount = 0
@@ -530,6 +602,7 @@ extension PanelController {
     /// 使用量更新のたびに呼ばれる。表示中メトリクスがリセット境界を越えていたら破裂演出を起こす。
     /// （検知はデータ駆動で確実に、発火の即時性は scheduleResetRefresh のタイマーで担保する）
     func onUsageUpdated() {
+        updateTripleBallsOnUsage()
         guard state.bubbleActive, !isPopping else {
             bubbleTrackedResetsAt = bubbleUsageWindow?.resetsAt
             return
@@ -578,7 +651,7 @@ extension PanelController {
         }
     }
 
-    private func showPopBurst(centeredOn center: NSPoint, scale: CGFloat = 1) {
+    func showPopBurst(centeredOn center: NSPoint, scale: CGFloat = 1) {
         let size: CGFloat = 240 * scale
         let w = NSWindow(
             contentRect: NSRect(x: center.x - size / 2, y: center.y - size / 2, width: size, height: size),

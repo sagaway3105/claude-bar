@@ -33,7 +33,9 @@ struct TripleBubbleView: View {
                 LegacyNeckLayer(cluster: cluster, state: state, drifting: drifting)
             }
             ForEach(TripleBubbleCluster.Slot.allCases, id: \.self) { slot in
-                ballContent(slot)
+                if !cluster.poppedSlots.contains(slot.index) {
+                    ballContent(slot)
+                }
             }
         }
         .frame(width: Self.windowSize.width, height: Self.windowSize.height)
@@ -69,6 +71,9 @@ struct TripleBubbleView: View {
         .frame(width: diameter, height: diameter)
         .modifier(BallGlass())
         .overlay(IridescentRim(shape: Circle(), lineWidth: 1.2).allowsHitTesting(false))
+        .scaleEffect(cluster.bounceScales[slot.index])
+        .opacity(cluster.poppedSlots.contains(slot.index) ? 0 : 1)
+        .scaleEffect(cluster.poppedSlots.contains(slot.index) ? 1.25 : 1) // 割れる瞬間に少し膨らむ
         .position(cluster.home(for: slot))
         .offset(cluster.offset(for: slot, drifting: drifting))
         .animation(cluster.driftAnimation(for: slot), value: drifting)
@@ -174,7 +179,9 @@ private struct LegacyNeckLayer: View {
     var drifting: Bool
 
     var body: some View {
-        let balls = TripleBubbleCluster.Slot.allCases.map { slot -> Metaball in
+        let balls = TripleBubbleCluster.Slot.allCases
+            .filter { !cluster.poppedSlots.contains($0.index) }
+            .map { slot -> Metaball in
             let home = cluster.home(for: slot)
             let offset = cluster.offset(for: slot, drifting: drifting)
             return Metaball(
