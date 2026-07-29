@@ -33,7 +33,6 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     // バブル専用ウィンドウ（パネルと同時に共存できる）
     var bubblePanel: NSPanel?
-    var bubbleContainer: PassthroughContainerView?
     var bubbleAssembly: NSView?
     var bubbleHosting: NSHostingView<BubbleRootView>?
     var bubbleHideGeneration = 0 // 遅延orderOutと再表示の競合ガード
@@ -88,7 +87,6 @@ final class PanelController: NSObject, NSWindowDelegate {
     let tripleCluster = TripleBubbleCluster()
     let detachThreshold: CGFloat = 30
     let snapMargin: CGFloat = 60
-    let bubbleLaunchDistance: CGFloat = 110 // 🫧ボタンでパネル横へ「ポーン」と飛ぶ距離
 
     init(state: AppState, usageService: UsageService, settings: SettingsStore) {
         self.state = state

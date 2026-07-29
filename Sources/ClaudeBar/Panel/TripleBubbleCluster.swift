@@ -240,7 +240,7 @@ final class TripleBubbleCluster {
     /// その球だけ割れて消える（他の球は残る）
     func pop(_ slot: Slot) {
         withAnimation(.easeOut(duration: 0.2)) {
-            poppedSlots.insert(slot.index)
+            _ = poppedSlots.insert(slot.index)
         }
         bounceScales[slot.index] = 1
     }
@@ -249,7 +249,7 @@ final class TripleBubbleCluster {
     func revive(_ slot: Slot) {
         guard poppedSlots.contains(slot.index) else { return }
         withAnimation(.bouncy(duration: 0.45)) {
-            poppedSlots.remove(slot.index)
+            _ = poppedSlots.remove(slot.index)
         }
     }
 

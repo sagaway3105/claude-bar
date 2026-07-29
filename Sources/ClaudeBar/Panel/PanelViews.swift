@@ -503,10 +503,7 @@ struct BubbleView: View {
                         center: UnitPoint(x: 0.5, y: 0.9),
                         startRadius: 1, endRadius: 26 * sizeFactor
                     ))
-                // ゲージ溝は非表示（進捗アークだけを見せる）
-                // ゲージだけ従来の位置（縁から7pt）に留める追加インセット
-                Circle().stroke(Color.primary.opacity(0), lineWidth: 4)
-                    .padding(4)
+                // 使用量リング。溝は描かず進捗アークだけを見せる
                 Circle()
                     .trim(from: 0, to: max(0.003, min(value, 100) / 100))
                     .stroke(

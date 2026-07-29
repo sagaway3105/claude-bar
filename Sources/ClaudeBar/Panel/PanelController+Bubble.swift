@@ -40,7 +40,6 @@ extension PanelController {
         p.contentView = container
 
         bubblePanel = p
-        bubbleContainer = container
         bubbleAssembly = assembly
         bubbleHosting = hosting
         return p

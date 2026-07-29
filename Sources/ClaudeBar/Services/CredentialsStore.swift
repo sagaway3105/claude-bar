@@ -50,7 +50,7 @@ enum CredentialsStore {
 
     /// 旧バージョンが作ったKeychainキャッシュ項目の掃除。ACL不一致の許可ダイアログ源になるため
     /// v1.5.1で廃止した。削除のみ（読み取りしない）なのでダイアログは出ない
-    nonisolated(unsafe) private static let legacyCacheCleanup: Void = {
+    private static let legacyCacheCleanup: Void = {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: legacyCacheService,
