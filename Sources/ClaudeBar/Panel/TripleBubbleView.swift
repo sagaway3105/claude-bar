@@ -20,8 +20,8 @@ struct TripleBubbleView: View {
 
     @State private var drifting = false
 
-    /// ウィンドウサイズ（塊 + 漂い・膨張・ドラッグ余白）
-    static let windowSize = CGSize(width: 260, height: 270)
+    /// ウィンドウサイズ（塊 + 漂い・膨張の余白）
+    static let windowSize = CGSize(width: 230, height: 240)
 
     /// 融合が始まる縁の距離。自前メタボール実装の maxNeckGap と同じ値
     static let mergeSpacing: CGFloat = 26

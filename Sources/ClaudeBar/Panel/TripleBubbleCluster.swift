@@ -48,9 +48,9 @@ final class TripleBubbleCluster {
     /// 縦一列に伸びないよう三角形に寄せて「ぎゅっと一塊」にする。
     /// 3ペアとも縁が数pt〜20pt程度の近接（重ねない: Appleの指針）で、常に繋がって見える
     static let homes: [CGPoint] = [
-        CGPoint(x: 99, y: 104),  // セッション（最上・最大・やや左）
-        CGPoint(x: 167, y: 130), // Fable（右へ振る）
-        CGPoint(x: 109, y: 178), // 週間（最下・最小・左へ戻す）
+        CGPoint(x: 85, y: 90),   // セッション（最上・最大・やや左）
+        CGPoint(x: 153, y: 116), // Fable（右へ振る）
+        CGPoint(x: 95, y: 164),  // 週間（最下・最小・左へ戻す）
     ]
 
     /// 個別ドラッグで動かせる範囲（リーシュ）。これを超えると塊ごと動く
@@ -94,8 +94,8 @@ final class TripleBubbleCluster {
 
     /// 球ごとに違う振幅・周期。さらにX/Yで周期をずらすことで、
     /// 3つが同じ動きに揃わず、それぞれ独立にふわふわ漂って見える
-    private static let driftAmplitudeX: [CGFloat] = [5, -7, 6]
-    private static let driftAmplitudeY: [CGFloat] = [7, 5, -6]
+    private static let driftAmplitudeX: [CGFloat] = [2.5, -3.5, 3]
+    private static let driftAmplitudeY: [CGFloat] = [3.5, 2.5, -3]
     private static let driftDurationX: [Double] = [3.9, 5.1, 4.3]
     private static let driftDurationY: [Double] = [5.6, 3.5, 6.2] // Xと違う周期にして円運動にしない
     private static let driftDelay: [Double] = [0, 0.9, 1.7]       // 開始位相もずらす
