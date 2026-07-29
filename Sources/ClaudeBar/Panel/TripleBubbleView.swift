@@ -70,7 +70,33 @@ struct TripleBubbleView: View {
         )
         .frame(width: diameter, height: diameter)
         .modifier(BallGlass())
-        .overlay(IridescentRim(shape: Circle(), lineWidth: 1.2).allowsHitTesting(false))
+        // シングルバブルと同じ縁の表現（内側へにじむ虹色フリンジ + 虹色リム）
+        .overlay(
+            ZStack {
+                Circle()
+                    .strokeBorder(
+                        AngularGradient(colors: [
+                            .cyan.opacity(0.3), .purple.opacity(0.24), .pink.opacity(0.28),
+                            .orange.opacity(0.22), .mint.opacity(0.26), .cyan.opacity(0.3),
+                        ], center: .center),
+                        lineWidth: 4
+                    )
+                    .blur(radius: 3)
+                    .opacity(0.7)
+                IridescentRim(shape: Circle())
+            }
+            .allowsHitTesting(false)
+        )
+        // 微かな白いドロップシャドウ（シングルバブルと同じ右下へのグロー）
+        .background(
+            Circle()
+                .fill(Color.white.opacity(0.25))
+                .blur(radius: 7)
+                .offset(x: 4, y: 5)
+        )
+        // 優先度どおりの重なり: セッションが常に手前、週間が最背面。
+        // 融合しても重要な球のゲージ・数字が隠れない
+        .zIndex(Double(TripleBubbleCluster.Slot.allCases.count - slot.index))
         .scaleEffect(cluster.bounceScales[slot.index])
         .opacity(cluster.poppedSlots.contains(slot.index) ? 0 : 1)
         .scaleEffect(cluster.poppedSlots.contains(slot.index) ? 1.25 : 1) // 割れる瞬間に少し膨らむ
@@ -82,6 +108,87 @@ struct TripleBubbleView: View {
         .animation(cluster.driftAnimationY(for: slot), value: drifting)
         .offset(cluster.dragOffsets[slot.index])
         .animation(.spring(response: 0.45, dampingFraction: 0.7), value: cluster.dragOffsets[slot.index])
+    }
+}
+
+/// シングルバブルと同じガラス玉の質感（ヘイズ・球面の照り・コースティクス・
+/// ハイライト・虹色リム）。中身だけ差し替えて使う共通部品。
+/// 直径76ptを基準にすべての装飾をスケールする
+struct BubbleSphere<Content: View>: View {
+    var diameter: CGFloat
+    @ViewBuilder var content: () -> Content
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// 76ptを1としたスケール
+    private var s: CGFloat { diameter / 76 }
+
+    private var hazeCore: Color {
+        colorScheme == .dark ? .black : Color(nsColor: .windowBackgroundColor)
+    }
+    private var hazeCoreOpacity: Double { colorScheme == .dark ? 0.38 : 0.25 }
+
+    var body: some View {
+        ZStack {
+            // ヘイズ: 中心に薄い乳白を敷いて文字の下地を安定させる
+            Circle()
+                .fill(EllipticalGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: hazeCore.opacity(hazeCoreOpacity), location: 0),
+                        .init(color: hazeCore.opacity(hazeCoreOpacity - 0.03), location: 0.4),
+                        .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.06), location: 0.65),
+                        .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.4), location: 0.88),
+                        .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.5), location: 1),
+                    ]),
+                    center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5
+                ))
+                .blur(radius: 2)
+            // 球面の照り（左上光源）
+            Circle()
+                .fill(RadialGradient(
+                    colors: [.white.opacity(0.15), .white.opacity(0.04), .clear],
+                    center: UnitPoint(x: 0.32, y: 0.28),
+                    startRadius: 2, endRadius: 46 * s
+                ))
+            // 上縁の深度シェーディング
+            Circle()
+                .trim(from: 0.5, to: 1.0)
+                .stroke(Color.black.opacity(0.15), style: StrokeStyle(lineWidth: 8 * s, lineCap: .round))
+                .blur(radius: 5 * s)
+            // 底に溜まる透過光（コースティクス）
+            Circle()
+                .trim(from: 0.1, to: 0.4)
+                .stroke(Color.white.opacity(0.6), style: StrokeStyle(lineWidth: 9 * s, lineCap: .round))
+                .blur(radius: 5 * s)
+            Circle()
+                .fill(RadialGradient(
+                    colors: [.white.opacity(0.35), .clear],
+                    center: UnitPoint(x: 0.5, y: 0.9),
+                    startRadius: 1, endRadius: 26 * s
+                ))
+
+            content()
+
+            // 主ハイライト（大きく柔らかいブルーム + 小さく鋭いスポット）
+            Ellipse()
+                .fill(.white.opacity(0.55))
+                .frame(width: 24 * s, height: 14 * s)
+                .rotationEffect(.degrees(-35))
+                .offset(x: -13 * s, y: -17 * s)
+                .blur(radius: 4 * s)
+            Circle()
+                .fill(.white.opacity(0.95))
+                .frame(width: 6 * s, height: 6 * s)
+                .offset(x: -19 * s, y: -13 * s)
+                .blur(radius: 0.6)
+            // 対向の小さなグリント
+            Circle()
+                .fill(.white.opacity(0.28))
+                .frame(width: 5 * s, height: 5 * s)
+                .offset(x: 15 * s, y: 19 * s)
+                .blur(radius: 0.8)
+        }
+        .padding(3 * s)
+        .frame(width: diameter, height: diameter)
     }
 }
 
@@ -107,46 +214,38 @@ struct BubbleFace: View {
     }
 
     var body: some View {
-        ZStack {
-            // 使用量リング。融合したときに隣の球のリングと交差して見えないよう、
-            // 縁から十分内側に入れる
-            Circle()
-                .trim(from: 0, to: max(0.003, min(value, 100) / 100))
-                .stroke(
-                    LinearGradient(colors: [tint.opacity(0.55), tint],
-                                   startPoint: .leading, endPoint: .trailing),
-                    style: StrokeStyle(lineWidth: isPrimary ? 3.5 : 2.5, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .padding(isPrimary ? 8 : 7)
-
-            VStack(spacing: 0) {
-                if isPrimary {
-                    // 主役のセッションだけロゴを出す（小さい球は%だけで詰まらせない）
-                    ClaudeLogoView(
-                        animating: state.isActive,
-                        color: state.isActive ? .claudeOrange : .primary
+        BubbleSphere(diameter: diameter) {
+            ZStack {
+                // 使用量リング（シングルバブルと同じく縁から少し内側）
+                Circle()
+                    .trim(from: 0, to: max(0.003, min(value, 100) / 100))
+                    .stroke(
+                        LinearGradient(colors: [tint.opacity(0.55), tint],
+                                       startPoint: .leading, endPoint: .trailing),
+                        style: StrokeStyle(lineWidth: isPrimary ? 4 : 3, lineCap: .round)
                     )
-                    .frame(width: 15, height: 15)
-                }
-                Text(percentText)
-                    .font(.system(size: isPrimary ? 13 : 11))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.4), value: percentText)
-                Text(slot.caption(fableLabel: state.fableLabel))
-                    .font(.system(size: 8))
-                    .foregroundStyle(.secondary)
-            }
+                    .rotationEffect(.degrees(-90))
+                    .padding(4)
 
-            // 球体感（左上光源のハイライト）
-            Ellipse()
-                .fill(.white.opacity(0.5))
-                .frame(width: diameter * 0.3, height: diameter * 0.17)
-                .rotationEffect(.degrees(-35))
-                .offset(x: -diameter * 0.17, y: -diameter * 0.22)
-                .blur(radius: 3)
-                .allowsHitTesting(false)
+                VStack(spacing: 0) {
+                    if isPrimary {
+                        // 主役のセッションだけロゴを出す（小さい球は%だけで詰まらせない）
+                        ClaudeLogoView(
+                            animating: state.isActive,
+                            color: state.isActive ? .claudeOrange : .primary
+                        )
+                        .frame(width: 15, height: 15)
+                    }
+                    Text(percentText)
+                        .font(.system(size: isPrimary ? 13 : 11))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .animation(.snappy(duration: 0.4), value: percentText)
+                    Text(slot.caption(fableLabel: state.fableLabel))
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }
