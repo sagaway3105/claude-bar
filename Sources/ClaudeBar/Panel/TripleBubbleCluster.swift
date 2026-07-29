@@ -121,13 +121,24 @@ final class TripleBubbleCluster {
             .delay(Self.driftDelay[slot.index] * 0.6)
     }
 
-    /// 漂い + 個別ドラッグの合成（旧OSのくびれ描画用の近似）
-    func offset(for slot: Slot, drifting: Bool) -> CGSize {
-        let drag = dragOffsets[slot.index]
-        return CGSize(
-            width: driftX(for: slot, drifting: drifting) + drag.width,
-            height: driftY(for: slot, drifting: drifting) + drag.height
-        )
+    /// 旧OS用: 時刻から漂いを直接計算する。
+    /// 宣言的アニメーションの「終点」ではなく実際の表示位置が必要なため
+    /// （球とくびれを同じ座標から描かないと繋がって見えない）。
+    /// 波形はX/Yで周期が違うeaseInOut往復＝正弦波と同等になるよう合わせてある
+    func driftOffset(for slot: Slot, at time: TimeInterval) -> CGSize {
+        let i = slot.index
+        let delay = Self.driftDelay[i]
+        let x = sin((time - delay) * 2 * .pi / (Self.driftDurationX[i] * 2)) * Self.driftAmplitudeX[i]
+        let y = sin((time - delay * 0.6) * 2 * .pi / (Self.driftDurationY[i] * 2)) * Self.driftAmplitudeY[i]
+        let drag = dragOffsets[i]
+        return CGSize(width: x + drag.width, height: y + drag.height)
+    }
+
+    /// 球の中心（旧OSのくびれ計算用）
+    func center(for slot: Slot, at time: TimeInterval) -> CGPoint {
+        let home = home(for: slot)
+        let offset = driftOffset(for: slot, at: time)
+        return CGPoint(x: home.x + offset.width, y: home.y + offset.height)
     }
 
     // MARK: - ヒットテストとドラッグ

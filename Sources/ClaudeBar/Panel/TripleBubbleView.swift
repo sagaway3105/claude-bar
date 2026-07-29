@@ -28,19 +28,18 @@ struct TripleBubbleView: View {
     static let mergeSpacing: CGFloat = 16
 
     var body: some View {
-        ZStack {
-            // 旧OSは純正の融合が無いので、くびれを自前で描いて繋がって見せる
-            if !isModernGlass {
-                LegacyNeckLayer(cluster: cluster, state: state, drifting: drifting)
-            }
-            ForEach(TripleBubbleCluster.Slot.allCases, id: \.self) { slot in
-                if !cluster.poppedSlots.contains(slot.index) {
-                    ballContent(slot)
+        Group {
+            if isModernGlass {
+                // 純正の融合。漂いは宣言的アニメーションでレンダーサーバへ委譲（低CPU）
+                modernBody
+            } else {
+                // 旧OS: 球とくびれを同じ座標から描く必要があるため毎フレーム計算する
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                    legacyBody(at: context.date.timeIntervalSinceReferenceDate)
                 }
             }
         }
         .frame(width: Self.windowSize.width, height: Self.windowSize.height)
-        .modifier(TripleGlassContainer(spacing: Self.mergeSpacing))
         .onAppear { drifting = true }
         .contextMenu {
             Button("パネルに展開") { actions.expand() }
@@ -56,6 +55,51 @@ struct TripleBubbleView: View {
     private var isModernGlass: Bool {
         if #available(macOS 26.0, *), !forceLegacyUI { return true }
         return false
+    }
+
+    /// macOS 26: Appleのレンダラが近接した球を融合する
+    private var modernBody: some View {
+        ZStack {
+            ForEach(TripleBubbleCluster.Slot.allCases, id: \.self) { slot in
+                if !cluster.poppedSlots.contains(slot.index) {
+                    ballContent(slot)
+                }
+            }
+        }
+        .modifier(TripleGlassContainer(spacing: Self.mergeSpacing))
+    }
+
+    /// macOS 14/15: 純正の融合が無いため、くびれを自前で描いて繋がって見せる。
+    /// 球とくびれを同一時刻の座標から描くので位置が必ず一致する
+    private func legacyBody(at time: TimeInterval) -> some View {
+        let visible = TripleBubbleCluster.Slot.allCases.filter { !cluster.poppedSlots.contains($0.index) }
+        let balls = visible.map { slot in
+            Metaball(
+                center: cluster.center(for: slot, at: time),
+                radius: cluster.diameter(for: slot, state: state) / 2
+            )
+        }
+        return ZStack {
+            // くびれ（背景を参照しない静的な塗り。可変形状に背景ブラーを掛けると極端に重くなる）
+            MetaballShape(balls: balls, maxNeckGap: Self.mergeSpacing)
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.55))
+                .overlay(
+                    MetaballShape(balls: balls, maxNeckGap: Self.mergeSpacing)
+                        .fill(.white.opacity(0.12))
+                )
+                .allowsHitTesting(false)
+            ForEach(Array(visible.enumerated()), id: \.element) { index, slot in
+                let diameter = cluster.diameter(for: slot, state: state)
+                BubbleFace(slot: slot, diameter: diameter, state: state,
+                           settings: settings, isPrimary: slot == .session)
+                    .frame(width: diameter, height: diameter)
+                    .modifier(BallGlass())
+                    .overlay(IridescentRim(shape: Circle()).allowsHitTesting(false))
+                    .scaleEffect(cluster.bounceScales[slot.index])
+                    .position(balls[index].center)
+                    .zIndex(Double(TripleBubbleCluster.Slot.allCases.count - slot.index))
+            }
+        }
     }
 
     /// 球の中身（%・ロゴ・ハイライト）+ ガラス。融合はコンテナ側が担当する
@@ -276,30 +320,3 @@ private struct BallGlass: ViewModifier {
     }
 }
 
-/// 旧OS（macOS 14/15）用のくびれ。純正の融合が無いため自前のメタボール形状で繋ぐ。
-/// 背景を参照しない静的な塗りにして、可変形状に背景ブラーを掛ける高コストを避ける
-private struct LegacyNeckLayer: View {
-    var cluster: TripleBubbleCluster
-    var state: AppState
-    var drifting: Bool
-
-    var body: some View {
-        let balls = TripleBubbleCluster.Slot.allCases
-            .filter { !cluster.poppedSlots.contains($0.index) }
-            .map { slot -> Metaball in
-            let home = cluster.home(for: slot)
-            let offset = cluster.offset(for: slot, drifting: drifting)
-            return Metaball(
-                center: CGPoint(x: home.x + offset.width, y: home.y + offset.height),
-                radius: cluster.diameter(for: slot, state: state) / 2
-            )
-        }
-        MetaballShape(balls: balls, maxNeckGap: TripleBubbleView.mergeSpacing)
-            .fill(Color(nsColor: .windowBackgroundColor).opacity(0.5))
-            .overlay(
-                MetaballShape(balls: balls, maxNeckGap: TripleBubbleView.mergeSpacing)
-                    .fill(.white.opacity(0.10))
-            )
-            .allowsHitTesting(false)
-    }
-}
