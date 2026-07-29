@@ -30,6 +30,32 @@ enum BenchConfig: String, CaseIterable {
     var isCADriven: Bool { self == .singleCA || self == .tripleCA }
 }
 
+/// 輪郭線（虹色リム）用に内部の線が出ない単一シルエットを作る。
+/// booleanのunionは塗りより高コストなのでベンチ専用（製品UIは球ごとにリムを描く）
+extension MetaballShape {
+    func outlinePath(in rect: CGRect) -> Path {
+        var shapes: [Path] = balls.filter { $0.radius > 0 }.map { ball in
+            Path(ellipseIn: CGRect(
+                x: ball.center.x - ball.radius, y: ball.center.y - ball.radius,
+                width: ball.radius * 2, height: ball.radius * 2
+            ))
+        }
+        for i in balls.indices {
+            for j in balls.indices where j > i {
+                if let neck = Self.neck(
+                    balls[i], balls[j],
+                    handleLenRate: handleLenRate, maxNeckGap: maxNeckGap, spread: spread
+                ) {
+                    shapes.append(neck)
+                }
+            }
+        }
+        guard var union = shapes.first else { return Path() }
+        for shape in shapes.dropFirst() { union = union.union(shape) }
+        return union
+    }
+}
+
 final class FrameCounter {
     static let shared = FrameCounter()
     private var stamps: [CFTimeInterval] = []

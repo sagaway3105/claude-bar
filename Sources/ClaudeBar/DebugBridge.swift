@@ -85,8 +85,6 @@ final class DebugBridge {
             panelController.showHoverHUD()
         case "hudoff":
             panelController.hideHoverHUD()
-        case "protooff":
-            MetaballProtoWindow.shared.hide()
         case "resetpop":
             panelController.popForReset()
         case "hide":
@@ -116,11 +114,6 @@ final class DebugBridge {
                 state.errorMessage = message.isEmpty ? nil : message
             } else if command.hasPrefix("needslogin:") {
                 state.needsLogin = command.hasSuffix("1")
-            } else if command.hasPrefix("proto:") {
-                let name = String(command.dropFirst(6))
-                if let config = ProtoConfig(rawValue: name) {
-                    MetaballProtoWindow.shared.show(config: config)
-                }
             }
         }
     }
@@ -173,10 +166,6 @@ final class DebugBridge {
            let hudAssembly = hud.contentView?.subviews.first,
            let pres = hudAssembly.layer?.presentation() {
             info["hudPresentation"] = [pres.position.x, pres.position.y]
-        }
-        if MetaballProtoWindow.shared.isVisible {
-            info["protoConfig"] = MetaballProtoWindow.shared.config.rawValue
-            info["protoFPS"] = ProtoFrameCounter.shared.fps
         }
         if let screen = NSScreen.main {
             info["screen"] = [screen.frame.width, screen.frame.height]
