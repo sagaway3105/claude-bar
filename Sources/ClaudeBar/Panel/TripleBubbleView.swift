@@ -21,10 +21,11 @@ struct TripleBubbleView: View {
     @State private var drifting = false
 
     /// ウィンドウサイズ（塊 + 漂い・膨張の余白）
-    static let windowSize = CGSize(width: 230, height: 240)
+    static let windowSize = CGSize(width: 220, height: 210)
 
-    /// 融合が始まる縁の距離。自前メタボール実装の maxNeckGap と同じ値
-    static let mergeSpacing: CGFloat = 26
+    /// 融合が始まる縁の距離。大きいほど「くびれ」が太く粘っこくなる。
+    /// 球は密に配置しつつ、ねばりは控えめにして球の輪郭が読めるようにする
+    static let mergeSpacing: CGFloat = 16
 
     var body: some View {
         ZStack {

@@ -47,10 +47,11 @@ final class TripleBubbleCluster {
     /// ホーム位置。上からセッション→Fable→週間の優先度を保ちつつ、
     /// 縦一列に伸びないよう三角形に寄せて「ぎゅっと一塊」にする。
     /// 3ペアとも縁が数pt〜20pt程度の近接（重ねない: Appleの指針）で、常に繋がって見える
+    /// 3ペアとも縁の距離が約2ptになる密な三角形（重ねずに最大限くっつける）
     static let homes: [CGPoint] = [
-        CGPoint(x: 85, y: 90),   // セッション（最上・最大・やや左）
-        CGPoint(x: 153, y: 116), // Fable（右へ振る）
-        CGPoint(x: 95, y: 164),  // 週間（最下・最小・左へ戻す）
+        CGPoint(x: 80, y: 81),   // セッション（最上・最大・やや左）
+        CGPoint(x: 148, y: 106), // Fable（右へ振る）
+        CGPoint(x: 103, y: 143), // 週間（最下・最小）
     ]
 
     /// 個別ドラッグで動かせる範囲（リーシュ）。これを超えると塊ごと動く
@@ -78,7 +79,7 @@ final class TripleBubbleCluster {
     /// これ以上引き離すと離れる（吸着より大きくしてヒステリシスにする）
     static let snapExitGap: CGFloat = 10
     /// 吸着の強さ（1.0で完全に吸い付く。弱めて「引っ張れば動く」感触を残す）
-    static let snapStrength: CGFloat = 0.6
+    static let snapStrength: CGFloat = 0.45
 
     func home(for slot: Slot) -> CGPoint { Self.homes[slot.index] }
 
