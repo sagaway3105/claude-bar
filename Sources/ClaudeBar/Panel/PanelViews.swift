@@ -75,6 +75,38 @@ struct IridescentRim<S: InsettableShape>: View {
     }
 }
 
+/// ガラス玉の外周表現: 内側へにじむ虹色フリンジ + 虹色リムと、
+/// 左上光源に合わせて右下へ落とす微かな白いグロー。
+/// シングルバブルと3つ表示の球で同じ縁に見せるための共通部品
+struct BubbleRimGlow: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                Circle()
+                    .fill(Color.white.opacity(0.25))
+                    .blur(radius: 7)
+                    .offset(x: 4, y: 5)
+            )
+            .overlay(
+                ZStack {
+                    // 内側へにじむ虹色フリンジ
+                    Circle()
+                        .strokeBorder(
+                            AngularGradient(colors: [
+                                .cyan.opacity(0.3), .purple.opacity(0.24), .pink.opacity(0.28),
+                                .orange.opacity(0.22), .mint.opacity(0.26), .cyan.opacity(0.3),
+                            ], center: .center),
+                            lineWidth: 4
+                        )
+                        .blur(radius: 3)
+                        .opacity(0.7)
+                    IridescentRim(shape: Circle())
+                }
+                .allowsHitTesting(false)
+            )
+    }
+}
+
 // MARK: - OS適応ガラス
 // macOS 26 = Liquid Glass（純正メニューと同じ質感）/ それ以前 = 従来のすりガラス(Material)
 
@@ -100,7 +132,9 @@ struct AdaptivePanelGlass: ViewModifier {
 }
 
 /// バブルのガラス玉: 26は透明なLiquid Glass、旧OSはすりガラスの球
-/// （ハイライト・コースティクス・虹色リムは自前描画なので全OS共通）
+/// （ハイライト・コースティクス・虹色リムは自前描画なので全OS共通）。
+/// 形状はCircle固定 — システムが標準プリミティブへ解決しようとするため、
+/// 3つ表示の融合（GlassEffectContainer）もこの形状に依存する
 struct AdaptiveBubbleGlass: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *), !forceLegacyUI {
@@ -570,30 +604,7 @@ struct BubbleView: View {
         .animation(.bouncy(duration: 0.4), value: sizeFactor)
         // 素のLiquid Glass（.clear = 透明度の高いガラス玉。旧OSはすりガラスにフォールバック）
         .modifier(AdaptiveBubbleGlass())
-        // 微かなドロップシャドウ（白）— 左上光源に合わせて右下へ落とすグロー
-        .background(
-            Circle()
-                .fill(Color.white.opacity(0.25))
-                .blur(radius: 7)
-                .offset(x: 4, y: 5)
-        )
-        .overlay(
-            ZStack {
-                // 内側へにじむ虹色フリンジ
-                Circle()
-                    .strokeBorder(
-                        AngularGradient(colors: [
-                            .cyan.opacity(0.3), .purple.opacity(0.24), .pink.opacity(0.28),
-                            .orange.opacity(0.22), .mint.opacity(0.26), .cyan.opacity(0.3),
-                        ], center: .center),
-                        lineWidth: 4
-                    )
-                    .blur(radius: 3)
-                    .opacity(0.7)
-                IridescentRim(shape: Circle())
-            }
-            .allowsHitTesting(false)
-        )
+        .modifier(BubbleRimGlow())
         .contentShape(Circle())
         .contextMenu {
             Button("パネルに展開") { actions.expand() }

@@ -93,7 +93,7 @@ struct TripleBubbleView: View {
                 BubbleFace(slot: slot, diameter: diameter, state: state,
                            settings: settings, isPrimary: slot == .session)
                     .frame(width: diameter, height: diameter)
-                    .modifier(BallGlass())
+                    .modifier(AdaptiveBubbleGlass())
                     .overlay(IridescentRim(shape: Circle()).allowsHitTesting(false))
                     .scaleEffect(cluster.bounceScales[slot.index])
                     .position(balls[index].center)
@@ -114,31 +114,9 @@ struct TripleBubbleView: View {
             isPrimary: slot == .session
         )
         .frame(width: diameter, height: diameter)
-        .modifier(BallGlass())
-        // シングルバブルと同じ縁の表現（内側へにじむ虹色フリンジ + 虹色リム）
-        .overlay(
-            ZStack {
-                Circle()
-                    .strokeBorder(
-                        AngularGradient(colors: [
-                            .cyan.opacity(0.3), .purple.opacity(0.24), .pink.opacity(0.28),
-                            .orange.opacity(0.22), .mint.opacity(0.26), .cyan.opacity(0.3),
-                        ], center: .center),
-                        lineWidth: 4
-                    )
-                    .blur(radius: 3)
-                    .opacity(0.7)
-                IridescentRim(shape: Circle())
-            }
-            .allowsHitTesting(false)
-        )
-        // 微かな白いドロップシャドウ（シングルバブルと同じ右下へのグロー）
-        .background(
-            Circle()
-                .fill(Color.white.opacity(0.25))
-                .blur(radius: 7)
-                .offset(x: 4, y: 5)
-        )
+        .modifier(AdaptiveBubbleGlass())
+        // 縁とグローはシングルバブルと共通（虹色フリンジ + 虹色リム + 右下への白いグロー）
+        .modifier(BubbleRimGlow())
         // 優先度どおりの重なり: セッションが常に手前、週間が最背面。
         // 融合しても重要な球のゲージ・数字が隠れない
         .zIndex(Double(TripleBubbleCluster.Slot.allCases.count - slot.index))
@@ -308,15 +286,3 @@ private struct TripleGlassContainer: ViewModifier {
         }
     }
 }
-
-/// 球1つぶんのガラス。形状はCircle固定（システムが標準プリミティブへ解決するため）
-private struct BallGlass: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 26.0, *), !forceLegacyUI {
-            content.glassEffect(.clear, in: Circle())
-        } else {
-            content.background(Circle().fill(.ultraThinMaterial))
-        }
-    }
-}
-
