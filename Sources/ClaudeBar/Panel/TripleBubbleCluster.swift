@@ -29,9 +29,9 @@ final class TripleBubbleCluster {
         /// 基準の直径（重要度順に少しずつ小さく）
         var baseDiameter: CGFloat {
             switch self {
-            case .session: return 76
-            case .fable: return 64
-            case .weekly: return 54
+            case .session: return 78
+            case .fable: return 62
+            case .weekly: return 50
             }
         }
 
@@ -44,13 +44,13 @@ final class TripleBubbleCluster {
         }
     }
 
-    /// ホーム位置。真っ直ぐ縦に並べず左右へ振り、塊を小さくまとめる。
-    /// 隣同士は縁が約5pt空いた近接（Appleの「Liquid Glass要素を重ねるな」に従い重ねない）。
-    /// セッション⇔週間は約41pt離してネックを張らせない
+    /// ホーム位置。上からセッション→Fable→週間の優先度を保ちつつ、
+    /// 縦一列に伸びないよう三角形に寄せて「ぎゅっと一塊」にする。
+    /// 3ペアとも縁が数pt〜20pt程度の近接（重ねない: Appleの指針）で、常に繋がって見える
     static let homes: [CGPoint] = [
-        CGPoint(x: 128, y: 112), // セッション（最上・最大・やや左）
-        CGPoint(x: 176, y: 170), // Fable（右へ振る）
-        CGPoint(x: 134, y: 218), // 週間（最下・最小・左へ戻す）
+        CGPoint(x: 99, y: 104),  // セッション（最上・最大・やや左）
+        CGPoint(x: 167, y: 130), // Fable（右へ振る）
+        CGPoint(x: 109, y: 178), // 週間（最下・最小・左へ戻す）
     ]
 
     /// 個別ドラッグで動かせる範囲（リーシュ）。これを超えると塊ごと動く
@@ -71,44 +71,62 @@ final class TripleBubbleCluster {
     /// 表面張力で吸い付いている相手（ヒステリシス用）
     private var snappedNeighbor: Slot?
 
-    /// 縁の距離がこれ以下になったら吸い付く
-    static let snapEnterGap: CGFloat = 8
+    /// 縁の距離がこれ以下になったら吸い付く（強すぎると操作を奪うので浅めに）
+    static let snapEnterGap: CGFloat = 4
     /// 吸い付いた後の落ち着く縁の距離（重ねない: Appleの指針）
-    static let snapRestGap: CGFloat = 4
+    static let snapRestGap: CGFloat = 3
     /// これ以上引き離すと離れる（吸着より大きくしてヒステリシスにする）
-    static let snapExitGap: CGFloat = 20
+    static let snapExitGap: CGFloat = 10
+    /// 吸着の強さ（1.0で完全に吸い付く。弱めて「引っ張れば動く」感触を残す）
+    static let snapStrength: CGFloat = 0.6
 
     func home(for slot: Slot) -> CGPoint { Self.homes[slot.index] }
 
-    /// 使用量に応じた直径（現行バブルと同じ膨らみ方）
+    /// 使用量に応じた直径。3つ表示では膨らみを半分に抑える
+    /// （使用量が高い小さい球が主役のセッションと同じ大きさになり、優先度が読めなくなるため）
     func diameter(for slot: Slot, state: AppState) -> CGFloat {
         let utilization = state.usage?.window(for: slot.metric)?.utilization ?? 0
-        return slot.baseDiameter * PanelController.bubbleScaleFactor(for: utilization)
+        let growth = PanelController.bubbleScaleFactor(for: utilization) - 1
+        return slot.baseDiameter * (1 + growth * 0.5)
     }
 
     // MARK: - 漂い（宣言的アニメーションでレンダーサーバへ委譲）
 
-    /// 球ごとに違う振幅・周期にして有機的に見せる
-    private static let driftAmplitudes: [CGSize] = [
-        CGSize(width: 6, height: 8),
-        CGSize(width: -8, height: 5),
-        CGSize(width: 5, height: -7),
-    ]
-    private static let driftDurations: [Double] = [3.7, 4.6, 5.3]
+    /// 球ごとに違う振幅・周期。さらにX/Yで周期をずらすことで、
+    /// 3つが同じ動きに揃わず、それぞれ独立にふわふわ漂って見える
+    private static let driftAmplitudeX: [CGFloat] = [5, -7, 6]
+    private static let driftAmplitudeY: [CGFloat] = [7, 5, -6]
+    private static let driftDurationX: [Double] = [3.9, 5.1, 4.3]
+    private static let driftDurationY: [Double] = [5.6, 3.5, 6.2] // Xと違う周期にして円運動にしない
+    private static let driftDelay: [Double] = [0, 0.9, 1.7]       // 開始位相もずらす
 
-    /// 漂い + 個別ドラッグの合成オフセット
-    func offset(for slot: Slot, drifting: Bool) -> CGSize {
-        let amplitude = Self.driftAmplitudes[slot.index]
-        let drag = dragOffsets[slot.index]
-        let sign: CGFloat = drifting ? 1 : -1
-        return CGSize(
-            width: amplitude.width * sign + drag.width,
-            height: amplitude.height * sign + drag.height
-        )
+    func driftX(for slot: Slot, drifting: Bool) -> CGFloat {
+        Self.driftAmplitudeX[slot.index] * (drifting ? 1 : -1)
     }
 
-    func driftAnimation(for slot: Slot) -> Animation {
-        .easeInOut(duration: Self.driftDurations[slot.index]).repeatForever(autoreverses: true)
+    func driftY(for slot: Slot, drifting: Bool) -> CGFloat {
+        Self.driftAmplitudeY[slot.index] * (drifting ? 1 : -1)
+    }
+
+    func driftAnimationX(for slot: Slot) -> Animation {
+        .easeInOut(duration: Self.driftDurationX[slot.index])
+            .repeatForever(autoreverses: true)
+            .delay(Self.driftDelay[slot.index])
+    }
+
+    func driftAnimationY(for slot: Slot) -> Animation {
+        .easeInOut(duration: Self.driftDurationY[slot.index])
+            .repeatForever(autoreverses: true)
+            .delay(Self.driftDelay[slot.index] * 0.6)
+    }
+
+    /// 漂い + 個別ドラッグの合成（旧OSのくびれ描画用の近似）
+    func offset(for slot: Slot, drifting: Bool) -> CGSize {
+        let drag = dragOffsets[slot.index]
+        return CGSize(
+            width: driftX(for: slot, drifting: drifting) + drag.width,
+            height: driftY(for: slot, drifting: drifting) + drag.height
+        )
     }
 
     // MARK: - ヒットテストとドラッグ
@@ -166,12 +184,18 @@ final class TripleBubbleCluster {
                 snappedNeighbor = other
                 NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
             }
-            // 縁が snapRestGap 空いた位置へ吸い寄せる
+            // 縁が snapRestGap 空いた位置へ引き寄せる。
+            // 完全には吸い付かせず（snapStrength）、引っ張れば動く感触を残す
             let target = sumRadius + Self.snapRestGap
             let ux = (center.x - otherCenter.x) / distance
             let uy = (center.y - otherCenter.y) / distance
-            let snappedCenter = CGPoint(x: otherCenter.x + ux * target, y: otherCenter.y + uy * target)
-            return CGSize(width: snappedCenter.x - home.x, height: snappedCenter.y - home.y)
+            let pulled = CGPoint(x: otherCenter.x + ux * target, y: otherCenter.y + uy * target)
+            let k = Self.snapStrength
+            let blended = CGPoint(
+                x: center.x + (pulled.x - center.x) * k,
+                y: center.y + (pulled.y - center.y) * k
+            )
+            return CGSize(width: blended.x - home.x, height: blended.y - home.y)
         }
         snappedNeighbor = nil
         return offset

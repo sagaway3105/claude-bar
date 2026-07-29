@@ -20,8 +20,8 @@ struct TripleBubbleView: View {
 
     @State private var drifting = false
 
-    /// ウィンドウサイズ（漂い・膨張・ドラッグ余白を含む）
-    static let windowSize = CGSize(width: 300, height: 320)
+    /// ウィンドウサイズ（塊 + 漂い・膨張・ドラッグ余白）
+    static let windowSize = CGSize(width: 260, height: 270)
 
     /// 融合が始まる縁の距離。自前メタボール実装の maxNeckGap と同じ値
     static let mergeSpacing: CGFloat = 26
@@ -75,8 +75,12 @@ struct TripleBubbleView: View {
         .opacity(cluster.poppedSlots.contains(slot.index) ? 0 : 1)
         .scaleEffect(cluster.poppedSlots.contains(slot.index) ? 1.25 : 1) // 割れる瞬間に少し膨らむ
         .position(cluster.home(for: slot))
-        .offset(cluster.offset(for: slot, drifting: drifting))
-        .animation(cluster.driftAnimation(for: slot), value: drifting)
+        // X/Yを別アニメーションにして、3つが同じ動きに揃わないようにする
+        .offset(x: cluster.driftX(for: slot, drifting: drifting))
+        .animation(cluster.driftAnimationX(for: slot), value: drifting)
+        .offset(y: cluster.driftY(for: slot, drifting: drifting))
+        .animation(cluster.driftAnimationY(for: slot), value: drifting)
+        .offset(cluster.dragOffsets[slot.index])
         .animation(.spring(response: 0.45, dampingFraction: 0.7), value: cluster.dragOffsets[slot.index])
     }
 }
@@ -104,16 +108,17 @@ struct BubbleFace: View {
 
     var body: some View {
         ZStack {
-            // 使用量リング
+            // 使用量リング。融合したときに隣の球のリングと交差して見えないよう、
+            // 縁から十分内側に入れる
             Circle()
                 .trim(from: 0, to: max(0.003, min(value, 100) / 100))
                 .stroke(
                     LinearGradient(colors: [tint.opacity(0.55), tint],
                                    startPoint: .leading, endPoint: .trailing),
-                    style: StrokeStyle(lineWidth: isPrimary ? 4 : 3, lineCap: .round)
+                    style: StrokeStyle(lineWidth: isPrimary ? 3.5 : 2.5, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .padding(isPrimary ? 4 : 3)
+                .padding(isPrimary ? 8 : 7)
 
             VStack(spacing: 0) {
                 if isPrimary {
