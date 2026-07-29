@@ -11,7 +11,9 @@ import SwiftUI
 /// - macOS 14/15: 各球は固定形状のすりガラス、くびれは背景を参照しない静的な板で描く
 ///   （バックドロップ参照層に毎フレーム変わる形状を渡すと極端に重くなるため）
 ///
-/// 漂いはSwiftUIの宣言的アニメーション（repeatForever）に委ね、毎フレームのCPU再計算を避ける。
+/// 漂いの駆動もOSで分かれる。macOS 26はSwiftUIの宣言的アニメーション（repeatForever）に委ねて
+/// 毎フレームのCPU再計算を避けるが、旧OSは球とくびれを同じ座標から描く必要があるため
+/// TimelineView(30fps)で毎フレーム計算する。
 struct TripleBubbleView: View {
     var state: AppState
     var settings: SettingsStore

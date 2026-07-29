@@ -10,8 +10,8 @@ struct Metaball: Equatable {
 ///
 /// 近い2球のあいだに解析的なくびれ（ネック）を張る古典的メタボール手法。
 /// 縁の距離が縮むほどネックが太くなり、重なると円の合併輪郭に漸近する。
-/// ガラス・虹色リム・下地ヘイズの3役で同じ形状を使い回すため、
-/// macOS 26のLiquid Glassでも旧OSのすりガラスでも見た目が揃う。
+/// macOS 26は純正の GlassEffectContainer が融合を担当するため、
+/// これを使うのは旧OS（macOS 14/15）のくびれ描画だけ。
 struct MetaballShape: Shape {
     var balls: [Metaball]
     /// ネックのハンドル長。大きいほど張りが強い（2.0〜3.0が自然）

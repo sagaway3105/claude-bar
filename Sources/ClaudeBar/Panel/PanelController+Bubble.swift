@@ -4,7 +4,7 @@ import SwiftUI
 
 /// バブル（浮遊モード）固有の挙動。
 ///
-/// バブルは専用の透明ウィンドウ（1つ表示=150pt / 3つ表示=300x320pt）で、その中のアセンブリだけを
+/// バブルは専用の透明ウィンドウ（1つ表示=150pt角 / 3つ表示=220x210pt）で、その中のアセンブリだけを
 /// レンダーサーバ側の無限アニメーションで漂わせる（ウィンドウ自体は動かさないので滑らか）。
 /// パネルとは独立したウィンドウなので、パネルを開いたままバブルを共存できる。
 /// 操作はAppKitのローカルモニタで判定: クリック=ポヨン(連打で破裂) / ドラッグ=ウィンドウ移動 /
@@ -93,7 +93,8 @@ extension PanelController {
         assembly.layer?.removeAllAnimations()
         wasHoveringBubble = false
         if settings.isTripleBubble {
-            // 3つ表示: 塊はウィンドウ全体。漂いはSwiftUI側の宣言的アニメーションが担当する
+            // 3つ表示: 塊はウィンドウ全体（アセンブリの漂いが塊ごとの揺れ、
+            // 球ごとの揺れはSwiftUI側の宣言的アニメーションが担当する）
             assembly.frame = NSRect(origin: .zero, size: size)
         } else {
             let diameter = currentBubbleDiameter
@@ -219,7 +220,7 @@ extension PanelController {
     // MARK: - 可動域
 
     /// ドラッグ時のウィンドウ原点の可動域を更新する。
-    /// ウィンドウ(150pt)ではなく「見えているバブルの縁」が画面の縁に届く基準:
+    /// ウィンドウの外形ではなく「見えているバブルの縁」が画面の縁に届く基準:
     /// 左右・下は画面端（下はDockの上端）に接するまで、上はメニューバーを覆えるまで。
     func updateFloatBounds(around point: NSPoint) {
         let size = bubbleWindowFrameSize

@@ -490,7 +490,7 @@ struct BubbleView: View {
         return settings.useSystemAccent ? Color(nsColor: .controlAccentColor) : .claudeOrange
     }
 
-    /// 使用量に応じて風船のように膨らむ（10%ごとに+4%、100%で1.4倍）
+    /// 使用量に応じて風船のように膨らむ（10%ごとに+2%、100%で1.2倍）
     private var sizeFactor: CGFloat {
         PanelController.bubbleScaleFactor(for: value)
     }

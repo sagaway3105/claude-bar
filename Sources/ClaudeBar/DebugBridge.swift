@@ -5,11 +5,16 @@ import Foundation
 /// UI検証用のコマンドブリッジ。デバッグビルド限定（リリースには含めない）。
 /// CLAUDEBAR_DEBUG=1 かつ CLAUDEBAR_CMDFILE=<path> で起動した時のみ有効。
 /// コマンドファイルに1行ずつ書き込むと実行される:
-///   click / bubble / expand / pop / hide / settings / quit
-///   usage:<session>,<weekly>,<fable>   例: usage:83,41,12
-///   active:1 / active:0                （ロゴアニメのon/off）
+///   click / hide / settings / quit
+///   bubble / tobubble / expand / overlay   （バブル表示・トグル・パネル展開・オーバーレイ）
+///   pop / resetpop                         （破裂 / リセット破裂→再生成）
+///   hud / hudoff                           （ホバーHUDの表示・非表示）
+///   checkupdate / bgupdate                 （Sparkleの更新確認）
+///   usage:<session>,<weekly>,<fable>       例: usage:83,41,12
+///   active:1 / active:0                    （ロゴアニメのon/off）
 ///   err:<メッセージ> / err:
-///   state                              （<cmdfile>.state にJSONを書き出す）
+///   needslogin:1 / needslogin:0
+///   state                                  （<cmdfile>.state にJSONを書き出す）
 @MainActor
 final class DebugBridge {
     private var timer: Timer?
