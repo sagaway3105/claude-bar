@@ -35,7 +35,13 @@ else
   echo "ℹ️ 公証はスキップ（Developer ID証明書またはnotary認証情報が未設定）"
 fi
 
-gh release create "v${VERSION}" "$ZIP" --title "v${VERSION}" --generate-notes
+# docs/release-notes/v<バージョン>.md があればそれをノートに使う（無ければ自動生成）
+NOTES_FILE="docs/release-notes/v${VERSION}.md"
+if [[ -f "$NOTES_FILE" ]]; then
+  gh release create "v${VERSION}" "$ZIP" --title "v${VERSION}" --notes-file "$NOTES_FILE"
+else
+  gh release create "v${VERSION}" "$ZIP" --title "v${VERSION}" --generate-notes
+fi
 echo "✅ GitHub Release作成: https://github.com/sagaway3105/claude-bar/releases/tag/v${VERSION}"
 
 # Sparkle: zipをEdDSA署名してappcast.xmlに追記し、pushする（自動アップデート配信）
