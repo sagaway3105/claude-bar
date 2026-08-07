@@ -16,15 +16,43 @@ extension PanelController {
         return CGPoint(x: inWindow.x, y: window.frame.height - inWindow.y)
     }
 
-    /// 球のスクリーン座標中心（破裂演出の位置決め用）
+    /// 塊全体の浮遊アニメーションによる見た目のズレ（presentation − モデル）。ビュー座標系。
+    /// モデル座標だけで当たり判定すると、浮遊が最大に振れた瞬間に見えている球の縁を外す
+    var tripleFloatOffset: CGSize {
+        guard let assembly = bubbleAssembly,
+              let pres = assembly.layer?.presentation() else { return .zero }
+        let dx = pres.position.x - assembly.frame.origin.x
+        let dy = pres.position.y - assembly.frame.origin.y
+        // ウィンドウ座標(下原点)のズレをビュー座標(上原点)へ反転
+        return CGSize(width: dx, height: -dy)
+    }
+
+    /// スクリーン座標のマウス位置がどの球の上か（塊の浮遊ぶんを補正して判定）
+    func tripleSlot(at screenPoint: NSPoint, in window: NSWindow) -> TripleBubbleCluster.Slot? {
+        let point = viewPoint(of: screenPoint, in: window)
+        let float = tripleFloatOffset
+        return tripleCluster.slot(
+            at: CGPoint(x: point.x - float.width, y: point.y - float.height), state: state
+        )
+    }
+
+    /// 塊の構成（破裂・復活）が変わった後、可動域を取り直す
+    /// （古い外接のままだと残った球が画面端に届かない/はみ出す）
+    func refreshTripleFloatBounds() {
+        guard settings.isTripleBubble, let p = bubblePanel else { return }
+        updateFloatBounds(around: NSPoint(x: p.frame.midX, y: p.frame.midY))
+    }
+
+    /// 球のスクリーン座標中心（破裂演出の位置決め用）。浮遊ぶんも補正して見た目に合わせる
     private func tripleBallScreenCenter(_ slot: TripleBubbleCluster.Slot) -> NSPoint? {
         guard let p = bubblePanel else { return nil }
         let home = tripleCluster.home(for: slot)
         let drag = tripleCluster.dragOffsets[slot.index]
+        let float = tripleFloatOffset
         // ビュー座標(左上原点) → スクリーン座標(左下原点)
         return NSPoint(
-            x: p.frame.origin.x + home.x + drag.width,
-            y: p.frame.origin.y + p.frame.height - (home.y + drag.height)
+            x: p.frame.origin.x + home.x + drag.width + float.width,
+            y: p.frame.origin.y + p.frame.height - (home.y + drag.height + float.height)
         )
     }
 
@@ -88,6 +116,9 @@ extension PanelController {
     /// その球だけ割れる（他は残る）。全部割れたらウィンドウを畳む
     func popTripleBall(_ slot: TripleBubbleCluster.Slot) {
         guard !tripleCluster.poppedSlots.contains(slot.index) else { return }
+        // 掴んでいる最中の球は割らない（掴んだまま消えて空ドラッグになる。
+        // 放した後の次の使用量判定で改めて割れる）
+        guard tripleCluster.draggingSlot != slot else { return }
         NSSound(named: "Pop")?.play()
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
         if let center = tripleBallScreenCenter(slot) {
@@ -99,6 +130,7 @@ extension PanelController {
             tripleCluster.poppedResetsAt[slot.index] = resets
         }
         tripleCluster.pop(slot)
+        refreshTripleFloatBounds()
         if tripleCluster.allPopped {
             // 3つとも割れたらバブル自体を畳み、復活を予約する
             Task { [weak self] in
@@ -141,6 +173,7 @@ extension PanelController {
         where (state.usage?.window(for: slot.metric)?.utilization ?? 0) < 100 {
             tripleCluster.revive(slot)
         }
+        refreshTripleFloatBounds()
     }
 
     // MARK: - 使用量の反映
@@ -157,6 +190,7 @@ extension PanelController {
                       settings.reviveBubble, hasResetSincePop(slot, window: window) {
                 // リセットで新しい期間に入った → ぽわんっと生まれ直す
                 tripleCluster.revive(slot)
+                refreshTripleFloatBounds()
             }
         }
     }

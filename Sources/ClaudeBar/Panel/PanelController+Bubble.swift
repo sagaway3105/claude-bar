@@ -112,6 +112,12 @@ extension PanelController {
         bubbleHosting?.frame = assembly.bounds
 
         updateFloatBounds(around: point)
+        // 新しいモードのサイズで画面からはみ出す位置なら押し込む
+        // （1⇔3切替・復活の再表示は元の中心を引き継ぐため、端では欠けることがある）
+        var clamped = p.frame.origin
+        clamped.x = min(max(clamped.x, floatBounds.minX), floatBounds.maxX)
+        clamped.y = min(max(clamped.y, floatBounds.minY), floatBounds.maxY)
+        if clamped != p.frame.origin { p.setFrameOrigin(clamped) }
         p.ignoresMouseEvents = false // 初期状態は受ける（以後はカーソル位置で自動切替）
         startMouseTracking()
         installBubbleMouseMonitor()
@@ -120,6 +126,17 @@ extension PanelController {
             napActivity = ProcessInfo.processInfo.beginActivity(
                 options: [.userInitiated], reason: "Bubble float animation"
             )
+        }
+
+        // 100%のまま再表示された場合は破裂させる。ビューは再生成されないため
+        // BubbleView側のonChange（100到達検知）や初回チェックは発火しない
+        if !settings.isTripleBubble, (bubbleUsageWindow?.utilization ?? 0) >= 100 {
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1.2))
+                guard let self, self.state.bubbleActive, !self.isPopping else { return }
+                guard (self.bubbleUsageWindow?.utilization ?? 0) >= 100 else { return }
+                self.popBubble()
+            }
         }
 
         if poppingIn {
@@ -275,11 +292,21 @@ extension PanelController {
         mouseTrackTimer = timer
     }
 
+    /// ホバー（ポヨン・HUD）の発火領域。3つ表示はウィンドウ全体ではなく
+    /// 見えている塊の外接基準にする（クリックは抜けるのにホバーだけ反応する不整合を防ぐ。
+    /// -12ptの余裕は塊全体の浮遊±8.5〜9.5ptぶん）
+    var bubbleHoverZone: NSRect? {
+        if settings.isTripleBubble, let p = bubblePanel {
+            return tripleClusterScreenBounds(in: p)?.insetBy(dx: -12, dy: -12)
+        }
+        return bubbleScreenFrame?.insetBy(dx: -6, dy: -6)
+    }
+
     private func trackMouse() {
         guard state.bubbleActive else { return }
         growBubbleIfNeeded()
         updateBubbleClickability()
-        guard let bubbleOnScreen = bubbleScreenFrame?.insetBy(dx: -6, dy: -6) else { return }
+        guard let bubbleOnScreen = bubbleHoverZone else { return }
         let inside = bubbleOnScreen.contains(NSEvent.mouseLocation)
         if inside, !wasHoveringBubble, !dragActive,
            Date().timeIntervalSince(lastHoverBounceAt) > 0.6 {
@@ -309,7 +336,7 @@ extension PanelController {
         let overBall: Bool
         if settings.isTripleBubble {
             overBall = p.frame.contains(NSEvent.mouseLocation)
-                && tripleCluster.slot(at: viewPoint(of: NSEvent.mouseLocation, in: p), state: state) != nil
+                && tripleSlot(at: NSEvent.mouseLocation, in: p) != nil
         } else {
             overBall = bubbleScreenFrame?.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation) ?? false
         }
@@ -422,11 +449,10 @@ extension PanelController {
         case .leftMouseDown:
             if settings.isTripleBubble {
                 guard p.frame.contains(NSEvent.mouseLocation) else { return false }
-                // どの球を掴んだか。球の外の余白は通常 ignoresMouseEvents で下へ抜けるため
+                // どの球を掴んだか（浮遊ぶんを補正して見た目どおりに判定）。
+                // 球の外の余白は通常 ignoresMouseEvents で下へ抜けるため
                 // ここへ来るのは球の上がほぼ全て（nilは切替タイミングの隙間のフォールバック）
-                tripleCluster.draggingSlot = tripleCluster.slot(
-                    at: viewPoint(of: NSEvent.mouseLocation, in: p), state: state
-                )
+                tripleCluster.draggingSlot = tripleSlot(at: NSEvent.mouseLocation, in: p)
                 lastTappedSlot = tripleCluster.draggingSlot
             } else {
                 guard let frame = bubbleScreenFrame,
@@ -640,14 +666,23 @@ extension PanelController {
         let delay = resets.timeIntervalSinceNow + 90
         revivalTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
-            guard let self, !Task.isCancelled else { return }
-            guard !self.state.bubbleActive else { return }
-            await self.usageService.refresh()
-            let canRevive = self.settings.isTripleBubble
-                ? self.tripleCanRevive
-                : (self.bubbleUsageWindow?.utilization ?? 0) < 100
-            guard canRevive else { return }
-            self.showBubble(at: self.lastBubbleCenter ?? self.defaultBubblePoint(), poppingIn: true)
+            // リセット直後の取得は空振りし得る（進行中のポーリングと重なって捨てられる・
+            // フォールバックが前期間のキャッシュを返す等）ため、少し置いて数回試す
+            for attempt in 0..<3 {
+                guard let self, !Task.isCancelled else { return }
+                guard !self.state.bubbleActive else { return }
+                await self.usageService.refresh()
+                let canRevive = self.settings.isTripleBubble
+                    ? self.tripleCanRevive
+                    : (self.bubbleUsageWindow?.utilization ?? 0) < 100
+                if canRevive {
+                    self.showBubble(at: self.lastBubbleCenter ?? self.defaultBubblePoint(), poppingIn: true)
+                    return
+                }
+                if attempt < 2 { try? await Task.sleep(for: .seconds(60)) }
+            }
+            // それでも100%のまま → 次のリセット時刻が取れていれば予約し直す
+            self?.scheduleRevivalIfNeeded()
         }
     }
 
@@ -666,11 +701,13 @@ extension PanelController {
         w.isReleasedWhenClosed = false
         w.contentView = NSHostingView(rootView: PopBurstView(burstScale: scale))
         w.orderFrontRegardless()
+        // 連続破裂（2球がほぼ同時に100%到達など）: 前のバーストを参照ごと潰さず、
+        // それぞれのウィンドウが自分の演出を全うしてから片付ける
         popWindow = w
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.0))
-            self?.popWindow?.orderOut(nil)
-            self?.popWindow = nil
+            w.orderOut(nil)
+            if let self, self.popWindow === w { self.popWindow = nil }
         }
     }
 

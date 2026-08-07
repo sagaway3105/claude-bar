@@ -14,8 +14,8 @@ extension PanelController {
         hoverHUDShowTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(0.45))
             guard let self, !Task.isCancelled else { return }
-            // 発火時点でまだバブルの上にいる時だけ表示
-            guard let frame = self.bubbleScreenFrame?.insetBy(dx: -6, dy: -6),
+            // 発火時点でまだバブル（3つ表示は塊の外接）の上にいる時だけ表示
+            guard let frame = self.bubbleHoverZone,
                   frame.contains(NSEvent.mouseLocation) else { return }
             self.showHoverHUD()
         }
@@ -89,7 +89,8 @@ extension PanelController {
     /// %のnumericText遷移（0.4秒）が終わってから測る。途中で測ると幅が数px足りない
     func refitHoverHUD() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-            guard let w = self?.hoverHUDWindow,
+            guard let self,
+                  let w = self.hoverHUDWindow,
                   let assembly = w.contentView?.subviews.first,
                   let hosting = assembly.subviews.first else { return }
             let size = hosting.fittingSize
@@ -100,7 +101,15 @@ extension PanelController {
             var frame = w.frame
             let newSize = NSSize(width: size.width + margin * 2, height: size.height + margin * 2)
             frame.origin.y -= (newSize.height - frame.height) / 2 // 縦中央を保つ
+            // バブルの左側に配置されている場合は左へ伸ばす（右へ伸ばすとバブルに食い込む）
+            if let bubbleMidX = self.bubblePanel?.frame.midX, frame.midX < bubbleMidX {
+                frame.origin.x -= newSize.width - frame.width
+            }
             frame.size = newSize
+            if let vf = w.screen?.visibleFrame {
+                frame.origin.x = min(max(frame.origin.x, vf.minX), vf.maxX - frame.width)
+                frame.origin.y = min(max(frame.origin.y, vf.minY), vf.maxY - frame.height)
+            }
             w.setFrame(frame, display: true)
             assembly.frame = NSRect(x: margin, y: margin, width: size.width, height: size.height)
             hosting.frame = assembly.bounds

@@ -79,7 +79,12 @@ enum ClaudeUsageBridge {
                 process.standardOutput = Pipe()
                 process.standardError = Pipe()
                 let watchdog = DispatchWorkItem {
-                    if process.isRunning { process.terminate() }
+                    guard process.isRunning else { return }
+                    process.terminate()
+                    // SIGTERMを無視する実体への保険
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+                    }
                 }
                 DispatchQueue.global().asyncAfter(deadline: .now() + 15, execute: watchdog)
                 do {

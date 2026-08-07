@@ -151,9 +151,10 @@ final class TripleBubbleCluster {
     // MARK: - ヒットテストとドラッグ
 
     /// ウィンドウ内座標（SwiftUI座標系: 左上原点）でどの球を指しているか。
-    /// 手前に描かれる小さい球を優先するため逆順に見る
+    /// 手前に描かれる小さい球を優先するため逆順に見る。割れて消えている球は対象外
+    /// （残すと跡地がクリックを奪い、掴むと空ドラッグになる）
     func slot(at point: CGPoint, state: AppState) -> Slot? {
-        for slot in Slot.allCases.reversed() {
+        for slot in Slot.allCases.reversed() where !poppedSlots.contains(slot.index) {
             let center = home(for: slot)
             let drag = dragOffsets[slot.index]
             let c = CGPoint(x: center.x + drag.width, y: center.y + drag.height)

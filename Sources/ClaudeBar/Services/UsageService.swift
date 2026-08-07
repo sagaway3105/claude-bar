@@ -183,9 +183,11 @@ final class UsageService {
 
     /// asOf: データの実際の取得時刻（キャッシュ由来の場合は過去になる。「◯時◯分 更新」表示を正直に保つ）
     func apply(_ snapshot: UsageSnapshot, fableLabel: String?, asOf: Date = Date()) {
-        // 適用済みより古いデータでは上書きしない。フォールバックが期限切れキャッシュを
-        // 返した時に表示が過去へ巻き戻り、直前の障害メッセージまで消えるのを防ぐ
-        if let last = state.lastUpdated, asOf.timeIntervalSince(last) < 0.1 { return }
+        // 適用済みより明確に古いデータでは上書きしない。フォールバックが期限切れキャッシュを
+        // 返した時に表示が過去へ巻き戻り、直前の障害メッセージまで消えるのを防ぐ。
+        // 同一キャッシュの再適用（asOfがほぼ同時刻）は通す — needsLogin/エラー表示のクリアを
+        // 担っており、弾くとローカル経路運用でログイン導線が誤表示され続ける
+        if let last = state.lastUpdated, asOf.timeIntervalSince(last) < -1.0 { return }
         let old = state.usage
         state.usage = snapshot
         if let fableLabel { state.fableLabel = fableLabel }
@@ -240,7 +242,12 @@ final class UsageService {
                 // ハングする実体（壊れたshim等）でrefresh全体が永久停止しないよう、
                 // 他のサブプロセス（security 3秒 / claude 15秒）と同じウォッチドッグを付ける
                 let watchdog = DispatchWorkItem {
-                    if process.isRunning { process.terminate() }
+                    guard process.isRunning else { return }
+                    process.terminate()
+                    // SIGTERMを無視する実体への保険
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+                    }
                 }
                 DispatchQueue.global().asyncAfter(deadline: .now() + 3, execute: watchdog)
                 process.waitUntilExit()
