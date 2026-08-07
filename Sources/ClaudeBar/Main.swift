@@ -54,6 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         usageService.onUsageApplied = { [weak self] in
             self?.panelController.onUsageUpdated()
         }
+        // 表示個数（1つ⇔3つ）の切替時、表示中のバブルを新モードで組み直す
+        settings.onBubbleCountChanged = { [weak self] in
+            self?.panelController.relayoutBubbleForCountChange()
+        }
 
         activityMonitor = ActivityMonitor { [weak self] in
             DispatchQueue.main.async {

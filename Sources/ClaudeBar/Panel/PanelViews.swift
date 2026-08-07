@@ -75,35 +75,41 @@ struct IridescentRim<S: InsettableShape>: View {
     }
 }
 
-/// ガラス玉の外周表現: 内側へにじむ虹色フリンジ + 虹色リムと、
-/// 左上光源に合わせて右下へ落とす微かな白いグロー。
-/// シングルバブルと3つ表示の球で同じ縁に見せるための共通部品
+/// 内側へにじむ虹色フリンジ + 虹色リム（シャボン玉の縁の虹）。
+/// シングルバブルはガラスの上へ直接、3つ表示は融合コンテナの外側のレイヤーとして重ねる
+struct BubbleIridescentEdge: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(
+                    AngularGradient(colors: [
+                        .cyan.opacity(0.3), .purple.opacity(0.24), .pink.opacity(0.28),
+                        .orange.opacity(0.22), .mint.opacity(0.26), .cyan.opacity(0.3),
+                    ], center: .center),
+                    lineWidth: 4
+                )
+                .blur(radius: 3)
+                .opacity(0.7)
+            IridescentRim(shape: Circle())
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// ガラス玉の外周表現: 虹の縁と、左上光源に合わせて右下へ落とす微かな白いグロー。
+/// glowOpacity: 3つ表示は密着した隣の球とグローが重なって足し算されるため薄くする
 struct BubbleRimGlow: ViewModifier {
+    var glowOpacity: Double = 0.25
+
     func body(content: Content) -> some View {
         content
             .background(
                 Circle()
-                    .fill(Color.white.opacity(0.25))
+                    .fill(Color.white.opacity(glowOpacity))
                     .blur(radius: 7)
                     .offset(x: 4, y: 5)
             )
-            .overlay(
-                ZStack {
-                    // 内側へにじむ虹色フリンジ
-                    Circle()
-                        .strokeBorder(
-                            AngularGradient(colors: [
-                                .cyan.opacity(0.3), .purple.opacity(0.24), .pink.opacity(0.28),
-                                .orange.opacity(0.22), .mint.opacity(0.26), .cyan.opacity(0.3),
-                            ], center: .center),
-                            lineWidth: 4
-                        )
-                        .blur(radius: 3)
-                        .opacity(0.7)
-                    IridescentRim(shape: Circle())
-                }
-                .allowsHitTesting(false)
-            )
+            .overlay(BubbleIridescentEdge())
     }
 }
 
@@ -324,8 +330,12 @@ struct LoginSetupTile: View {
         }
         .modifier(SectionTile())
         .task {
-            // パネルを開くたびに検出し直す（①実行後に開き直せば②だけの表示になる）
-            cliInstalled = LoginHelper.claudeCLIInstalled
+            // NSHostingViewはパネルを閉じても生き続け、開き直しでビューが作り直されないため、
+            // タイル表示中は定期的に検出し直す（①実行後、少し待つか開き直せば②だけの表示になる）
+            while !Task.isCancelled {
+                cliInstalled = LoginHelper.claudeCLIInstalled
+                try? await Task.sleep(for: .seconds(5))
+            }
         }
     }
 }

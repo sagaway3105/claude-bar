@@ -46,11 +46,13 @@ final class TripleBubbleCluster {
 
     /// ホーム位置。上からセッション→Fable→週間の優先度を保ちつつ、
     /// 縦一列に伸びないよう三角形に寄せて「ぎゅっと一塊」にする。
-    /// 3ペアとも縁の距離が約2ptの密な近接配置（重ねない: Appleの指針）で、常に繋がって見える
+    /// 3ペアとも縁を約3pt重ねた密着配置: 漂いで最も離れた瞬間でもくびれが繋がったままになる。
+    /// （5ptまで重ねると窮屈＝ユーザー確認済み。コンテナ内の融合は形状の和として描かれるため
+    ///   軽い重なりは安全。Appleの「重ねるな」指針はコンテナ外の独立ガラス同士の話）
     static let homes: [CGPoint] = [
         CGPoint(x: 80, y: 81),   // セッション（最上・最大・やや左）
-        CGPoint(x: 148, y: 106), // Fable（右へ振る）
-        CGPoint(x: 103, y: 143), // 週間（最下・最小）
+        CGPoint(x: 143, y: 104), // Fable（右へ振る）
+        CGPoint(x: 102, y: 138), // 週間（最下・最小）
     ]
 
     /// 個別ドラッグで動かせる範囲（リーシュ）。これを超えると塊ごと動く
@@ -68,6 +70,9 @@ final class TripleBubbleCluster {
     /// 割れて消えている球
     var poppedSlots: Set<Int> = []
 
+    /// 割れた時点のリセット時刻（球ごと）。「リセットで新しい期間に入ったら復活」の判定に使う
+    var poppedResetsAt: [Int: Date] = [:]
+
     /// 表面張力で吸い付いている相手（ヒステリシス用）
     private var snappedNeighbor: Slot?
 
@@ -82,22 +87,24 @@ final class TripleBubbleCluster {
 
     func home(for slot: Slot) -> CGPoint { Self.homes[slot.index] }
 
-    /// 使用量に応じた直径。3つ表示では膨らみを半分に抑える
-    /// （使用量が高い小さい球が主役のセッションと同じ大きさになり、優先度が読めなくなるため）
+    /// 使用量に応じた直径。膨らむのは主役のセッションだけ（膨張率は1つ表示と同じ）。
+    /// 小さい球まで膨らむと使用量次第で主役との大小関係が崩れ、優先度が読めなくなる
     func diameter(for slot: Slot, state: AppState) -> CGFloat {
+        guard slot == .session else { return slot.baseDiameter }
         let utilization = state.usage?.window(for: slot.metric)?.utilization ?? 0
-        let growth = PanelController.bubbleScaleFactor(for: utilization) - 1
-        return slot.baseDiameter * (1 + growth * 0.5)
+        return slot.baseDiameter * PanelController.bubbleScaleFactor(for: utilization)
     }
 
     // MARK: - 漂い（macOS 26は宣言的アニメーション / 旧OSは時刻からの直接計算）
 
     /// 球ごとに違う振幅・周期。さらにX/Yで周期をずらすことで、
-    /// 3つが同じ動きに揃わず、それぞれ独立にふわふわ漂って見える
-    private static let driftAmplitudeX: [CGFloat] = [2.5, -3.5, 3]
-    private static let driftAmplitudeY: [CGFloat] = [3.5, 2.5, -3]
-    private static let driftDurationX: [Double] = [3.9, 5.1, 4.3]
-    private static let driftDurationY: [Double] = [5.6, 3.5, 6.2] // Xと違う周期にして円運動にしない
+    /// 3つが同じ動きに揃わず、それぞれ独立にふわふわ漂って見える。
+    /// 振幅は塊全体の浮遊（±8.5pt）に埋もれない大きさにして「球ごとに生きてる」相対運動を見せる。
+    /// 縁がほぼ接する配置なので漂いで周期的に軽く重なる＝くびれが太くなったり離れたりする表情になる
+    private static let driftAmplitudeX: [CGFloat] = [3.5, -4.5, 4]
+    private static let driftAmplitudeY: [CGFloat] = [4.5, 3.5, -4]
+    private static let driftDurationX: [Double] = [3.4, 4.5, 3.8]
+    private static let driftDurationY: [Double] = [5.0, 3.1, 5.5] // Xと違う周期にして円運動にしない
     private static let driftDelay: [Double] = [0, 0.9, 1.7]       // 開始位相もずらす
 
     func driftX(for slot: Slot, drifting: Bool) -> CGFloat {
@@ -149,7 +156,7 @@ final class TripleBubbleCluster {
             let center = home(for: slot)
             let drag = dragOffsets[slot.index]
             let c = CGPoint(x: center.x + drag.width, y: center.y + drag.height)
-            let r = diameter(for: slot, state: state) / 2 + 6 // 漂いぶんの余裕
+            let r = diameter(for: slot, state: state) / 2 + 8 // 漂いぶんの余裕
             if hypot(point.x - c.x, point.y - c.y) <= r { return slot }
         }
         return nil
@@ -247,6 +254,7 @@ final class TripleBubbleCluster {
     /// リセット後などに生まれ直す
     func revive(_ slot: Slot) {
         guard poppedSlots.contains(slot.index) else { return }
+        poppedResetsAt.removeValue(forKey: slot.index)
         withAnimation(.bouncy(duration: 0.45)) {
             _ = poppedSlots.remove(slot.index)
         }

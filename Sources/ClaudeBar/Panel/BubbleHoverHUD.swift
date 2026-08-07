@@ -81,6 +81,28 @@ extension PanelController {
         }
     }
 
+    /// 表示中に内容の幅が変わったら（起動直後の初回取得・ラベル変化）、実測し直して欠けを防ぐ。
+    /// %のnumericText遷移（0.4秒）が終わってから測る。途中で測ると幅が数px足りない
+    func refitHoverHUD() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            guard let w = self?.hoverHUDWindow,
+                  let assembly = w.contentView?.subviews.first,
+                  let hosting = assembly.subviews.first else { return }
+            let size = hosting.fittingSize
+            guard size.width > 10, size.height > 10,
+                  abs(size.width - assembly.frame.width) > 0.5
+                    || abs(size.height - assembly.frame.height) > 0.5 else { return }
+            let margin: CGFloat = 12
+            var frame = w.frame
+            let newSize = NSSize(width: size.width + margin * 2, height: size.height + margin * 2)
+            frame.origin.y -= (newSize.height - frame.height) / 2 // 縦中央を保つ
+            frame.size = newSize
+            w.setFrame(frame, display: true)
+            assembly.frame = NSRect(x: margin, y: margin, width: size.width, height: size.height)
+            hosting.frame = assembly.bounds
+        }
+    }
+
     /// バブルの浮遊アニメーションを同位相でHUDへコピーし、バブルと一緒に漂わせる。
     /// animation(forKey:)のコピーにはbeginTimeが解決済みで入っているため、
     /// そのまま追加するだけで位相が揃う（両レイヤーとも標準タイムスペース）

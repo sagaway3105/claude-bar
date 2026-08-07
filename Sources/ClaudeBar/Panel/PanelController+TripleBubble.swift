@@ -34,6 +34,11 @@ extension PanelController {
     /// 1回目ポヨン、2回目強めのポヨン、3連打でその球だけ破裂💥
     func registerTripleBubbleTap() {
         guard let slot = lastTappedSlot else { bubbleTapCount = 0; return }
+        if slot != tapCountSlot {
+            // 連打カウントは球ごと。持ち越すと2球目への初回クリックで破裂してしまう
+            bubbleTapCount = 1
+            tapCountSlot = slot
+        }
         if bubbleTapCount >= 3 {
             bubbleTapCount = 0
             popTripleBall(slot)
@@ -53,17 +58,52 @@ extension PanelController {
             let utilization = state.usage?.window(for: slot.metric)?.utilization ?? 0
             showPopBurst(centeredOn: center, scale: Self.bubbleScaleFactor(for: utilization) * 0.8)
         }
+        // 割れた時点のリセット時刻を控える（新しい期間に入るまで復活させない判定用）
+        if let resets = state.usage?.window(for: slot.metric)?.resetsAt {
+            tripleCluster.poppedResetsAt[slot.index] = resets
+        }
         tripleCluster.pop(slot)
         if tripleCluster.allPopped {
             // 3つとも割れたらバブル自体を畳み、復活を予約する
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(0.6))
                 guard let self, self.tripleCluster.allPopped else { return }
+                if let frame = self.bubblePanel?.frame {
+                    // 復活時に同じ場所へ生まれ直すための位置
+                    self.lastBubbleCenter = NSPoint(x: frame.midX, y: frame.midY)
+                }
                 self.state.bubbleActive = false
                 self.stopMouseTracking()
                 self.removeBubbleMouseMonitor()
                 self.bubblePanel?.orderOut(nil)
+                self.scheduleRevivalIfNeeded()
             }
+        }
+    }
+
+    // MARK: - 全滅からの復活（scheduleRevivalIfNeeded の3つ表示ぶんの判定）
+
+    /// 3メトリクスのうち最初に来るリセット時刻（全滅からの復活予約の基準）
+    var tripleNextResetsAt: Date? {
+        TripleBubbleCluster.Slot.allCases
+            .compactMap { state.usage?.window(for: $0.metric)?.resetsAt }
+            .filter { $0.timeIntervalSinceNow > 0 }
+            .min()
+    }
+
+    /// 1球でも100%未満に戻っていれば復活できる（100%のままの球は割れたままでよい）
+    var tripleCanRevive: Bool {
+        TripleBubbleCluster.Slot.allCases.contains {
+            (state.usage?.window(for: $0.metric)?.utilization ?? 0) < 100
+        }
+    }
+
+    /// 割れたままの球のうち100%未満に戻っているものを生まれ直させる。
+    /// バブル再表示（🫧・復活予約）の入口で呼び、全球割れたままの「見えない空ウィンドウ」を出さない
+    func reviveTripleBallsBelowLimit() {
+        for slot in TripleBubbleCluster.Slot.allCases
+        where (state.usage?.window(for: slot.metric)?.utilization ?? 0) < 100 {
+            tripleCluster.revive(slot)
         }
     }
 
@@ -78,10 +118,20 @@ extension PanelController {
             if utilization >= 100, !tripleCluster.poppedSlots.contains(slot.index) {
                 popTripleBall(slot)
             } else if utilization < 100, tripleCluster.poppedSlots.contains(slot.index),
-                      settings.reviveBubble {
-                // リセットで使用量が戻った → ぽわんっと生まれ直す
+                      settings.reviveBubble, hasResetSincePop(slot, window: window) {
+                // リセットで新しい期間に入った → ぽわんっと生まれ直す
                 tripleCluster.revive(slot)
             }
         }
+    }
+
+    /// 割れた時点から使用量ウィンドウが新しい期間へ進んだか。
+    /// 手動で割った球（100%未満）が次のポーリングで即復活しないよう、期間の進みで判定する。
+    /// 割れた時点のリセット時刻が控えられていない（使用量未取得で割れた）場合は復活を許す
+    private func hasResetSincePop(_ slot: TripleBubbleCluster.Slot, window: UsageWindow?) -> Bool {
+        guard let poppedResets = tripleCluster.poppedResetsAt[slot.index] else { return true }
+        guard let current = window?.resetsAt else { return false }
+        // 60秒の遊び: リセット時刻の秒単位の揺れを新しい期間と誤認しない（単発モードの検知と同じ）
+        return current > poppedResets.addingTimeInterval(60)
     }
 }

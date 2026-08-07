@@ -20,8 +20,6 @@ struct TripleBubbleView: View {
     var cluster: TripleBubbleCluster
     var actions: PanelActions
 
-    @State private var drifting = false
-
     /// ウィンドウサイズ（塊 + 漂い・膨張の余白）
     static let windowSize = CGSize(width: 220, height: 210)
 
@@ -42,7 +40,6 @@ struct TripleBubbleView: View {
             }
         }
         .frame(width: Self.windowSize.width, height: Self.windowSize.height)
-        .onAppear { drifting = true }
         .contextMenu {
             Button("パネルに展開") { actions.expand() }
             Button("バブルを閉じる") { actions.toBubble() }
@@ -62,13 +59,38 @@ struct TripleBubbleView: View {
     /// macOS 26: Appleのレンダラが近接した球を融合する
     private var modernBody: some View {
         ZStack {
+            ZStack {
+                ForEach(TripleBubbleCluster.Slot.allCases, id: \.self) { slot in
+                    if !cluster.poppedSlots.contains(slot.index) {
+                        DriftingBall(slot: slot, cluster: cluster) {
+                            ballContent(slot)
+                        }
+                    }
+                }
+            }
+            .modifier(TripleGlassContainer(spacing: Self.mergeSpacing))
+            // 虹色リムは融合コンテナの外側に重ねる。コンテナ内に描くと融合ガラスの
+            // 曇りに沈んで虹がほぼ見えない（シングルとの質感差の正体）。
+            // 位置・スケールは ballContent と同じ式・同じ値で駆動して完全に追従させる
             ForEach(TripleBubbleCluster.Slot.allCases, id: \.self) { slot in
                 if !cluster.poppedSlots.contains(slot.index) {
-                    ballContent(slot)
+                    DriftingBall(slot: slot, cluster: cluster) {
+                        ballRim(slot)
+                    }
                 }
             }
         }
-        .modifier(TripleGlassContainer(spacing: Self.mergeSpacing))
+    }
+
+    /// 球の縁の虹（コンテナの上のレイヤー）。変形の連鎖は ballContent と揃える
+    private func ballRim(_ slot: TripleBubbleCluster.Slot) -> some View {
+        let diameter = cluster.diameter(for: slot, state: state)
+        return BubbleIridescentEdge()
+            .frame(width: diameter, height: diameter)
+            .scaleEffect(cluster.bounceScales[slot.index])
+            .position(cluster.home(for: slot))
+            .offset(cluster.dragOffsets[slot.index])
+            .animation(.spring(response: 0.45, dampingFraction: 0.7), value: cluster.dragOffsets[slot.index])
     }
 
     /// macOS 14/15: 純正の融合が無いため、くびれを自前で描いて繋がって見せる。
@@ -84,10 +106,10 @@ struct TripleBubbleView: View {
         return ZStack {
             // くびれ（背景を参照しない静的な塗り。可変形状に背景ブラーを掛けると極端に重くなる）
             MetaballShape(balls: balls, maxNeckGap: Self.mergeSpacing)
-                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.55))
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.4))
                 .overlay(
                     MetaballShape(balls: balls, maxNeckGap: Self.mergeSpacing)
-                        .fill(.white.opacity(0.12))
+                        .fill(.white.opacity(0.08))
                 )
                 .allowsHitTesting(false)
             ForEach(Array(visible.enumerated()), id: \.element) { index, slot in
@@ -117,8 +139,14 @@ struct TripleBubbleView: View {
         )
         .frame(width: diameter, height: diameter)
         .modifier(AdaptiveBubbleGlass())
-        // 縁とグローはシングルバブルと共通（虹色フリンジ + 虹色リム + 右下への白いグロー）
-        .modifier(BubbleRimGlow())
+        // 白いグローだけコンテナ内に敷く（薄め: 密着配置では隣の球と重なり、くびれが白く濁る）。
+        // 虹色リムはここではなく modernBody がコンテナの外側に重ねる
+        .background(
+            Circle()
+                .fill(Color.white.opacity(0.12))
+                .blur(radius: 7)
+                .offset(x: 4, y: 5)
+        )
         // 優先度どおりの重なり: セッションが常に手前、週間が最背面。
         // 融合しても重要な球のゲージ・数字が隠れない
         .zIndex(Double(TripleBubbleCluster.Slot.allCases.count - slot.index))
@@ -126,13 +154,28 @@ struct TripleBubbleView: View {
         .opacity(cluster.poppedSlots.contains(slot.index) ? 0 : 1)
         .scaleEffect(cluster.poppedSlots.contains(slot.index) ? 1.25 : 1) // 割れる瞬間に少し膨らむ
         .position(cluster.home(for: slot))
-        // X/Yを別アニメーションにして、3つが同じ動きに揃わないようにする
-        .offset(x: cluster.driftX(for: slot, drifting: drifting))
-        .animation(cluster.driftAnimationX(for: slot), value: drifting)
-        .offset(y: cluster.driftY(for: slot, drifting: drifting))
-        .animation(cluster.driftAnimationY(for: slot), value: drifting)
         .offset(cluster.dragOffsets[slot.index])
         .animation(.spring(response: 0.45, dampingFraction: 0.7), value: cluster.dragOffsets[slot.index])
+    }
+}
+
+/// 球1つぶんの漂い。@Stateを球ごとに持ち、自分のonAppearで漂いを始める。
+/// 親の共有フラグ方式だと、破裂→復活でビューが作り直された球は
+/// フラグ変化に立ち会えずアニメーションが始まらない（＝復活後に静止する）
+private struct DriftingBall<Content: View>: View {
+    let slot: TripleBubbleCluster.Slot
+    let cluster: TripleBubbleCluster
+    @ViewBuilder var content: () -> Content
+    @State private var drifting = false
+
+    var body: some View {
+        content()
+            // X/Yを別アニメーションにして、3つが同じ動きに揃わないようにする
+            .offset(x: cluster.driftX(for: slot, drifting: drifting))
+            .animation(cluster.driftAnimationX(for: slot), value: drifting)
+            .offset(y: cluster.driftY(for: slot, drifting: drifting))
+            .animation(cluster.driftAnimationY(for: slot), value: drifting)
+            .onAppear { drifting = true }
     }
 }
 
@@ -156,15 +199,17 @@ struct BubbleSphere<Content: View>: View {
 
     var body: some View {
         ZStack {
-            // ヘイズ: 中心に薄い乳白を敷いて文字の下地を安定させる
+            // ヘイズ: 中心に薄い乳白を敷いて文字の下地を安定させる。
+            // 縁側はシングルバブル（0.4/0.5）より薄くする — 密着配置では隣の球の縁と
+            // 重なって足し算され、くびれが白く濁るため
             Circle()
                 .fill(EllipticalGradient(
                     gradient: Gradient(stops: [
                         .init(color: hazeCore.opacity(hazeCoreOpacity), location: 0),
                         .init(color: hazeCore.opacity(hazeCoreOpacity - 0.03), location: 0.4),
-                        .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.06), location: 0.65),
-                        .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.4), location: 0.88),
-                        .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.5), location: 1),
+                        .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.05), location: 0.65),
+                        .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.22), location: 0.88),
+                        .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.28), location: 1),
                     ]),
                     center: .center, startRadiusFraction: 0, endRadiusFraction: 0.5
                 ))

@@ -22,7 +22,9 @@ final class NotificationService {
         for threshold in [80.0, 95.0] {
             let key = "\(name)-\(Int(threshold))-\(new.resetsAt?.timeIntervalSince1970 ?? 0)"
             guard new.utilization >= threshold, !notifiedKeys.contains(key) else { continue }
-            notifiedKeys.insert(key)
+            // resetsAt不明のままキーを恒久登録すると、リセット後に再度跨いでも二度と
+            // 通知されない。期間を特定できる時だけ記録し、不明時は閾値跨ぎ判定だけで抑制する
+            if new.resetsAt != nil { notifiedKeys.insert(key) }
             // 起動直後（前回値なし）や既に超過していた場合は騒がない
             guard let old, old.utilization < threshold else { continue }
 

@@ -89,6 +89,11 @@ final class StatusClickCatcherView: NSView {
     var onRightMouseDown: (() -> Void)?
 
     override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.command) {
+            // ⌘ドラッグ（メニューバー内の並べ替え・取り外し）はシステムのボタンに任せる
+            superview?.mouseDown(with: event)
+            return
+        }
         onLeftMouseDown?()
     }
 

@@ -34,9 +34,15 @@ final class SettingsStore {
         didSet { persist(bubbleMetric.rawValue, "bubbleMetric") }
     }
 
+    /// バブル表示個数の変更時に呼ばれる（表示中のバブルを新モードで組み直すため）
+    var onBubbleCountChanged: (() -> Void)?
+
     /// バブルの表示個数。3ならセッション+Fable+週間を同時に浮かべる（bubbleMetricは無効）
     var bubbleCount: Int {
-        didSet { persist(bubbleCount, "bubbleCount") }
+        didSet {
+            persist(bubbleCount, "bubbleCount")
+            if isLoaded, oldValue != bubbleCount { onBubbleCountChanged?() }
+        }
     }
 
     /// 3つ表示モードか
@@ -85,8 +91,13 @@ final class SettingsStore {
         Self.defaults.set(value, forKey: key)
     }
 
+    /// didSetから呼んだメソッド内の再代入は（observer本体と違い）didSetを再発火させるため、
+    /// catch節の巻き戻しからの再帰をこのフラグで止める。register/unregisterが
+    /// 連続してthrowする環境（App Translocation下等）で無限再帰になるのを防ぐ
+    private var isSyncingLoginItem = false
+
     private func updateLoginItem() {
-        guard isLoaded, canManageLoginItem else { return }
+        guard isLoaded, canManageLoginItem, !isSyncingLoginItem else { return }
         do {
             if launchAtLogin {
                 try SMAppService.mainApp.register()
@@ -95,7 +106,9 @@ final class SettingsStore {
             }
         } catch {
             // 失敗したら実際の状態に戻す
+            isSyncingLoginItem = true
             launchAtLogin = SMAppService.mainApp.status == .enabled
+            isSyncingLoginItem = false
         }
     }
 }

@@ -37,6 +37,7 @@ final class UsageService {
     private var pollTask: Task<Void, Never>?
     private var cooldownUntil: Date?
     private var isRefreshing = false
+    private var pendingForce = false // refresh進行中に来た手動更新の保留フラグ
 
     private let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private let rateLimitCooldown: TimeInterval = 300
@@ -87,9 +88,20 @@ final class UsageService {
 
     /// force: 手動更新（↻・右クリック）。フォールバック経路の鮮度判定を厳しくする
     func refresh(force: Bool = false) async {
-        guard !isFake, !isRefreshing else { return }
+        guard !isFake else { return }
+        if isRefreshing {
+            // 進行中に来た手動更新は黙って捨てず、完了後に改めて実行する
+            if force { pendingForce = true }
+            return
+        }
         isRefreshing = true
-        defer { isRefreshing = false }
+        defer {
+            isRefreshing = false
+            if pendingForce {
+                pendingForce = false
+                Task { await self.refresh(force: true) }
+            }
+        }
 
         // 主経路: API直叩き（トークンはsecurity CLI経由＝ダイアログなし）。
         // サーバーの現在値がそのまま来るので、設定した更新間隔どおりの鮮度になる
@@ -171,6 +183,9 @@ final class UsageService {
 
     /// asOf: データの実際の取得時刻（キャッシュ由来の場合は過去になる。「◯時◯分 更新」表示を正直に保つ）
     func apply(_ snapshot: UsageSnapshot, fableLabel: String?, asOf: Date = Date()) {
+        // 適用済みより古いデータでは上書きしない。フォールバックが期限切れキャッシュを
+        // 返した時に表示が過去へ巻き戻り、直前の障害メッセージまで消えるのを防ぐ
+        if let last = state.lastUpdated, asOf.timeIntervalSince(last) < 0.1 { return }
         let old = state.usage
         state.usage = snapshot
         if let fableLabel { state.fableLabel = fableLabel }
@@ -222,7 +237,14 @@ final class UsageService {
             process.standardError = Pipe()
             do {
                 try process.run()
+                // ハングする実体（壊れたshim等）でrefresh全体が永久停止しないよう、
+                // 他のサブプロセス（security 3秒 / claude 15秒）と同じウォッチドッグを付ける
+                let watchdog = DispatchWorkItem {
+                    if process.isRunning { process.terminate() }
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 3, execute: watchdog)
                 process.waitUntilExit()
+                watchdog.cancel()
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 guard let output = String(data: data, encoding: .utf8) else { return nil }
                 // 例: "2.1.34 (Claude Code)" → "2.1.34"

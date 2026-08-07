@@ -5,17 +5,9 @@ struct StatusLabelView: View {
     var state: AppState
     var onWidthChange: (CGFloat) -> Void = { _ in }
 
-    private var tint: Color? {
-        guard let u = state.sessionUtilization else { return nil }
-        if u >= 95 { return .red }
-        if u >= 80 { return .orange }
-        return nil
-    }
-
-    /// 内容の色は通常のまま（純正の展開ピルは淡いオーバーレイで、文字色は反転しない）
-    private var contentColor: Color {
-        tint ?? .primary
-    }
+    /// 内容の色は常に通常色。使用量が高くても変えない（警告色はバブル・パネル側が担う）。
+    /// 純正の展開ピルは淡いオーバーレイなので、ハイライト中も文字色は反転しない
+    private var contentColor: Color { .primary }
 
     /// 純正メニューバーと同じフォント（サイズ・ウェイト・アクセシビリティ追従）
     private static let menuBarFont: Font =

@@ -65,6 +65,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     var bubbleTapResetTask: Task<Void, Never>?
     /// 3つ表示で最後に掴んだ球（ポヨン/破裂の対象）
     var lastTappedSlot: TripleBubbleCluster.Slot?
+    /// 3連打カウントが数えている球。別の球を叩いたら数え直す
+    var tapCountSlot: TripleBubbleCluster.Slot?
 
     // ホバーHUD（バブルにマウスを載せると全メトリクスを一覧表示する小窓）
     var hoverHUDWindow: NSWindow?
@@ -355,6 +357,12 @@ final class PanelController: NSObject, NSWindowDelegate {
         guard let p = panel, p.isVisible, !isProgrammaticMove,
               (notification.object as? NSWindow) === p else { return }
         if state.mode == .attached {
+            // 引き剥がしはユーザーのドラッグ（左ボタン押下中）のみ。ディスプレイ構成変更などで
+            // システムがウィンドウを動かした時は、基準位置だけ追従してフローティング化しない
+            guard NSEvent.pressedMouseButtons & 1 != 0 else {
+                attachedOrigin = p.frame.origin
+                return
+            }
             // 引き剥がしたらフローティングパネルになる（バブルは🫧ボタンからのみ）
             let o = p.frame.origin
             if hypot(o.x - attachedOrigin.x, o.y - attachedOrigin.y) > detachThreshold {
@@ -370,6 +378,11 @@ final class PanelController: NSObject, NSWindowDelegate {
         bounceAssembly() // ぷるんっ
         removeDismissMonitors()
         state.menuHighlighted = false
+        // attached表示時のメニュートラッキング開始通知を対で解除する
+        // （フルスクリーンアプリ上でメニューバーが出っぱなしにならないように）
+        DistributedNotificationCenter.default().post(
+            name: .init("com.apple.HIToolbox.endMenuTrackingNotification"), object: nil
+        )
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
         p.level = .floating
         p.isMovableByWindowBackground = true
@@ -384,7 +397,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         state.menuHighlighted = true
         if let bf = statusButtonFrame?() {
             var x = bf.midX - panelWidth / 2
-            if let screen = p.screen ?? NSScreen.main {
+            // クランプはステータスアイコンのある画面基準
+            // （パネルを別ディスプレイへ動かしてから戻しても正しくアイコン直下へ着地する）
+            let buttonScreen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: bf.midX, y: bf.midY)) }
+            if let screen = buttonScreen ?? p.screen ?? NSScreen.main {
                 x = min(max(x, screen.frame.minX + 8), screen.frame.maxX - panelWidth - 8)
             }
             let target = NSRect(x: x, y: bf.minY - panelWindowHeight - 6, width: panelWidth, height: panelWindowHeight)

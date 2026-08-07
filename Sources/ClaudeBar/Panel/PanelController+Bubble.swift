@@ -95,6 +95,7 @@ extension PanelController {
         if settings.isTripleBubble {
             // 3つ表示: 塊はウィンドウ全体（アセンブリの漂いが塊ごとの揺れ、
             // 球ごとの揺れはSwiftUI側の宣言的アニメーションが担当する）
+            reviveTripleBallsBelowLimit()
             assembly.frame = NSRect(origin: .zero, size: size)
         } else {
             let diameter = currentBubbleDiameter
@@ -171,6 +172,16 @@ extension PanelController {
 
     func showBubbleNearStatusItem() {
         showBubble(at: defaultBubblePoint(), poppingIn: true)
+    }
+
+    /// 設定で表示個数（1つ⇔3つ）が変わった時: 表示中ならその場で組み直す。
+    /// SwiftUI側は設定を監視して即切り替わるため、放置するとウィンドウサイズ・
+    /// アセンブリ・当たり判定だけが旧モードのまま残って表示が壊れる
+    func relayoutBubbleForCountChange() {
+        guard state.bubbleActive, let p = bubblePanel else { return }
+        let center = NSPoint(x: p.frame.midX, y: p.frame.midY)
+        tripleCluster.releaseBall()
+        showBubble(at: center)
     }
 
     private func defaultBubblePoint() -> NSPoint {
@@ -540,8 +551,15 @@ extension PanelController {
     /// （検知はデータ駆動で確実に、発火の即時性は scheduleResetRefresh のタイマーで担保する）
     func onUsageUpdated() {
         updateTripleBallsOnUsage()
+        refitHoverHUD() // 表示中HUDの幅を新しい内容に合わせる
         guard state.bubbleActive, !isPopping else {
             bubbleTrackedResetsAt = bubbleUsageWindow?.resetsAt
+            return
+        }
+        if settings.isTripleBubble {
+            // 3つ表示のリセット破裂・復活は球ごと（updateTripleBallsOnUsage）。
+            // 単発用メトリクスの境界検知で塊全体を破裂させない
+            scheduleResetRefresh()
             return
         }
         let newResets = bubbleUsageWindow?.resetsAt
@@ -556,12 +574,14 @@ extension PanelController {
         }
     }
 
-    /// 表示中メトリクスのリセット時刻+90秒に使用量の再取得を予約する。
-    /// 取得結果で onUsageUpdated が境界越えを検知し、ポーリングを待たず数分以内に破裂→再生成が始まる
+    /// リセット時刻+90秒に使用量の再取得を予約する（1つ表示は表示中メトリクス、
+    /// 3つ表示は最初に来るリセット）。取得結果で onUsageUpdated が境界越えや球の復活を
+    /// 検知し、ポーリングを待たず数分以内に破裂→再生成が始まる
     private func scheduleResetRefresh() {
         resetRefreshTask?.cancel()
+        let next = settings.isTripleBubble ? tripleNextResetsAt : bubbleUsageWindow?.resetsAt
         guard state.bubbleActive,
-              let resets = bubbleUsageWindow?.resetsAt,
+              let resets = next,
               resets.timeIntervalSinceNow > 0 else { return }
         let delay = resets.timeIntervalSinceNow + 90
         resetRefreshTask = Task { [weak self] in
@@ -571,11 +591,13 @@ extension PanelController {
         }
     }
 
-    /// 設定が有効なら、表示中メトリクスのリセット後にバブルを復活させる
-    private func scheduleRevivalIfNeeded() {
+    /// 設定が有効なら、リセット後にバブルを復活させる。
+    /// 1つ表示は表示中メトリクス、3つ表示（全滅時）は3メトリクスのうち最初に来るリセットが基準
+    func scheduleRevivalIfNeeded() {
         revivalTask?.cancel()
+        let nextResets = settings.isTripleBubble ? tripleNextResetsAt : bubbleUsageWindow?.resetsAt
         guard settings.reviveBubble,
-              let resets = bubbleUsageWindow?.resetsAt,
+              let resets = nextResets,
               resets.timeIntervalSinceNow > 0 else { return }
         let delay = resets.timeIntervalSinceNow + 90
         revivalTask = Task { [weak self] in
@@ -583,7 +605,10 @@ extension PanelController {
             guard let self, !Task.isCancelled else { return }
             guard !self.state.bubbleActive else { return }
             await self.usageService.refresh()
-            guard (self.bubbleUsageWindow?.utilization ?? 0) < 100 else { return }
+            let canRevive = self.settings.isTripleBubble
+                ? self.tripleCanRevive
+                : (self.bubbleUsageWindow?.utilization ?? 0) < 100
+            guard canRevive else { return }
             self.showBubble(at: self.lastBubbleCenter ?? self.defaultBubblePoint(), poppingIn: true)
         }
     }

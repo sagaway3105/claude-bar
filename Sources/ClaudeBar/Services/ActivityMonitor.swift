@@ -5,6 +5,7 @@ import Foundation
 /// Claude Codeがトークンを消費中かどうかを検知する。
 final class ActivityMonitor {
     private var stream: FSEventStreamRef?
+    private var retryTimer: Timer?
     private let onActivity: () -> Void
     private let watchedPath = NSString(string: "~/.claude/projects").expandingTildeInPath
 
@@ -13,7 +14,18 @@ final class ActivityMonitor {
     }
 
     func start() {
-        guard FileManager.default.fileExists(atPath: watchedPath) else { return }
+        guard FileManager.default.fileExists(atPath: watchedPath) else {
+            // Claude Code未使用でディレクトリがまだ無い → 現れた時点で監視を始める
+            // （再試行しないと、アプリ再起動まで活動検知が無効のままになる）
+            retryTimer?.invalidate()
+            retryTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+                guard let self, FileManager.default.fileExists(atPath: self.watchedPath) else { return }
+                self.retryTimer?.invalidate()
+                self.retryTimer = nil
+                self.start()
+            }
+            return
+        }
 
         var context = FSEventStreamContext(
             version: 0,
@@ -48,6 +60,7 @@ final class ActivityMonitor {
     }
 
     deinit {
+        retryTimer?.invalidate()
         if let stream {
             FSEventStreamStop(stream)
             FSEventStreamInvalidate(stream)
