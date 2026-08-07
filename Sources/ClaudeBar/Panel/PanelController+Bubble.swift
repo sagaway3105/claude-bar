@@ -26,6 +26,12 @@ extension PanelController {
         let container = PassthroughContainerView(frame: NSRect(origin: .zero, size: size))
         container.wantsLayer = true
         container.pinsChildrenToBounds = false // アセンブリは中で自由に漂う
+        #if DEBUG
+        // 透明ウィンドウの実際の範囲を可視化する（レイアウト検証用）
+        if ProcessInfo.processInfo.environment["CLAUDEBAR_TINT_WINDOW"] == "1" {
+            container.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.18).cgColor
+        }
+        #endif
 
         let assembly = NSView(frame: container.bounds)
         assembly.wantsLayer = true
@@ -106,6 +112,7 @@ extension PanelController {
         bubbleHosting?.frame = assembly.bounds
 
         updateFloatBounds(around: point)
+        p.ignoresMouseEvents = false // 初期状態は受ける（以後はカーソル位置で自動切替）
         startMouseTracking()
         installBubbleMouseMonitor()
         // アクセサリアプリはApp Napでタイマーが間引かれるため、バブル表示中は抑止する
@@ -233,17 +240,27 @@ extension PanelController {
     /// ドラッグ時のウィンドウ原点の可動域を更新する。
     /// ウィンドウの外形ではなく「見えているバブルの縁」が画面の縁に届く基準:
     /// 左右・下は画面端（下はDockの上端）に接するまで、上はメニューバーを覆えるまで。
+    /// 3つ表示も同じ基準（見えている塊の外接とウィンドウ縁の距離を辺ごとに余裕にする）
     func updateFloatBounds(around point: NSPoint) {
         let size = bubbleWindowFrameSize
-        // 3つ表示では塊がウィンドウをほぼ埋めるのでマージンは取らない
-        let margin = settings.isTripleBubble ? 0 : (size.width - currentBubbleDiameter) / 2
+        let left: CGFloat, right: CGFloat, top: CGFloat, bottom: CGFloat
+        if settings.isTripleBubble, let bounds = tripleClusterBounds() {
+            // ビュー座標は左上原点: bounds.minY はウィンドウ上端から塊上端までの距離
+            left = bounds.minX
+            right = size.width - bounds.maxX
+            top = bounds.minY
+            bottom = size.height - bounds.maxY
+        } else {
+            let margin = (size.width - currentBubbleDiameter) / 2
+            left = margin; right = margin; top = margin; bottom = margin
+        }
         let screen = NSScreen.screens.first { $0.frame.contains(point) } ?? bubblePanel?.screen ?? NSScreen.main
         guard let vf = screen?.visibleFrame, let sf = screen?.frame else { return }
         floatBounds = NSRect(
-            x: sf.minX - margin,
-            y: vf.minY - margin,
-            width: max(0, sf.width - size.width + margin * 2),
-            height: max(0, (sf.maxY - size.height + margin) - (vf.minY - margin))
+            x: sf.minX - left,
+            y: vf.minY - bottom,
+            width: max(0, sf.width - size.width + left + right),
+            height: max(0, (sf.maxY - size.height + top) - (vf.minY - bottom))
         )
     }
 
@@ -261,6 +278,7 @@ extension PanelController {
     private func trackMouse() {
         guard state.bubbleActive else { return }
         growBubbleIfNeeded()
+        updateBubbleClickability()
         guard let bubbleOnScreen = bubbleScreenFrame?.insetBy(dx: -6, dy: -6) else { return }
         let inside = bubbleOnScreen.contains(NSEvent.mouseLocation)
         if inside, !wasHoveringBubble, !dragActive,
@@ -277,6 +295,25 @@ extension PanelController {
             }
         }
         wasHoveringBubble = inside
+    }
+
+    /// カーソルが球の上にある時だけクリックを受け、それ以外（ウィンドウの透明な余白）は
+    /// クリックを下のウィンドウへ確実に通す。アルファ値の自動ヒット判定に任せると
+    /// グローの薄い被膜まで奪って境界が曖昧になるため、明示的に切り替える
+    private func updateBubbleClickability() {
+        guard let p = bubblePanel else { return }
+        if dragActive {
+            p.ignoresMouseEvents = false // 掴んでいる間は受けたまま
+            return
+        }
+        let overBall: Bool
+        if settings.isTripleBubble {
+            overBall = p.frame.contains(NSEvent.mouseLocation)
+                && tripleCluster.slot(at: viewPoint(of: NSEvent.mouseLocation, in: p), state: state) != nil
+        } else {
+            overBall = bubbleScreenFrame?.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation) ?? false
+        }
+        p.ignoresMouseEvents = !overBall
     }
 
     /// 使用量が10%刻みを跨いだらバブルをぷにっと成長させる
@@ -385,7 +422,8 @@ extension PanelController {
         case .leftMouseDown:
             if settings.isTripleBubble {
                 guard p.frame.contains(NSEvent.mouseLocation) else { return false }
-                // どの球を掴んだか（塊の余白なら塊ごと動かす）
+                // どの球を掴んだか。球の外の余白は通常 ignoresMouseEvents で下へ抜けるため
+                // ここへ来るのは球の上がほぼ全て（nilは切替タイミングの隙間のフォールバック）
                 tripleCluster.draggingSlot = tripleCluster.slot(
                     at: viewPoint(of: NSEvent.mouseLocation, in: p), state: state
                 )

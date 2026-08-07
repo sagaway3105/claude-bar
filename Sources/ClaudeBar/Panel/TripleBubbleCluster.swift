@@ -26,10 +26,11 @@ final class TripleBubbleCluster {
             }
         }
 
-        /// 基準の直径（重要度順に少しずつ小さく）
+        /// 基準の直径（重要度順に少しずつ小さく）。
+        /// 主役のセッションは1つ表示のバブル（72pt）と同じ大きさ・同じ膨張率
         var baseDiameter: CGFloat {
             switch self {
-            case .session: return 78
+            case .session: return 72
             case .fable: return 62
             case .weekly: return 50
             }
@@ -51,8 +52,8 @@ final class TripleBubbleCluster {
     ///   軽い重なりは安全。Appleの「重ねるな」指針はコンテナ外の独立ガラス同士の話）
     static let homes: [CGPoint] = [
         CGPoint(x: 80, y: 81),   // セッション（最上・最大・やや左）
-        CGPoint(x: 143, y: 104), // Fable（右へ振る）
-        CGPoint(x: 102, y: 138), // 週間（最下・最小）
+        CGPoint(x: 140, y: 103), // Fable（右へ振る）
+        CGPoint(x: 99, y: 136),  // 週間（最下・最小）
     ]
 
     /// 個別ドラッグで動かせる範囲（リーシュ）。これを超えると塊ごと動く

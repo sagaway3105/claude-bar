@@ -28,6 +28,42 @@ extension PanelController {
         )
     }
 
+    /// 見えている球の外接矩形（ビュー座標・左上原点）。ドラッグ中の個別ズレも含む。
+    /// ホバーHUDの位置決めと、可動域（見えている縁が画面の縁へ届く基準）に使う
+    func tripleClusterBounds() -> CGRect? {
+        let visible = TripleBubbleCluster.Slot.allCases.filter { !tripleCluster.poppedSlots.contains($0.index) }
+        guard !visible.isEmpty else { return nil }
+        var minX = CGFloat.greatestFiniteMagnitude
+        var minY = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude
+        var maxY = -CGFloat.greatestFiniteMagnitude
+        for slot in visible {
+            let home = tripleCluster.home(for: slot)
+            let drag = tripleCluster.dragOffsets[slot.index]
+            let radius = tripleCluster.diameter(for: slot, state: state) / 2
+            minX = min(minX, home.x + drag.width - radius)
+            maxX = max(maxX, home.x + drag.width + radius)
+            minY = min(minY, home.y + drag.height - radius)
+            maxY = max(maxY, home.y + drag.height + radius)
+        }
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
+    /// 見えている球の外接矩形（スクリーン座標）。ホバーHUDの位置決めに使う。
+    /// アセンブリはウィンドウ全体を占め塊の周囲に大きな余白があるため、
+    /// アセンブリ枠を基準にするとHUDが塊から離れて見えてしまう
+    func tripleClusterScreenBounds(in window: NSWindow) -> NSRect? {
+        guard let b = tripleClusterBounds() else { return nil }
+        // ビュー座標(左上原点) → スクリーン座標(左下原点)
+        let frame = window.frame
+        return NSRect(
+            x: frame.origin.x + b.minX,
+            y: frame.origin.y + frame.height - b.maxY,
+            width: b.width,
+            height: b.height
+        )
+    }
+
     // MARK: - 球ごとのポヨンと破裂
 
     /// 3つ表示のクリック遊び: 掴んでいた球だけが反応する（他の球は残らず動かない）。

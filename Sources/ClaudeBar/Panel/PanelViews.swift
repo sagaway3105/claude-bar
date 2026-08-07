@@ -611,7 +611,7 @@ struct BubbleView: View {
         }
         // フレームだけ拡大し、リングの太さ・ぼかし・中身（ロゴ/%）は固定サイズを保つ。
         // 3つ表示の BubbleSphere は装飾ごとスケールする別方針なので共通化していない
-        .frame(width: 76 * sizeFactor, height: 76 * sizeFactor)
+        .frame(width: 72 * sizeFactor, height: 72 * sizeFactor)
         .animation(.bouncy(duration: 0.4), value: sizeFactor)
         // 素のLiquid Glass（.clear = 透明度の高いガラス玉。旧OSはすりガラスにフォールバック）
         .modifier(AdaptiveBubbleGlass())

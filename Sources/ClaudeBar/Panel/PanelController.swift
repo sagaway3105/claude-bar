@@ -75,8 +75,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     // レイアウト定数
     let panelWidth: CGFloat = 300
     let panelWindowHeight: CGFloat = 460 // 固定（内容はSwiftUIが上詰めで描き、余りは完全透明）
-    let bubbleDiameter: CGFloat = 76
-    let singleBubbleWindowSize: CGFloat = 150 // 最大バブル(76*1.2)+浮遊・ポヨンのマージン
+    let bubbleDiameter: CGFloat = 72
+    let singleBubbleWindowSize: CGFloat = 150 // 最大バブル(72*1.2)+浮遊・ポヨンのマージン
 
     /// バブルウィンドウの大きさ（3つ表示モードでは塊が収まる大きさになる）
     var bubbleWindowFrameSize: NSSize {

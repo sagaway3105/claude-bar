@@ -25,8 +25,12 @@ extension PanelController {
         guard state.bubbleActive, !isPopping, !dragActive, hoverHUDWindow == nil,
               let p = bubblePanel, let bubbleAssembly else { return }
         // 位置の基準は漂いの中心（モデル座標）。presentation（見た目の位置）を使うと
-        // 表示した瞬間の漂いオフセットが焼き込まれ、タイミングによって上下にズレる
+        // 表示した瞬間の漂いオフセットが焼き込まれ、タイミングによって上下にズレる。
+        // 3つ表示はアセンブリ枠（ウィンドウ全体）ではなく見えている球の外接矩形を基準にする
         let bubbleFrame = p.convertToScreen(bubbleAssembly.frame)
+        let anchor = settings.isTripleBubble
+            ? (tripleClusterScreenBounds(in: p) ?? bubbleFrame)
+            : bubbleFrame
         let hosting = NSHostingView(
             rootView: BubbleHoverHUDView(state: state, settings: settings)
         )
@@ -35,10 +39,10 @@ extension PanelController {
 
         // バブルの右横・縦中央。右に入らなければ左横へ。最後に画面内へクランプ
         let gap: CGFloat = 12
-        var origin = NSPoint(x: bubbleFrame.maxX + gap, y: bubbleFrame.midY - size.height / 2)
+        var origin = NSPoint(x: anchor.maxX + gap, y: anchor.midY - size.height / 2)
         if let vf = (bubblePanel?.screen ?? NSScreen.main)?.visibleFrame {
             if origin.x + size.width > vf.maxX - 8 {
-                origin.x = bubbleFrame.minX - gap - size.width
+                origin.x = anchor.minX - gap - size.width
             }
             origin.x = max(origin.x, vf.minX + 8)
             origin.y = min(max(origin.y, vf.minY + 8), vf.maxY - size.height - 8)

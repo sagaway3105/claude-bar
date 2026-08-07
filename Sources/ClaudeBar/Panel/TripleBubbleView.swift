@@ -189,8 +189,9 @@ struct BubbleSphere<Content: View>: View {
     @ViewBuilder var content: () -> Content
     @Environment(\.colorScheme) private var colorScheme
 
-    /// 76ptを1としたスケール
-    private var s: CGFloat { diameter / 76 }
+    /// 基準径（シングルバブルと同じ72pt）を1としたスケール。
+    /// セッション球でシングルと装飾の絶対値が一致する
+    private var s: CGFloat { diameter / 72 }
 
     private var hazeCore: Color {
         colorScheme == .dark ? .black : Color(nsColor: .windowBackgroundColor)
