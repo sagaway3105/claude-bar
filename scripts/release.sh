@@ -6,6 +6,19 @@ cd "$(dirname "$0")/.."
 
 VERSION="${1:?使い方: ./scripts/release.sh <バージョン>  例: ./scripts/release.sh 1.0.0}"
 
+# 配布はmainブランチからのみ（SparkleのフィードURLはmainのraw URL固定。
+# 別ブランチでappcastをpushしても既存ユーザーに配信されず、成功したように見えてしまう）
+CURRENT_BRANCH="$(git branch --show-current)"
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+  echo "❌ mainブランチで実行してください（現在: ${CURRENT_BRANCH}）" >&2
+  exit 1
+fi
+# ステージ済みの変更があると後段のappcastコミットに混入する
+if ! git diff --cached --quiet; then
+  echo "❌ ステージ済みの変更があります。コミットまたはunstageしてから実行してください" >&2
+  exit 1
+fi
+
 VERSION="$VERSION" ./scripts/make-app.sh
 
 # 署名の完全性チェック（壊れた署名のまま配布しない）
@@ -32,7 +45,11 @@ if [[ "$SIGN_INFO" == *"Developer ID"* ]] &&
   ditto -c -k --keepParent build/ClaudeBar.app "$ZIP"
   echo "✅ 公証完了（Gatekeeperの警告なしで起動できます）"
 else
-  echo "ℹ️ 公証はスキップ（Developer ID証明書またはnotary認証情報が未設定）"
+  # make-app.sh は証明書が無いと ad-hoc 署名へ黙ってフォールバックする。
+  # 未公証・ad-hoc のまま配布するとGatekeeperにブロックされるため、ここで必ず止める
+  echo "❌ 公証できません（Developer ID証明書またはnotary認証情報 claudebar-notary が未設定）" >&2
+  echo "   未公証ビルドの配布は事故のもとなので中断します" >&2
+  exit 1
 fi
 
 # docs/release-notes/v<バージョン>.md があればそれをノートに使う（無ければ自動生成）

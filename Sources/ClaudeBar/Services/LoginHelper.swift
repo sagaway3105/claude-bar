@@ -22,10 +22,18 @@ enum LoginHelper {
 
     /// ターミナルで claude /login を起動する（失敗時はコマンドをコピーしてターミナルを開く）
     static func openLoginTerminal() {
+        // 検出済みの実体の絶対パスで起動する。インストール判定は固定パス走査なので、
+        // 裸の `claude` だとシェルのPATH/エイリアス次第で command not found になる環境がある
+        let command: String
+        if let path = ClaudeUsageBridge.claudeBinaryPath() {
+            command = "'\(path)' /login"
+        } else {
+            command = "claude /login"
+        }
         let source = """
         tell application "Terminal"
             activate
-            do script "claude /login"
+            do script "\(command)"
         end tell
         """
         if let script = NSAppleScript(source: source) {
@@ -34,7 +42,7 @@ enum LoginHelper {
             if error == nil { return }
         }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString("claude /login", forType: .string)
+        NSPasteboard.general.setString(command, forType: .string)
         let terminalURL = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
         NSWorkspace.shared.openApplication(at: terminalURL, configuration: .init(), completionHandler: nil)
     }

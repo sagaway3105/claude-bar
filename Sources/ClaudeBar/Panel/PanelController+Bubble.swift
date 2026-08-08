@@ -51,6 +51,27 @@ extension PanelController {
         bubblePanel = p
         bubbleAssembly = assembly
         bubbleHosting = hosting
+        // 画面ロック・ディスプレイスリープ等（orderOutを経ない非表示）でも
+        // 宣言的アニメーションは破棄されるため、可視化のたびに漂いを始め直す
+        bubbleOcclusionObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: p, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.state.bubbleActive,
+                      self.bubblePanel?.occlusionState.contains(.visible) == true else { return }
+                if self.settings.isTripleBubble {
+                    self.tripleCluster.showGeneration += 1
+                }
+                // 塊の浮遊も同条件で破棄される。モデル側に残る死んだアニメーションが
+                // startFloating の in-needed ガードを塞ぐため、外してから張り直す
+                if let layer = self.bubbleAssembly?.layer {
+                    for key in ["float-x1", "float-x2", "float-y1", "float-y2"] {
+                        layer.removeAnimation(forKey: key)
+                    }
+                }
+                self.startFloating()
+            }
+        }
         return p
     }
 
@@ -86,6 +107,7 @@ extension PanelController {
         resetPopRetry?.cancel()
         isPopping = false
         state.bubbleActive = true
+        tripleCluster.contentParked = false // 畳んでいた中身を戻す
         bubbleTrackedResetsAt = bubbleUsageWindow?.resetsAt // リセット境界検知のベースライン
         scheduleResetRefresh()
 
@@ -102,6 +124,7 @@ extension PanelController {
             // 3つ表示: 塊はウィンドウ全体（アセンブリの漂いが塊ごとの揺れ、
             // 球ごとの揺れはSwiftUI側の宣言的アニメーションが担当する）
             reviveTripleBallsBelowLimit()
+            tripleCluster.showGeneration += 1 // 球ごとの漂いを確実に始め直す
             assembly.frame = NSRect(origin: .zero, size: size)
         } else {
             let diameter = currentBubbleDiameter
@@ -190,6 +213,7 @@ extension PanelController {
                 guard let self, self.bubbleHideGeneration == generation else { return }
                 self.bubblePanel?.orderOut(nil)
                 self.bubbleAssembly?.alphaValue = 1
+                self.tripleCluster.contentParked = true
             }
         })
     }
@@ -551,6 +575,7 @@ extension PanelController {
             self.removeBubbleMouseMonitor()
             self.bubblePanel?.orderOut(nil)
             self.bubbleAssembly?.alphaValue = 1
+            self.tripleCluster.contentParked = true
             self.scheduleRevivalIfNeeded()
         }
     }
@@ -738,6 +763,7 @@ extension PanelController {
                 guard let self, self.bubbleHideGeneration == generation else { return }
                 self.bubblePanel?.orderOut(nil)
                 self.bubbleAssembly?.alphaValue = 1
+                self.tripleCluster.contentParked = true
             }
         })
     }

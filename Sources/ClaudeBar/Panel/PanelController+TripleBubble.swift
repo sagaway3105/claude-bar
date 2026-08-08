@@ -132,10 +132,13 @@ extension PanelController {
         tripleCluster.pop(slot)
         refreshTripleFloatBounds()
         if tripleCluster.allPopped {
-            // 3つとも割れたらバブル自体を畳み、復活を予約する
+            // 3つとも割れたらバブル自体を畳み、復活を予約する。
+            // 世代ガード: 0.6秒以内に再表示（1⇔3切替等）されたら畳まない
+            let generation = bubbleHideGeneration
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(0.6))
-                guard let self, self.tripleCluster.allPopped else { return }
+                guard let self, self.tripleCluster.allPopped,
+                      self.bubbleHideGeneration == generation else { return }
                 if let frame = self.bubblePanel?.frame {
                     // 復活時に同じ場所へ生まれ直すための位置
                     self.lastBubbleCenter = NSPoint(x: frame.midX, y: frame.midY)
@@ -144,6 +147,7 @@ extension PanelController {
                 self.stopMouseTracking()
                 self.removeBubbleMouseMonitor()
                 self.bubblePanel?.orderOut(nil)
+                self.tripleCluster.contentParked = true
                 self.scheduleRevivalIfNeeded()
             }
         }

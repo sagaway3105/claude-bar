@@ -41,7 +41,10 @@ struct BubbleRootView: View {
 
     var body: some View {
         Group {
-            if settings.isTripleBubble {
+            if cluster.contentParked {
+                // 非表示中は中身ごと畳む（無限アニメーションのCPU評価を止める）
+                Color.clear
+            } else if settings.isTripleBubble {
                 TripleBubbleView(state: state, settings: settings, cluster: cluster, actions: actions)
             } else {
                 BubbleView(state: state, settings: settings, actions: actions)

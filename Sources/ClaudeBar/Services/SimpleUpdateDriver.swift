@@ -11,16 +11,25 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
     /// 手動チェック中か（背景チェックでは「最新です」やエラーを出さないための判定）
     private var userInitiated = false
 
+    /// 更新ダイアログで「インストールして再起動」を選んだか。
+    /// バックグラウンドチェック起点でも、ユーザーが明示的にインストールを
+    /// 押した後の失敗は無通知にしない（押したのに何も起きない状態を防ぐ）
+    private var userAcceptedUpdate = false
+
     // MARK: - 表示するのはここだけ
 
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
         let releasePage = URL(string: "https://github.com/sagaway3105/claude-bar/releases/tag/v\(appcastItem.displayVersionString)")
-        reply(runUpdateAlert(detailsURL: releasePage))
+        let choice = runUpdateAlert(detailsURL: releasePage)
+        if choice == .install { userAcceptedUpdate = true }
+        reply(choice)
     }
 
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
         // この経路ではバージョン不明のためリリース一覧へ
-        reply(runUpdateAlert(detailsURL: URL(string: "https://github.com/sagaway3105/claude-bar/releases")))
+        let choice = runUpdateAlert(detailsURL: URL(string: "https://github.com/sagaway3105/claude-bar/releases"))
+        if choice == .install { userAcceptedUpdate = true }
+        reply(choice)
     }
 
     /// アプリアイコン＋メッセージ＋2択だけの確認ダイアログ。
@@ -81,11 +90,14 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
     }
 
     func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {
-        if userInitiated {
+        // 手動チェック中、またはユーザーがインストールを明示した後の失敗は必ず知らせる
+        if userInitiated || userAcceptedUpdate {
             let alert = NSAlert()
             if let icon = Self.appIcon { alert.icon = icon }
             alert.alertStyle = .warning
-            alert.messageText = "アップデートを確認できませんでした"
+            alert.messageText = userAcceptedUpdate
+                ? "アップデートをインストールできませんでした"
+                : "アップデートを確認できませんでした"
             alert.informativeText = error.localizedDescription
             alert.addButton(withTitle: "OK")
             alert.runModal()
@@ -120,5 +132,6 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
 
     func dismissUpdateInstallation() {
         userInitiated = false
+        userAcceptedUpdate = false
     }
 }

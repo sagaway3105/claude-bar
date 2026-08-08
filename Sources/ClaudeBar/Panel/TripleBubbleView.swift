@@ -40,6 +40,9 @@ struct TripleBubbleView: View {
             }
         }
         .frame(width: Self.windowSize.width, height: Self.windowSize.height)
+        // 再表示のたびにビューを作り直して漂いを始め直す（隠している間に
+        // レンダーサーバから破棄された宣言的アニメーションは自動では戻らない）
+        .id(cluster.showGeneration)
         .contextMenu {
             Button("パネルに展開") { actions.expand() }
             Button("バブルを閉じる") { actions.toBubble() }
@@ -65,6 +68,10 @@ struct TripleBubbleView: View {
                         DriftingBall(slot: slot, cluster: cluster) {
                             ballContent(slot)
                         }
+                        // 優先度どおりの重なり: セッションが常に手前、週間が最背面。
+                        // zIndexはZStackの直接の子に付けないと効かない
+                        // （DriftingBallの内側に置くと外のZStackへ伝わらない）
+                        .zIndex(Double(TripleBubbleCluster.Slot.allCases.count - slot.index))
                     }
                 }
             }
@@ -77,6 +84,7 @@ struct TripleBubbleView: View {
                     DriftingBall(slot: slot, cluster: cluster) {
                         ballRim(slot)
                     }
+                    .zIndex(Double(TripleBubbleCluster.Slot.allCases.count - slot.index))
                 }
             }
         }
@@ -147,9 +155,7 @@ struct TripleBubbleView: View {
                 .blur(radius: 7)
                 .offset(x: 4, y: 5)
         )
-        // 優先度どおりの重なり: セッションが常に手前、週間が最背面。
-        // 融合しても重要な球のゲージ・数字が隠れない
-        .zIndex(Double(TripleBubbleCluster.Slot.allCases.count - slot.index))
+        // 重なり順（zIndex）はここではなく modernBody のZStack直下で指定する
         .scaleEffect(cluster.bounceScales[slot.index])
         .opacity(cluster.poppedSlots.contains(slot.index) ? 0 : 1)
         .scaleEffect(cluster.poppedSlots.contains(slot.index) ? 1.25 : 1) // 割れる瞬間に少し膨らむ

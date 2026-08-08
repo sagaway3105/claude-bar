@@ -47,13 +47,13 @@ final class TripleBubbleCluster {
 
     /// ホーム位置。上からセッション→Fable→週間の優先度を保ちつつ、
     /// 縦一列に伸びないよう三角形に寄せて「ぎゅっと一塊」にする。
-    /// 3ペアとも縁を約3pt重ねた密着配置: 漂いで最も離れた瞬間でもくびれが繋がったままになる。
-    /// （5ptまで重ねると窮屈＝ユーザー確認済み。コンテナ内の融合は形状の和として描かれるため
-    ///   軽い重なりは安全。Appleの「重ねるな」指針はコンテナ外の独立ガラス同士の話）
+    /// 3ペアとも縁を約2pt重ねた密着配置: 漂いで最も離れた瞬間でもくびれが繋がったままになる。
+    /// （3ptはやや深い・5ptは窮屈＝ユーザー確認済み。コンテナ内の融合は形状の和として
+    ///   描かれるため軽い重なりは安全。Appleの「重ねるな」指針はコンテナ外の独立ガラス同士の話）
     static let homes: [CGPoint] = [
         CGPoint(x: 80, y: 81),   // セッション（最上・最大・やや左）
-        CGPoint(x: 140, y: 103), // Fable（右へ振る）
-        CGPoint(x: 99, y: 136),  // 週間（最下・最小）
+        CGPoint(x: 141, y: 104), // Fable（右へ振る）
+        CGPoint(x: 98, y: 137),  // 週間（最下・最小）
     ]
 
     /// 個別ドラッグで動かせる範囲（リーシュ）。これを超えると塊ごと動く
@@ -67,6 +67,16 @@ final class TripleBubbleCluster {
 
     /// クリックのポヨン用スケール
     var bounceScales: [CGFloat] = [1, 1, 1]
+
+    /// バブルの表示世代。showBubbleごとに進み、TripleBubbleViewはこれをidにして
+    /// ビューを作り直す。ウィンドウを隠すと宣言的アニメーション（球ごとの漂い）が
+    /// レンダーサーバから破棄され、再表示では復元されないため、毎回始め直す
+    var showGeneration = 0
+
+    /// バブルを畳んでいる間true。BubbleRootViewはこの間コンテンツを空にする。
+    /// ウィンドウをorderOutしてもSwiftUIの無限アニメーション（漂い・ロゴ等）の
+    /// 評価はCPU側で回り続け、非表示のまま約7%を食い続けるため、中身ごと畳む
+    var contentParked = false
 
     /// 割れて消えている球
     var poppedSlots: Set<Int> = []
@@ -151,10 +161,11 @@ final class TripleBubbleCluster {
     // MARK: - ヒットテストとドラッグ
 
     /// ウィンドウ内座標（SwiftUI座標系: 左上原点）でどの球を指しているか。
-    /// 手前に描かれる小さい球を優先するため逆順に見る。割れて消えている球は対象外
+    /// 描画順（zIndex: セッション最前面）と同じ前から順に見る — 重なった部分では
+    /// 見えている球が反応する。割れて消えている球は対象外
     /// （残すと跡地がクリックを奪い、掴むと空ドラッグになる）
     func slot(at point: CGPoint, state: AppState) -> Slot? {
-        for slot in Slot.allCases.reversed() where !poppedSlots.contains(slot.index) {
+        for slot in Slot.allCases where !poppedSlots.contains(slot.index) {
             let center = home(for: slot)
             let drag = dragOffsets[slot.index]
             let c = CGPoint(x: center.x + drag.width, y: center.y + drag.height)

@@ -48,7 +48,10 @@ enum UsageParser {
         snapshot.weeklyAll = window(response.sevenDay)
 
         var fableLabel: String?
-        // 新形式: limits[] の weekly_scoped エントリにモデル別の週間上限（Fable/Opus）が入る
+        // 新形式: limits[] の weekly_scoped エントリにモデル別の週間上限（Fable/Opus）が入る。
+        // 注意: is_active は「有効/無効」ではなく「いま最も逼迫している制限か」の意味
+        // （セッションが最逼迫だと weekly_scoped は false になる）。
+        // フィルタに使うとFableが消える（2026-08-09に実データで確認済み）
         if let scoped = response.limits?.first(where: { $0.kind == "weekly_scoped" && $0.percent != nil }) {
             snapshot.weeklyFable = UsageWindow(utilization: scoped.percent ?? 0, resetsAt: date(scoped.resetsAt))
             fableLabel = scoped.scope?.model?.displayName

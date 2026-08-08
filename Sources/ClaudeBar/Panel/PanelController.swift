@@ -58,6 +58,8 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     // バブルのマウス操作（クリック=ポヨン、連打=破裂 / ドラッグ=移動）
     var bubbleMouseMonitor: Any?
+    /// 画面ロック等からの復帰で漂いを張り直すためのオクルージョン監視
+    var bubbleOcclusionObserver: NSObjectProtocol?
     var dragActive = false
     var dragMoved = false
     var dragStartMouse = NSPoint.zero
