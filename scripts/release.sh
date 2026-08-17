@@ -6,8 +6,9 @@ cd "$(dirname "$0")/.."
 
 VERSION="${1:?使い方: ./scripts/release.sh <バージョン>  例: ./scripts/release.sh 1.0.0}"
 
-# 配布はmainブランチからのみ（SparkleのフィードURLはmainのraw URL固定。
-# 別ブランチでappcastをpushしても既存ユーザーに配信されず、成功したように見えてしまう）
+# 配布はmainブランチからのみ（SparkleのフィードURLは main/docs/appcast.xml 固定＝
+# GitHub Pages と raw の両方がこれを配信している。別ブランチでappcastをpushしても
+# 既存ユーザーに配信されず、成功したように見えてしまう）
 CURRENT_BRANCH="$(git branch --show-current)"
 if [[ "$CURRENT_BRANCH" != "main" ]]; then
   echo "❌ mainブランチで実行してください（現在: ${CURRENT_BRANCH}）" >&2
@@ -27,8 +28,11 @@ echo "✅ codesign検証OK"
 
 ZIP="build/ClaudeBar-v${VERSION}.zip"
 rm -f "$ZIP"
-# ditto はシンボリックリンクやメタデータを保った macOS 標準の zip 化手段
-ditto -c -k --keepParent build/ClaudeBar.app "$ZIP"
+# ditto はシンボリックリンク（Sparkle.frameworkのVersions等）を保った macOS 標準の zip 化手段。
+# --norsrc --noextattr は必須: 付けないと拡張属性が AppleDouble（._*）として同梱され、
+# unzip で展開した人だけ「a sealed resource is missing or invalid」で署名が壊れる。
+# （Dropbox配下でビルドしていると com.dropbox.attrs が全ファイルに付くため必ず踏む）
+ditto -c -k --keepParent --norsrc --noextattr build/ClaudeBar.app "$ZIP"
 
 # Developer ID署名済み かつ notary認証情報（claudebar-notary プロファイル）があれば公証する
 # ※ grep -q はpipefail下でSIGPIPE(141)になるため変数に受けてから判定する
@@ -42,7 +46,22 @@ if [[ "$SIGN_INFO" == *"Developer ID"* ]] &&
   spctl --assess --type exec -vv build/ClaudeBar.app
   # ステープル済みアプリでzipを作り直す
   rm -f "$ZIP"
-  ditto -c -k --keepParent build/ClaudeBar.app "$ZIP"
+  ditto -c -k --keepParent --norsrc --noextattr build/ClaudeBar.app "$ZIP"
+  # build/ のappだけ検証していると「zip化の過程で壊れる」事故を見逃すため、
+  # 実際に配る zip を展開し直して確認する。ユーザーの展開方法はFinder(=ditto)と
+  # unzip の両方があり得るので両方試す（片方だけ壊れるパターンが実在する）
+  for TOOL in ditto unzip; do
+    WORK="$(mktemp -d)"
+    case "$TOOL" in
+      ditto) ditto -x -k "$ZIP" "$WORK" ;;
+      unzip) unzip -qq "$ZIP" -d "$WORK" ;;
+    esac
+    codesign --verify --deep --strict "$WORK/ClaudeBar.app"
+    spctl --assess --type exec "$WORK/ClaudeBar.app"
+    xcrun stapler validate "$WORK/ClaudeBar.app" >/dev/null
+    rm -rf "$WORK"
+    echo "✅ 配布zipの検証OK（${TOOL}で展開）"
+  done
   echo "✅ 公証完了（Gatekeeperの警告なしで起動できます）"
 else
   # make-app.sh は証明書が無いと ad-hoc 署名へ黙ってフォールバックする。
