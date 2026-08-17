@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    # glassEffect などを `if #available(macOS 26.0, *)` で参照している（コンパイル時ガードは無い）ため、
+    # ビルドには macOS 26 SDK = Xcode 26 が載ったランナーが必要。
+    # macos-26 は Apple Silicon の GA イメージ（macos-latest と同じ）。
+    # 配布ターゲットは macOS 14 だが、旧ランナー(macos-14/15)ではSDKが古くコンパイルできないので、
+    # 旧OSの挙動は CLAUDEBAR_FORCE_LEGACY=1 のテストで代替検証する。
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 環境を記録
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: ビルド
+        run: swift build
+
+      - name: テスト
+        run: swift test
+
+      - name: 旧OS分岐のテスト（macOS 14/15が通るコード経路）
+        run: CLAUDEBAR_FORCE_LEGACY=1 swift test
+
+      - name: .app の組み立てが壊れていないか（make-app.sh・証明書が無いのでad-hoc署名になる）
+        run: ./scripts/make-app.sh
+
+      - name: 生成した .app の署名を検証
+        run: codesign --verify --deep --strict build/ClaudeBar.app
