@@ -1,0 +1,98 @@
+name: バグ報告 / Bug report
+description: 動作がおかしい・落ちる・表示が合わない / Something is broken, crashing, or showing wrong numbers
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        日本語・English どちらでもOKです / Japanese or English are both fine.
+
+  - type: input
+    id: version
+    attributes:
+      label: ClaudeBarのバージョン / ClaudeBar version
+      description: メニューバーアイコン右クリック →「設定」か、`ClaudeBar.app` の情報を見るで確認できます
+      placeholder: "1.5.2"
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOSのバージョン / macOS version
+      description: アップルメニュー →「このMacについて」
+      placeholder: "26.6.1 / 15.5 / 14.7 など"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: インストール方法 / How did you install it?
+      options:
+        - Homebrew (brew install --cask sagaway3105/tap/claudebar)
+        - Releasesのzipを手動で / manual zip from Releases
+        - アプリ内の自動アップデート / in-app auto update
+        - ソースからビルド / built from source
+    validations:
+      required: true
+
+  - type: dropdown
+    id: plan
+    attributes:
+      label: 使っているプラン / Your plan
+      options:
+        - Claude Pro
+        - Claude Max
+        - わからない / not sure
+        - APIキーのみ（※このアプリは対象外です / not supported）
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 何が起きたか / What happened
+      description: 期待した動作と、実際に起きたことを書いてください / Describe what you expected and what actually happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順 / Steps to reproduce
+      placeholder: |
+        1. バブル表示をONにする
+        2. 3つ表示に切り替える
+        3. …
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: スクリーンショット・動画 / Screenshot or video
+      description: 見た目や動きの問題は、画像や短い動画があると圧倒的に早く直せます
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ / Logs
+      description: |
+        コンソール.app（Console.app）を開いて検索欄に `ClaudeBar` と入れ、問題が起きた時刻あたりの行を貼ってください。
+        クラッシュの場合は `~/Library/Logs/DiagnosticReports/` の `ClaudeBar-*.ips` が役立ちます。
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 確認 / Checklist
+      options:
+        - label: 最新バージョンで再現することを確認しました / I reproduced this on the latest version
+          required: false
+        - label: Claude Codeにログイン済みです（`claude /login` が通る状態）/ Claude Code is signed in
+          required: false

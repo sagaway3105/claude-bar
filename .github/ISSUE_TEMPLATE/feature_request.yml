@@ -1,0 +1,30 @@
+name: 要望・提案 / Feature request
+description: こういう機能・表示がほしい / Suggest a feature or a change
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        日本語・English どちらでもOKです / Japanese or English are both fine.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 困っていること / What's the problem?
+      description: 「何が欲しいか」より「何が不便か」を書いてもらえると、より良い形で実現できることがあります
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: 実現したい形 / What would it look like?
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        参考: 使用量の取得は Claude Code の認証を読み取り専用で流用する方式で、
+        推論APIは呼ばず、自前のログインも持ちません（[README](../../README.md) の「認証と規約について」参照）。
+        この方針から外れる要望は実装できないことがあります。

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 紹介ページ / Overview page
+    url: https://sagaway3105.github.io/claude-bar/
+    about: 機能とインストール方法のまとめ（デモ動画つき）/ Features, demos and install instructions
+  - name: 使い方・セットアップ / Setup guide
+    url: https://github.com/sagaway3105/claude-bar#初めて使う人のセットアップアカウント連携の流れ
+    about: 「使用量が表示されない」場合はまずこちらを確認してください / Check this first if usage never shows up
