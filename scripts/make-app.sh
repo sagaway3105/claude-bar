@@ -58,8 +58,12 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Claude Codeのログインをターミナルで起動するために使用します。</string>
+	<!-- フィードは GitHub Pages 経由（docs/appcast.xml を配信）。
+	     raw.githubusercontent.com はIP単位のレート制限(429)があり、NAT配下の環境で
+	     更新チェックが失敗し得るため。実体は同じ main/docs/appcast.xml なので、
+	     旧バージョン(v1.5.2以前)が見ているraw URLもそのまま生き続ける -->
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/sagaway3105/claude-bar/main/docs/appcast.xml</string>
+	<string>https://sagaway3105.github.io/claude-bar/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>V4/WjEP/6rfm8Avez5FhQwTuHebW5LncwugED9dvg6A=</string>
 	<key>SUEnableAutomaticChecks</key>
