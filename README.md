@@ -1,9 +1,20 @@
 # ClaudeBar 🫧
 
+**日本語** ｜ [English](README.en.md)
+
 Claudeのプラン使用量をmacOSメニューバーに常駐表示するネイティブアプリ。
 
-メニューバー: `42% ✳` — 現在のセッション使用量% + Claudeロゴ。
-Claude Codeがトークン消費中はロゴが回転しながら脈打ち、80%で橙・95%で赤に変わります。
+<img src="docs/screenshots/panel.png" width="360" alt="メニューバーの「25% ✳」と、クリックで開いたパネル">
+
+メニューバー: `42% ✳` — 現在のセッション使用量% + Claudeロゴ。クリックすると、セッション / 週間（すべてのモデル・Fable）の使用量とリセットまでの残り時間がパネルに出ます。
+
+Claude Codeがトークンを消費している間は、ロゴがClaudeオレンジで回転しながら脈打ちます。
+
+<img src="docs/screenshots/menubar.gif" width="420" alt="消費中はメニューバーのロゴがオレンジで回転する">
+
+🫧 **浮遊バブルモード** — 使用量を映すガラス玉が画面をぷかぷか漂います。3つ表示にすると セッション / Fable / 週間 がシャボン玉の塊になってそれぞれ独立に漂い、マウスを載せると全メトリクスの一覧が出ます。
+
+<img src="docs/screenshots/bubbles.gif" width="680" alt="3つのバブルが漂い、ホバーで使用量一覧が表示される">
 
 ## 機能
 
@@ -118,3 +129,10 @@ echo "usage:100,41,12" >> /tmp/cbcmd  # → 割れる
 - **推論APIは一切呼びません。** トークン消費を伴わない使用量照会のみです
 - それでも `/api/oauth/usage` は非公開エンドポイントであり、Anthropicは予告なくアクセス制御を変更できます。その場合このアプリの使用量表示は動作しなくなります（同種のOSSツール — CodexBar、Raycast拡張など — と同じ立ち位置です）
 - v1.2.0以降は **Developer ID署名 + Apple公証済み** で配布しています（Gatekeeperの警告なしで起動できます）
+
+## ライセンス
+
+[MIT License](LICENSE) — Copyright (c) 2026 Atsushi Sagae
+同梱している [Sparkle](https://github.com/sparkle-project/Sparkle)（自動アップデート）も MIT License です。
+
+"Claude" は Anthropic PBC の商標です。本アプリは非公式のツールであり、Anthropicによる承認・提携・支援は受けていません。
