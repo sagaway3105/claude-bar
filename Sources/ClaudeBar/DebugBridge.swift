@@ -144,7 +144,7 @@ final class DebugBridge {
         }
         if let frame = panelController.debugPanelFrame {
             info["panel"] = [frame.origin.x, frame.origin.y, frame.width, frame.height]
-            info["visible"] = panelController.debugPanelVisible
+            info["visible"] = panelController.isPanelVisible
         }
         if let w = panelController.panel {
             info["window"] = [w.frame.origin.x, w.frame.origin.y, w.frame.width, w.frame.height]

@@ -1,0 +1,118 @@
+/* ClaudeBar — 日本語 */
+
+/* ===== パネル ===== */
+"panel.title" = "Claude 使用量";
+"panel.backToMenuBar" = "メニューバーへ戻す";
+"panel.currentSession" = "現在のセッション";
+"panel.weeklyLimit" = "週間制限";
+"panel.allModels" = "すべてのモデル";
+"panel.weekly" = "週間";
+"panel.extraUsage" = "追加利用";
+"panel.refreshNow" = "今すぐ更新";
+"panel.settings" = "設定";
+"panel.notFetched" = "未取得";
+"panel.updatedAt" = "%@ 更新";
+"panel.overlayMode" = "オーバーレイモード（常に手前に表示）";
+"panel.backBelowMenuBar" = "メニューバー直下に戻す";
+"panel.floatingMode" = "浮遊モード（バブル）";
+"panel.hideBubble" = "バブルを非表示";
+
+/* ===== ログイン / オンボーディング ===== */
+"login.title" = "アカウント連携";
+"login.description" = "Claude Codeの公式ログインで連携します。パスワードがこのアプリを経由することはありません";
+"login.needsClaudeCode" = "連携にはClaude Codeが必要です（未検出）。①でインストールしてから②でログインしてください";
+"login.copyInstall" = "① インストールコマンドをコピー";
+"login.copied" = "コピーしました — ターミナルで実行してください";
+"login.signIn" = "Claude Codeにログイン";
+"login.signInStep" = "② Claude Codeにログイン";
+"onboarding.welcome" = "ClaudeBarへようこそ";
+"onboarding.openPanel" = "パネルを開いてみる";
+"onboarding.close" = "閉じる";
+
+/* ===== バブル ===== */
+"bubble.expandToPanel" = "パネルに展開";
+"bubble.closeBubble" = "バブルを閉じる";
+"bubble.settingsMenu" = "設定…";
+"bubble.quit" = "終了";
+"bubble.helpSingle" = "クリックでポヨン・3連打で破裂・ドラッグで移動・パネルはメニューバーから";
+"bubble.helpTriple" = "ドラッグで移動（強く引くと全体が動きます）・クリックでポヨン・3連打で破裂";
+
+/* ===== ホバーHUD ===== */
+"hud.currentSession" = "現在のセッション";
+"hud.weeklyAllModels" = "週間 すべてのモデル";
+"hud.weeklyModel" = "週間 %@";
+
+/* ===== 時刻・リセット ===== */
+"time.resetsIn" = "%1$@（%2$@後にリセット）";
+"time.days" = "%d日";
+"time.daysHours" = "%1$d日%2$d時間";
+"time.hoursMinutes" = "%1$d時間%2$d分";
+"time.minutes" = "%d分";
+"time.formatShort" = "H:mm";
+"time.formatLong" = "M/d H:mm";
+"time.updatedFormat" = "H:mm";
+
+/* ===== メニューバーのメニュー ===== */
+"status.refreshNow" = "今すぐ更新";
+"status.showBubble" = "バブルで表示";
+"status.hideBubble" = "バブルを非表示";
+"status.checkForUpdates" = "アップデートを確認…";
+
+/* ===== 設定 ===== */
+"settings.windowTitle" = "ClaudeBar 設定";
+"settings.general" = "一般";
+"settings.launchAtLogin" = "ログイン時に起動";
+"settings.appOnlyNote" = ".appとして起動した場合のみ変更できます";
+"settings.refreshInterval" = "更新間隔";
+"settings.oneMinute" = "1分";
+"settings.twoMinutes" = "2分";
+"settings.fiveMinutes" = "5分";
+"settings.useSystemAccent" = "バーの色をアクセントカラーに合わせる";
+"settings.bubble" = "バブル";
+"settings.bubblesShown" = "表示するバブル";
+"settings.one" = "1つ";
+"settings.three" = "3つ（セッション + %@ + 週間）";
+"settings.metricShown" = "表示する使用量";
+"settings.metricSession" = "現在のセッション";
+"settings.metricWeeklyAll" = "週間（すべてのモデル）";
+"settings.metricWeeklyModel" = "%@（週間）";
+"settings.tripleNote" = "3つ表示中は3種類すべてが並ぶため、選択は使いません";
+"settings.reviveBubble" = "割れた後、リセット時に復活";
+"settings.notifications" = "通知";
+"settings.notifyThresholds" = "80% / 95% 到達時に通知";
+"settings.system" = "システム";
+"settings.autoUpdate" = "自動でアップデート（再起動時に適用）";
+"settings.checkUpdatesNow" = "今すぐアップデートを確認";
+"settings.version" = "バージョン";
+"settings.quitApp" = "ClaudeBarを終了";
+
+/* ===== アップデート ===== */
+"update.available" = "新しいバージョンのClaudeBarがご利用できます！";
+"update.installAndRelaunch" = "インストールして再起動";
+"update.later" = "後にする";
+"update.releaseNotes" = "詳しいアップデート内容を見る";
+"update.upToDateTitle" = "最新バージョンです";
+"update.upToDateBody" = "アップデートはありません。";
+"update.installFailed" = "アップデートをインストールできませんでした";
+"update.checkFailed" = "アップデートを確認できませんでした";
+"update.sparkleFailed" = "Sparkleを開始できませんでした: %@";
+
+/* ===== 通知 ===== */
+"notify.currentSession" = "現在のセッション";
+"notify.weeklyAllModels" = "週間制限（すべてのモデル）";
+"notify.weeklyModel" = "週間制限（%@）";
+"notify.thresholdTitle" = "%1$@が%2$d%%を超えました";
+"notify.currentPercent" = "現在 %d%%";
+"notify.resetsAt" = "・リセットは %@";
+
+/* ===== エラー ===== */
+"error.noCredentials" = "Claude Codeの認証情報が見つかりません。ターミナルで claude にログインしてください。";
+"error.noToken" = "KeychainにOAuthトークンがありません。claude で再ログインしてください。";
+"error.noScope" = "トークンに user:profile スコープがなく使用量を取得できません。claude /login し直してください。";
+"error.tokenExpired" = "トークンが期限切れです。Claude Codeを一度使うと自動更新されます。";
+"error.unreadable" = "認証情報を読み取れませんでした。";
+"error.auth401" = "認証エラー(401)。Claude Codeを一度使うとトークンが更新されます。";
+"error.forbidden403" = "権限エラー(403)。トークンのスコープが不足しています。";
+"error.rateLimited" = "レート制限中。%@ 以降に自動で再試行します。";
+"error.httpFailed" = "使用量の取得に失敗しました (HTTP %d)";
+"error.badResponse" = "使用量レスポンスを解釈できませんでした。";

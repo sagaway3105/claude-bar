@@ -1,0 +1,118 @@
+/* ClaudeBar — English (base localization) */
+
+/* ===== Panel ===== */
+"panel.title" = "Claude Usage";
+"panel.backToMenuBar" = "Back to Menu Bar";
+"panel.currentSession" = "Current Session";
+"panel.weeklyLimit" = "Weekly Limit";
+"panel.allModels" = "All Models";
+"panel.weekly" = "Weekly";
+"panel.extraUsage" = "Extra Usage";
+"panel.refreshNow" = "Refresh Now";
+"panel.settings" = "Settings";
+"panel.notFetched" = "Not fetched";
+"panel.updatedAt" = "Updated %@";
+"panel.overlayMode" = "Overlay Mode (Always on Top)";
+"panel.backBelowMenuBar" = "Dock Below Menu Bar";
+"panel.floatingMode" = "Floating Mode (Bubble)";
+"panel.hideBubble" = "Hide Bubble";
+
+/* ===== Login / onboarding ===== */
+"login.title" = "Connect Account";
+"login.description" = "Sign in with Claude Code's official login. Your password never passes through this app.";
+"login.needsClaudeCode" = "Claude Code is required (not detected). Install it with ① then sign in with ②.";
+"login.copyInstall" = "① Copy Install Command";
+"login.copied" = "Copied — run it in Terminal";
+"login.signIn" = "Sign in to Claude Code";
+"login.signInStep" = "② Sign in to Claude Code";
+"onboarding.welcome" = "Welcome to ClaudeBar";
+"onboarding.openPanel" = "Open the Panel";
+"onboarding.close" = "Close";
+
+/* ===== Bubble ===== */
+"bubble.expandToPanel" = "Expand to Panel";
+"bubble.closeBubble" = "Close Bubble";
+"bubble.settingsMenu" = "Settings…";
+"bubble.quit" = "Quit";
+"bubble.helpSingle" = "Click to bounce · Triple-click to pop · Drag to move · Panel from the menu bar";
+"bubble.helpTriple" = "Drag to move (pull hard to move the cluster) · Click to bounce · Triple-click to pop";
+
+/* ===== Hover HUD ===== */
+"hud.currentSession" = "Current Session";
+"hud.weeklyAllModels" = "Weekly · All Models";
+"hud.weeklyModel" = "Weekly · %@";
+
+/* ===== Time / reset ===== */
+"time.resetsIn" = "%1$@ (resets in %2$@)";
+"time.days" = "%dd";
+"time.daysHours" = "%1$dd %2$dh";
+"time.hoursMinutes" = "%1$dh %2$dm";
+"time.minutes" = "%dm";
+"time.formatShort" = "H:mm";
+"time.formatLong" = "M/d H:mm";
+"time.updatedFormat" = "H:mm";
+
+/* ===== Status bar menu ===== */
+"status.refreshNow" = "Refresh Now";
+"status.showBubble" = "Show Bubble";
+"status.hideBubble" = "Hide Bubble";
+"status.checkForUpdates" = "Check for Updates…";
+
+/* ===== Settings ===== */
+"settings.windowTitle" = "ClaudeBar Settings";
+"settings.general" = "General";
+"settings.launchAtLogin" = "Launch at Login";
+"settings.appOnlyNote" = "Only available when launched as an .app";
+"settings.refreshInterval" = "Refresh Interval";
+"settings.oneMinute" = "1 min";
+"settings.twoMinutes" = "2 min";
+"settings.fiveMinutes" = "5 min";
+"settings.useSystemAccent" = "Match bar color to accent color";
+"settings.bubble" = "Bubble";
+"settings.bubblesShown" = "Bubbles Shown";
+"settings.one" = "One";
+"settings.three" = "Three (Session + %@ + Weekly)";
+"settings.metricShown" = "Usage Shown";
+"settings.metricSession" = "Current Session";
+"settings.metricWeeklyAll" = "Weekly (All Models)";
+"settings.metricWeeklyModel" = "%@ (Weekly)";
+"settings.tripleNote" = "Not used while three bubbles are shown — all three appear together";
+"settings.reviveBubble" = "Revive after popping, on reset";
+"settings.notifications" = "Notifications";
+"settings.notifyThresholds" = "Notify at 80% / 95%";
+"settings.system" = "System";
+"settings.autoUpdate" = "Update automatically (applied on restart)";
+"settings.checkUpdatesNow" = "Check for Updates Now";
+"settings.version" = "Version";
+"settings.quitApp" = "Quit ClaudeBar";
+
+/* ===== Updates ===== */
+"update.available" = "A new version of ClaudeBar is available!";
+"update.installAndRelaunch" = "Install and Relaunch";
+"update.later" = "Later";
+"update.releaseNotes" = "See full release notes";
+"update.upToDateTitle" = "You're up to date";
+"update.upToDateBody" = "No updates are available.";
+"update.installFailed" = "Couldn't install the update";
+"update.checkFailed" = "Couldn't check for updates";
+"update.sparkleFailed" = "Couldn't start Sparkle: %@";
+
+/* ===== Notifications ===== */
+"notify.currentSession" = "Current session";
+"notify.weeklyAllModels" = "Weekly limit (all models)";
+"notify.weeklyModel" = "Weekly limit (%@)";
+"notify.thresholdTitle" = "%1$@ has passed %2$d%%";
+"notify.currentPercent" = "Now at %d%%";
+"notify.resetsAt" = " · resets at %@";
+
+/* ===== Errors ===== */
+"error.noCredentials" = "Couldn't find Claude Code credentials. Sign in to claude in Terminal.";
+"error.noToken" = "No OAuth token in the Keychain. Sign in to claude again.";
+"error.noScope" = "The token lacks the user:profile scope, so usage can't be read. Run claude /login again.";
+"error.tokenExpired" = "The token has expired. It refreshes automatically once you use Claude Code.";
+"error.unreadable" = "Couldn't read the credentials.";
+"error.auth401" = "Authentication error (401). The token refreshes once you use Claude Code.";
+"error.forbidden403" = "Permission error (403). The token's scope is insufficient.";
+"error.rateLimited" = "Rate limited. Retrying automatically after %@.";
+"error.httpFailed" = "Couldn't fetch usage (HTTP %d)";
+"error.badResponse" = "Couldn't interpret the usage response.";

@@ -11,15 +11,15 @@ enum CredentialsError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .notFound:
-            return "Claude Codeの認証情報が見つかりません。ターミナルで claude にログインしてください。"
+            return L("error.noCredentials")
         case .mcpOnly:
-            return "KeychainにOAuthトークンがありません。claude で再ログインしてください。"
+            return L("error.noToken")
         case .missingProfileScope:
-            return "トークンに user:profile スコープがなく使用量を取得できません。claude /login し直してください。"
+            return L("error.noScope")
         case .expired:
-            return "トークンが期限切れです。Claude Codeを一度使うと自動更新されます。"
+            return L("error.tokenExpired")
         case .unreadable:
-            return "認証情報を読み取れませんでした。"
+            return L("error.unreadable")
         }
     }
 }

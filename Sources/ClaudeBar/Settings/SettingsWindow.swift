@@ -4,61 +4,63 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var settings: SettingsStore
     var updater: UpdaterService?
+    /// 週間モデル名（"Fable" 等）。表示名は状況で変わるため差し込みで扱う
+    var fableLabel: String = "Fable"
 
     var body: some View {
         Form {
-            Section("一般") {
-                Toggle("ログイン時に起動", isOn: $settings.launchAtLogin)
+            Section(L("settings.general")) {
+                Toggle(L("settings.launchAtLogin"), isOn: $settings.launchAtLogin)
                     .disabled(!settings.canManageLoginItem)
                 if !settings.canManageLoginItem {
-                    Text(".appとして起動した場合のみ変更できます")
+                    Text(L("settings.appOnlyNote"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Picker("更新間隔", selection: $settings.pollIntervalMinutes) {
-                    Text("1分").tag(1)
-                    Text("2分").tag(2)
-                    Text("5分").tag(5)
+                Picker(L("settings.refreshInterval"), selection: $settings.pollIntervalMinutes) {
+                    Text(L("settings.oneMinute")).tag(1)
+                    Text(L("settings.twoMinutes")).tag(2)
+                    Text(L("settings.fiveMinutes")).tag(5)
                 }
-                Toggle("バーの色をアクセントカラーに合わせる", isOn: $settings.useSystemAccent)
+                Toggle(L("settings.useSystemAccent"), isOn: $settings.useSystemAccent)
             }
-            Section("バブル") {
-                Picker("表示するバブル", selection: $settings.bubbleCount) {
-                    Text("1つ").tag(1)
-                    Text("3つ（セッション + Fable + 週間）").tag(3)
+            Section(L("settings.bubble")) {
+                Picker(L("settings.bubblesShown"), selection: $settings.bubbleCount) {
+                    Text(L("settings.one")).tag(1)
+                    Text(L("settings.three", fableLabel)).tag(3)
                 }
-                Picker("表示する使用量", selection: $settings.bubbleMetric) {
-                    Text("現在のセッション").tag(BubbleMetric.session)
-                    Text("週間（すべてのモデル）").tag(BubbleMetric.weekly)
-                    Text("Fable（週間）").tag(BubbleMetric.fable)
+                Picker(L("settings.metricShown"), selection: $settings.bubbleMetric) {
+                    Text(L("settings.metricSession")).tag(BubbleMetric.session)
+                    Text(L("settings.metricWeeklyAll")).tag(BubbleMetric.weekly)
+                    Text(L("settings.metricWeeklyModel", fableLabel)).tag(BubbleMetric.fable)
                 }
                 .disabled(settings.isTripleBubble)
                 if settings.isTripleBubble {
-                    Text("3つ表示中は3種類すべてが並ぶため、選択は使いません")
+                    Text(L("settings.tripleNote"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Toggle("割れた後、リセット時に復活", isOn: $settings.reviveBubble)
+                Toggle(L("settings.reviveBubble"), isOn: $settings.reviveBubble)
             }
-            Section("通知") {
-                Toggle("80% / 95% 到達時に通知", isOn: $settings.notifyThresholds)
+            Section(L("settings.notifications")) {
+                Toggle(L("settings.notifyThresholds"), isOn: $settings.notifyThresholds)
             }
-            Section("システム") {
-                Toggle("自動でアップデート（再起動時に適用）", isOn: $settings.autoUpdate)
+            Section(L("settings.system")) {
+                Toggle(L("settings.autoUpdate"), isOn: $settings.autoUpdate)
                     .disabled(updater?.isAvailable != true)
                     .onChange(of: settings.autoUpdate) { _, on in
                         updater?.automaticallyChecksForUpdates = on
                         updater?.automaticallyDownloadsUpdates = on
                     }
-                Button("今すぐアップデートを確認") { updater?.checkForUpdates() }
+                Button(L("settings.checkUpdatesNow")) { updater?.checkForUpdates() }
                     .disabled(updater?.isAvailable != true)
                 if updater?.isAvailable != true {
-                    Text(".appとして起動した場合のみ利用できます")
+                    Text(L("settings.appOnlyNote"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                LabeledContent("バージョン", value: Self.version)
-                Button("ClaudeBarを終了", role: .destructive) { NSApp.terminate(nil) }
+                LabeledContent(L("settings.version"), value: Self.version)
+                Button(L("settings.quitApp"), role: .destructive) { NSApp.terminate(nil) }
             }
         }
         .formStyle(.grouped)
@@ -72,6 +74,8 @@ struct SettingsView: View {
 
 @MainActor
 final class SettingsWindowController {
+    /// 週間モデル名の表示に使う（設定画面のラベル差し込み用）
+    weak var state: AppState?
     private var window: NSWindow?
     private let settings: SettingsStore
     private let updater: UpdaterService?
@@ -88,9 +92,9 @@ final class SettingsWindowController {
                 styleMask: [.titled, .closable],
                 backing: .buffered, defer: false
             )
-            w.title = "ClaudeBar 設定"
+            w.title = L("settings.windowTitle")
             w.isReleasedWhenClosed = false
-            w.contentView = NSHostingView(rootView: SettingsView(settings: settings, updater: updater))
+            w.contentView = NSHostingView(rootView: SettingsView(settings: settings, updater: updater, fableLabel: state?.fableLabel ?? "Fable"))
             w.center()
             window = w
         }

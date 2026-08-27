@@ -12,9 +12,9 @@ final class NotificationService {
 
     func evaluate(old: UsageSnapshot?, new: UsageSnapshot, fableLabel: String, enabled: Bool) {
         guard enabled, canNotify else { return }
-        check(name: "現在のセッション", old: old?.session, new: new.session)
-        check(name: "週間制限（すべてのモデル）", old: old?.weeklyAll, new: new.weeklyAll)
-        check(name: "週間制限（\(fableLabel)）", old: old?.weeklyFable, new: new.weeklyFable)
+        check(name: L("notify.currentSession"), old: old?.session, new: new.session)
+        check(name: L("notify.weeklyAllModels"), old: old?.weeklyAll, new: new.weeklyAll)
+        check(name: L("notify.weeklyModel", fableLabel), old: old?.weeklyFable, new: new.weeklyFable)
     }
 
     private func check(name: String, old: UsageWindow?, new: UsageWindow?) {
@@ -28,11 +28,11 @@ final class NotificationService {
             // 起動直後（前回値なし）や既に超過していた場合は騒がない
             guard let old, old.utilization < threshold else { continue }
 
-            var body = "現在 \(Int(new.utilization.rounded()))%"
+            var body = L("notify.currentPercent", Int(new.utilization.rounded()))
             if let resets = new.resetsAt {
-                body += "・リセットは \(UsageGaugeView.resetText(resets))"
+                body += L("notify.resetsAt", UsageGaugeView.resetText(resets))
             }
-            send(title: "\(name)が\(Int(threshold))%を超えました", body: body)
+            send(title: L("notify.thresholdTitle", name, Int(threshold)), body: body)
         }
     }
 

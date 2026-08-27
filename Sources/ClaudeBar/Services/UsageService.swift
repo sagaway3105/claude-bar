@@ -11,17 +11,17 @@ enum UsageError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unauthorized:
-            return "認証エラー(401)。Claude Codeを一度使うとトークンが更新されます。"
+            return L("error.auth401")
         case .forbidden:
-            return "権限エラー(403)。トークンのスコープが不足しています。"
+            return L("error.forbidden403")
         case .rateLimited(let until):
             let f = DateFormatter()
             f.dateFormat = "H:mm"
-            return "レート制限中。\(f.string(from: until)) 以降に自動で再試行します。"
+            return L("error.rateLimited", f.string(from: until))
         case .http(let code):
-            return "使用量の取得に失敗しました (HTTP \(code))"
+            return L("error.httpFailed", code)
         case .badResponse:
-            return "使用量レスポンスを解釈できませんでした。"
+            return L("error.badResponse")
         }
     }
 }

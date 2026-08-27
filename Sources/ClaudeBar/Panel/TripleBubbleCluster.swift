@@ -40,16 +40,15 @@ final class TripleBubbleCluster {
             switch self {
             case .session: return "5h"
             case .fable: return fableLabel
-            case .weekly: return "週間"
+            case .weekly: return L("panel.weekly")
             }
         }
     }
 
     /// ホーム位置。上からセッション→Fable→週間の優先度を保ちつつ、
     /// 縦一列に伸びないよう三角形に寄せて「ぎゅっと一塊」にする。
-    /// 3ペアとも縁を約2pt重ねた密着配置: 漂いで最も離れた瞬間でもくびれが繋がったままになる。
-    /// （3ptはやや深い・5ptは窮屈＝ユーザー確認済み。コンテナ内の融合は形状の和として
-    ///   描かれるため軽い重なりは安全。Appleの「重ねるな」指針はコンテナ外の独立ガラス同士の話）
+    /// 3ペアとも縁が約2pt重なる密着配置（3ptはやや深い・5ptは窮屈＝ユーザー確認済み）。
+    /// 融合（くびれ）は廃止済みなので、重なりは単に手前の球が奥の球を隠すだけになる
     static let homes: [CGPoint] = [
         CGPoint(x: 80, y: 81),   // セッション（最上・最大・やや左）
         CGPoint(x: 141, y: 104), // Fable（右へ振る）
@@ -84,7 +83,7 @@ final class TripleBubbleCluster {
     /// 割れた時点のリセット時刻（球ごと）。「リセットで新しい期間に入ったら復活」の判定に使う
     var poppedResetsAt: [Int: Date] = [:]
 
-    /// 表面張力で吸い付いている相手（ヒステリシス用）
+    /// ドラッグ中に吸い付いている相手（ヒステリシス用）
     private var snappedNeighbor: Slot?
 
     /// 縁の距離がこれ以下になったら吸い付く（強すぎると操作を奪うので浅めに）
@@ -106,56 +105,22 @@ final class TripleBubbleCluster {
         return slot.baseDiameter * PanelController.bubbleScaleFactor(for: utilization)
     }
 
-    // MARK: - 漂い（macOS 26は宣言的アニメーション / 旧OSは時刻からの直接計算）
+    // MARK: - 漂い（球ごとのDriftHost=CAAnimationのパラメータ）
 
     /// 球ごとに違う振幅・周期。さらにX/Yで周期をずらすことで、
     /// 3つが同じ動きに揃わず、それぞれ独立にふわふわ漂って見える。
-    /// 振幅は塊全体の浮遊（±8.5pt）に埋もれない大きさにして「球ごとに生きてる」相対運動を見せる。
-    /// 縁がほぼ接する配置なので漂いで周期的に軽く重なる＝くびれが太くなったり離れたりする表情になる
+    /// 振幅は塊全体の浮遊（±8.5pt）に埋もれない大きさにして「球ごとに生きてる」相対運動を見せる
     private static let driftAmplitudeX: [CGFloat] = [3.5, -4.5, 4]
     private static let driftAmplitudeY: [CGFloat] = [4.5, 3.5, -4]
     private static let driftDurationX: [Double] = [3.4, 4.5, 3.8]
     private static let driftDurationY: [Double] = [5.0, 3.1, 5.5] // Xと違う周期にして円運動にしない
     private static let driftDelay: [Double] = [0, 0.9, 1.7]       // 開始位相もずらす
 
-    func driftX(for slot: Slot, drifting: Bool) -> CGFloat {
-        Self.driftAmplitudeX[slot.index] * (drifting ? 1 : -1)
-    }
-
-    func driftY(for slot: Slot, drifting: Bool) -> CGFloat {
-        Self.driftAmplitudeY[slot.index] * (drifting ? 1 : -1)
-    }
-
-    func driftAnimationX(for slot: Slot) -> Animation {
-        .easeInOut(duration: Self.driftDurationX[slot.index])
-            .repeatForever(autoreverses: true)
-            .delay(Self.driftDelay[slot.index])
-    }
-
-    func driftAnimationY(for slot: Slot) -> Animation {
-        .easeInOut(duration: Self.driftDurationY[slot.index])
-            .repeatForever(autoreverses: true)
-            .delay(Self.driftDelay[slot.index] * 0.6)
-    }
-
-    /// 旧OS用: 時刻から漂いを直接計算する。
-    /// 宣言的アニメーションの「終点」ではなく実際の表示位置が必要なため
-    /// （球とくびれを同じ座標から描かないと繋がって見えない）。
-    /// 波形はX/Yで周期が違うeaseInOut往復＝正弦波と同等になるよう合わせてある
-    func driftOffset(for slot: Slot, at time: TimeInterval) -> CGSize {
+    /// 球ごとの漂いパラメータ（DriftHost用）。振幅・周期・開始位相の組
+    func driftParams(for slot: Slot) -> (ax: CGFloat, dx: Double, ay: CGFloat, dy: Double, phase: Double) {
         let i = slot.index
-        let delay = Self.driftDelay[i]
-        let x = sin((time - delay) * 2 * .pi / (Self.driftDurationX[i] * 2)) * Self.driftAmplitudeX[i]
-        let y = sin((time - delay * 0.6) * 2 * .pi / (Self.driftDurationY[i] * 2)) * Self.driftAmplitudeY[i]
-        let drag = dragOffsets[i]
-        return CGSize(width: x + drag.width, height: y + drag.height)
-    }
-
-    /// 球の中心（旧OSのくびれ計算用）
-    func center(for slot: Slot, at time: TimeInterval) -> CGPoint {
-        let home = home(for: slot)
-        let offset = driftOffset(for: slot, at: time)
-        return CGPoint(x: home.x + offset.width, y: home.y + offset.height)
+        return (Self.driftAmplitudeX[i], Self.driftDurationX[i],
+                Self.driftAmplitudeY[i], Self.driftDurationY[i], Self.driftDelay[i])
     }
 
     // MARK: - ヒットテストとドラッグ
@@ -192,7 +157,7 @@ final class TripleBubbleCluster {
         return overflow
     }
 
-    /// 表面張力の吸着。近づいたら縁が数pt空いた位置へ引き寄せ、
+    /// ドラッグ時の吸着。近づいたら縁が数pt空いた位置へ引き寄せ、
     /// 一度くっついたら大きく引き離すまで離れない（ヒステリシス）
     private func snapped(_ slot: Slot, offset: CGSize, state: AppState) -> CGSize {
         let home = home(for: slot)

@@ -18,7 +18,7 @@ enum OnboardingDialog {
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
             let alert = NSAlert()
-            alert.messageText = "ClaudeBarへようこそ"
+            alert.messageText = L("onboarding.welcome")
             alert.informativeText = """
             メニューバーにClaudeプランの使用量を常時表示します。
 
@@ -34,8 +34,8 @@ enum OnboardingDialog {
                let icon = NSImage(contentsOf: iconURL) {
                 alert.icon = icon
             }
-            alert.addButton(withTitle: "パネルを開いてみる")
-            alert.addButton(withTitle: "閉じる")
+            alert.addButton(withTitle: L("onboarding.openPanel"))
+            alert.addButton(withTitle: L("onboarding.close"))
             guard alert.runModal() == .alertFirstButtonReturn else { return }
             // アラートが閉じてから展開する
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { openPanel() }

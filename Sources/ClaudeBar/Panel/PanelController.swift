@@ -78,7 +78,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     let panelWidth: CGFloat = 300
     let panelWindowHeight: CGFloat = 460 // 固定（内容はSwiftUIが上詰めで描き、余りは完全透明）
     let bubbleDiameter: CGFloat = 72
-    let singleBubbleWindowSize: CGFloat = 150 // 最大バブル(72*1.2)+浮遊・ポヨンのマージン
+    let singleBubbleWindowSize: CGFloat = 150 // 最大バブル(72*1.1)+浮遊・ポヨンのマージン
 
     /// バブルウィンドウの大きさ（3つ表示モードでは塊が収まる大きさになる）
     var bubbleWindowFrameSize: NSSize {
@@ -106,9 +106,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         state.usage?.window(for: settings.bubbleMetric)
     }
 
-    /// 使用量に応じたバブルの拡大率: 10%ごとに+2%、100%で1.2倍（風船のように膨らむ）
+    /// 使用量に応じたバブルの拡大率: 10%ごとに+1%、100%で1.1倍（風船のように膨らむ）
     static func bubbleScaleFactor(for utilization: Double) -> CGFloat {
-        1 + 0.02 * CGFloat((min(max(utilization, 0), 100) / 10).rounded(.down))
+        1 + 0.01 * CGFloat((min(max(utilization, 0), 100) / 10).rounded(.down))
     }
 
     /// 現在の使用量に応じたバブルの直径
@@ -597,7 +597,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         return panel?.frame
     }
 
-    var debugPanelVisible: Bool {
+    var isPanelVisible: Bool {
         state.bubbleActive ? (bubblePanel?.isVisible ?? false) : (panel?.isVisible ?? false)
     }
 }

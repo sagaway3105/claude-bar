@@ -37,13 +37,21 @@
 パネルの `NSPanel` は `UsagePanelView`、バブルの `NSPanel` は `BubbleRootView` を常時ホストする
 （旧設計の「1枚のウィンドウをクローム変形して使い回す」方式は廃止）。
 
-### バブルのアニメーション（60fps保証の要）
+### バブルのアニメーション（60fps保証の要・2026-08-21更新）
 
 - 毎フレームのウィンドウ移動はmacOS 14+でvsync同期のウィンドウサーバ往復となりカクつくため、**ウィンドウは動かさない**
 - 浮遊は周期の異なる正弦波4本（easeInEaseOut・autoreverse・無限リピート・加算合成）を**レンダーサーバに常駐**させる方式。アプリのメインスレッドが詰まっても滑らか、繋ぎ目も存在しない
+- **常時アニメーションは全てCAAnimationに隔離する**のが鉄則。SwiftUIのTimelineView/repeatForeverは
+  アプリ内で毎フレーム刻む（AppleはSwiftUIアニメにバッキングCAAnimationを持たせない）ため、
+  待機中でも数%〜十数%のCPUを食い続ける（v1.5.3までのバブルはこれで待機7.5%だった）。
+  - 中身のゆらぎ: `WobbleHost`（レイヤーのCAKeyframeAnimation・sin波形）
+  - 球ごとの漂い（3つ表示）: `DriftHost`（加算CABasicAnimation×2）
+  - ロゴ回転: `SpinningLogoView`（従来どおり）
+  - いずれもオクルージョン変化での張り直しと「視差効果を減らす」への追従を持つ
 - 現在位置の取得は `layer.presentation()`（macOSのlayer-backed viewはanchorPoint(0,0)なのでposition=frame.origin）
 - クリック透過はカーソル位置の80msポーリングで `ignoresMouseEvents` を切り替え。クリック=展開/ドラッグ=移動はAppKitローカルモニタで判定（SwiftUIのDragGestureは非アクティブ化パネルで不安定）
 - App Nap対策として浮遊中は `ProcessInfo.beginActivity` を保持
+  （`.userInitiatedAllowingIdleSystemSleep`。素の `.userInitiated` はアイドルスリープ禁止を含む）
 
 ### ファイル分割
 
@@ -74,7 +82,17 @@
 - NSGlassEffectViewは不使用（contentView機構の内部Auto Layoutとautoresizingの相互作用で
   ウィンドウ/ガラスが内容サイズへ強制収縮する多段バグの温床だった）
 - **SwiftUIの .glassEffect(.regular.tint(windowBackgroundColor 45%)) が内容にピッタリ描く**。
-  透明ボーダレスウィンドウでも背後サンプリングが効くことは実証済み
+  透明ボーダレスウィンドウでも背後サンプリング（ぼかし+色採取）が効くことは実証済み。
+  ただし**屈折（レンズ）は自ウィンドウ内のコンテンツにしか掛からない**
+  （NSGlassEffectViewでも同じ・2026-08実測。詳細はメモリ liquid-glass-limits）
+- 単体バブルのガラスは `SingleBubbleGlass`: glassEffect(.clear) を**2倍サイズで描いて
+  0.5倍に縮小合成**する。固定で調整不可のぼかし半径が実効1/3になり（遷移幅26.5→7.5pt）、
+  縮小写像が実物のガラス玉と同じミニファイになる。`.opacity()` でガラスを薄めるのは禁止
+  （屈折像と素の背景の線形クロスフェードになるだけ）
+- バブルの装飾は「素通し+縁に色を集約」: フレネル縁（角度マスクつき）+ 薄膜干渉バンド +
+  拡散照明 + 湾曲グロス（色収差つき）+ 裏面反射 + 下部の光だまり。独立レイヤーだった
+  虹色リム/ガラス管はフレネル+薄膜へ統合し削除。乳白ヘイズ・大ブルームは透過を塗り潰すため全廃。
+  単体・3つ表示とも BubbleDecoration.swift の同一部品を使う（詳細は docs/BUBBLE_RENDERING.md）
 - ウィンドウは固定サイズ（パネル300x460 / バブル150）でリサイズしない。
   内容は上詰め、余白は完全透明。hosting.sizingOptions = [] は必須
 

@@ -32,6 +32,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        #if DEBUG
+        // 検証用: CLAUDEBAR_APPEARANCE=dark|light でアプリ外観を固定する
+        // （システム設定を切り替えずにライト/ダーク両方のスタイルを確認するため）
+        switch ProcessInfo.processInfo.environment["CLAUDEBAR_APPEARANCE"] {
+        case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
+        case "light": NSApp.appearance = NSAppearance(named: .aqua)
+        default: break
+        }
+        #endif
 
         let state = AppState()
         self.state = state
@@ -40,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         usageService = UsageService(state: state, settings: settings, notifier: notifier)
         updater = UpdaterService()
         settingsController = SettingsWindowController(settings: settings, updater: updater)
+        settingsController.state = state
         panelController = PanelController(state: state, usageService: usageService, settings: settings)
         statusController = StatusItemController(state: state, panelController: panelController)
         panelController.updater = updater

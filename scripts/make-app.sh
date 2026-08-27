@@ -21,6 +21,21 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/ClaudeBar "$APP/Contents/MacOS/ClaudeBar"
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
+# ローカライズ: メインバンドルが「対応している言語」を宣言する必要がある。
+# 実際の文字列は SwiftPM のリソースバンドル(ClaudeBar_ClaudeBar.bundle)側にあるが、
+# CFBundle の言語解決はメインバンドルの .lproj / CFBundleLocalizations に
+# 制限されるため、ここに空の .lproj を置かないと ja が選ばれず英語に固定される
+for LANG_DIR in en ja; do
+  mkdir -p "$APP/Contents/Resources/$LANG_DIR.lproj"
+  : > "$APP/Contents/Resources/$LANG_DIR.lproj/InfoPlist.strings"
+done
+
+# SwiftPMのリソースバンドルを同梱（Localizable.strings が入っている）
+RES_BUNDLE=".build/release/ClaudeBar_ClaudeBar.bundle"
+if [[ -d "$RES_BUNDLE" ]]; then
+  cp -R "$RES_BUNDLE" "$APP/Contents/Resources/"
+fi
+
 # Sparkle.framework を Contents/Frameworks に同梱（自動アップデート用）
 SPARKLE_FW=".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 if [[ -d "$SPARKLE_FW" ]]; then
@@ -52,6 +67,13 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<string>14.0</string>
 	<key>CFBundleAllowMixedLocalizations</key>
 	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ja</string>
+	</array>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHighResolutionCapable</key>

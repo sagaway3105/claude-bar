@@ -44,7 +44,7 @@ struct UsageGaugeView: View {
             if let resets = window?.resetsAt {
                 // 残り時間は1分ごとに更新
                 TimelineView(.periodic(from: .now, by: 60)) { _ in
-                    Text("\(Self.resetText(resets))（\(Self.remainText(resets))後にリセット）")
+                    Text(L("time.resetsIn", Self.resetText(resets), Self.remainText(resets)))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
@@ -52,10 +52,29 @@ struct UsageGaugeView: View {
         }
     }
 
-    static func resetText(_ date: Date) -> String {
+    /// DateFormatterの生成はICUフォーマッタ構築を伴い高価（毎フレーム呼ぶと
+    /// バブルのフレームコストの約半分を占めた実測あり）なので、2書式とも使い回す。
+    /// dateFormatの切替も内部再構築を誘発するため、書式ごとに別インスタンスを持つ。
+    ///
+    /// 書式はテンプレートから現在のロケール向けに組み立てる（`Hm` は
+    /// 日本語なら "15:45"、英語(US)なら "3:45 PM" になる）。固定の "H:mm" を
+    /// 使うと英語圏で24時間表記が出てしまう
+    private static let timeFormatter: DateFormatter = makeFormatter("Hm")
+    private static let dayTimeFormatter: DateFormatter = makeFormatter("MdHm")
+
+    private static func makeFormatter(_ template: String) -> DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = date.timeIntervalSinceNow < 24 * 3600 ? "H:mm" : "M/d H:mm"
+        let locale = Locale.autoupdatingCurrent
+        formatter.locale = locale
+        // キャッシュされた後もシステムのタイムゾーン変更に追従させる
+        // （既定値だと生成時点のゾーンで固定され、旅行やDST切替で時刻がズレる）
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.setLocalizedDateFormatFromTemplate(template)
+        return formatter
+    }
+
+    static func resetText(_ date: Date) -> String {
+        let formatter = date.timeIntervalSinceNow < 24 * 3600 ? timeFormatter : dayTimeFormatter
         return formatter.string(from: date)
     }
 
@@ -65,9 +84,11 @@ struct UsageGaugeView: View {
         let minutes = (Int(seconds) % 3600) / 60
         if hours >= 24 {
             let remainderHours = hours % 24
-            return remainderHours > 0 ? "\(hours / 24)日\(remainderHours)時間" : "\(hours / 24)日"
+            return remainderHours > 0
+                ? L("time.daysHours", hours / 24, remainderHours)
+                : L("time.days", hours / 24)
         }
-        if hours > 0 { return "\(hours)時間\(minutes)分" }
-        return "\(minutes)分"
+        if hours > 0 { return L("time.hoursMinutes", hours, minutes) }
+        return L("time.minutes", minutes)
     }
 }

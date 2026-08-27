@@ -57,15 +57,15 @@ final class StatusItemController: NSObject {
 
     private func showContextMenu(on button: NSStatusBarButton) {
         let menu = NSMenu()
-        menu.addItem(makeItem("今すぐ更新", #selector(refreshNow)))
-        menu.addItem(makeItem(panelController.state.bubbleActive ? "バブルを非表示" : "バブルで表示", #selector(toggleBubble)))
+        menu.addItem(makeItem(L("status.refreshNow"), #selector(refreshNow)))
+        menu.addItem(makeItem(panelController.state.bubbleActive ? L("status.hideBubble") : L("status.showBubble"), #selector(toggleBubble)))
         menu.addItem(.separator())
         if panelController.updater?.isAvailable == true {
-            menu.addItem(makeItem("アップデートを確認…", #selector(checkForUpdates)))
+            menu.addItem(makeItem(L("status.checkForUpdates"), #selector(checkForUpdates)))
         }
-        menu.addItem(makeItem("設定…", #selector(openSettings)))
+        menu.addItem(makeItem(L("bubble.settingsMenu"), #selector(openSettings)))
         menu.addItem(.separator())
-        menu.addItem(makeItem("ClaudeBarを終了", #selector(quit)))
+        menu.addItem(makeItem(L("settings.quitApp"), #selector(quit)))
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 6), in: button)
     }
 

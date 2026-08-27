@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 // macOS 14互換シム。15+の専用APIを使う箇所はここを経由する。
-// （glassEffectの26分岐は PanelViews の AdaptivePanelGlass / AdaptiveBubbleGlass 参照）
+// （glassEffectの26分岐は PanelViews の AdaptivePanelGlass / SingleBubbleGlass、TripleBubbleView の TripleBubbleGlass 参照）
 
 /// 旧OS分岐の検証用: CLAUDEBAR_FORCE_LEGACY=1 で全ての新API分岐を旧OS側に倒す
 /// （新しいmacOS上ではフォールバックが実行されず目視確認できないため）

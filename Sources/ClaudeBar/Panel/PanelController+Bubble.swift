@@ -144,10 +144,12 @@ extension PanelController {
         p.ignoresMouseEvents = false // 初期状態は受ける（以後はカーソル位置で自動切替）
         startMouseTracking()
         installBubbleMouseMonitor()
-        // アクセサリアプリはApp Napでタイマーが間引かれるため、バブル表示中は抑止する
+        // アクセサリアプリはApp Napでタイマーが間引かれるため、バブル表示中は抑止する。
+        // ※ .userInitiated は idleSystemSleepDisabled を含み、バブル表示中は
+        //   Macがアイドルスリープできなくなるため、スリープを許す方を使う
         if napActivity == nil {
             napActivity = ProcessInfo.processInfo.beginActivity(
-                options: [.userInitiated], reason: "Bubble float animation"
+                options: [.userInitiatedAllowingIdleSystemSleep], reason: "Bubble float animation"
             )
         }
 

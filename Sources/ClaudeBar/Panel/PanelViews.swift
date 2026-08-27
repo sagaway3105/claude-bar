@@ -54,68 +54,6 @@ struct BubbleRootView: View {
     }
 }
 
-// MARK: - シャボン玉風の質感（虹色のリム + ハイライト）
-
-struct IridescentRim<S: InsettableShape>: View {
-    var shape: S
-    var lineWidth: CGFloat = 1.5
-
-    var body: some View {
-        ZStack {
-            shape
-                .strokeBorder(
-                    AngularGradient(colors: [
-                        .cyan.opacity(0.28), .purple.opacity(0.22), .pink.opacity(0.26),
-                        .orange.opacity(0.2), .mint.opacity(0.24), .cyan.opacity(0.28),
-                    ], center: .center),
-                    lineWidth: lineWidth
-                )
-                .blur(radius: 0.5)
-            shape
-                .strokeBorder(.white.opacity(0.25), lineWidth: 0.8)
-        }
-        .allowsHitTesting(false)
-    }
-}
-
-/// 内側へにじむ虹色フリンジ + 虹色リム（シャボン玉の縁の虹）。
-/// シングルバブルはガラスの上へ直接、3つ表示は融合コンテナの外側のレイヤーとして重ねる
-struct BubbleIridescentEdge: View {
-    var body: some View {
-        ZStack {
-            Circle()
-                .strokeBorder(
-                    AngularGradient(colors: [
-                        .cyan.opacity(0.3), .purple.opacity(0.24), .pink.opacity(0.28),
-                        .orange.opacity(0.22), .mint.opacity(0.26), .cyan.opacity(0.3),
-                    ], center: .center),
-                    lineWidth: 4
-                )
-                .blur(radius: 3)
-                .opacity(0.7)
-            IridescentRim(shape: Circle())
-        }
-        .allowsHitTesting(false)
-    }
-}
-
-/// ガラス玉の外周表現: 虹の縁と、左上光源に合わせて右下へ落とす微かな白いグロー。
-/// glowOpacity: 3つ表示は密着した隣の球とグローが重なって足し算されるため薄くする
-struct BubbleRimGlow: ViewModifier {
-    var glowOpacity: Double = 0.25
-
-    func body(content: Content) -> some View {
-        content
-            .background(
-                Circle()
-                    .fill(Color.white.opacity(glowOpacity))
-                    .blur(radius: 7)
-                    .offset(x: 4, y: 5)
-            )
-            .overlay(BubbleIridescentEdge())
-    }
-}
-
 // MARK: - OS適応ガラス
 // macOS 26 = Liquid Glass（純正メニューと同じ質感）/ それ以前 = 従来のすりガラス(Material)
 
@@ -140,16 +78,49 @@ struct AdaptivePanelGlass: ViewModifier {
     }
 }
 
-/// バブルのガラス玉: 26は透明なLiquid Glass、旧OSはすりガラスの球
-/// （ハイライト・コースティクス・虹色リムは自前描画なので全OS共通）。
-/// 形状はCircle固定 — システムが標準プリミティブへ解決しようとするため、
-/// 3つ表示の融合（GlassEffectContainer）もこの形状に依存する
-struct AdaptiveBubbleGlass: ViewModifier {
+/// 単体バブル専用のガラス玉。ガラスを content ではなく背景の円に敷き、
+/// 2倍で描いて0.5倍に縮める縮小レンズ合成を行う（%やリセット時刻は不透明のまま前面）。
+/// 3つ表示（TripleBubbleGlass）に縮小合成を入れていないのは、150ptウィンドウ前提の
+/// 2倍サンプリング領域が220ptウィンドウ+隣接球でどう干渉するか未検証のため
+struct SingleBubbleGlass: ViewModifier {
+    /// 検証用: CLAUDEBAR_GLASS=clear で旧構成（.clear+縮小レンズ）に戻す
+    static let useClear = ProcessInfo.processInfo.environment["CLAUDEBAR_GLASS"] == "clear"
+    /// ガラスの背後に敷く下地の濃さ（検証用: CLAUDEBAR_BACKDROP 0-100）
+    static let backdropOpacity = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_BACKDROP"] ?? "0")! / 100
+    /// 下地の入れ方（検証用: back / front / tint）
+    static let mode = ProcessInfo.processInfo.environment["CLAUDEBAR_MODE"] ?? "back"
+
     func body(content: Content) -> some View {
-        if #available(macOS 26.0, *), !forceLegacyUI {
-            content.glassEffect(.clear, in: Circle())
-        } else {
-            content.background(Circle().fill(.ultraThinMaterial))
+        content.background {
+            if #available(macOS 26.0, *), !forceLegacyUI {
+                if Self.useClear {
+                    // 旧構成: .clear + 2倍で描いて0.5倍に縮める（ぼかし実効半減）
+                    GeometryReader { geo in
+                        Circle().fill(.clear)
+                            .glassEffect(.clear, in: Circle())
+                            .frame(width: geo.size.width * 2, height: geo.size.height * 2)
+                            .scaleEffect(0.5)
+                            .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                    }
+                } else {
+                    // コントロールセンターのタイルと同じ構成:
+                    // .regular（適応する材質。背景の明るさに応じて自らの明度を調整し、
+                    // 縁のレンズも素のまま働く）を、縮小合成なしでそのまま使う。
+                    // .clearは適応能力を持たないためAppleは暗幕とセットで使うよう指示しており、
+                    // 暗幕なしの単体使用は明るい背景で消える（実測1.48:1）
+                    ZStack {
+                        // 黒い要素は全廃した（暗幕・ティント・ターミネーター・
+                        // 影はいずれも「黒いブラー」として悪目立ちしたため）。
+                        // 球体表現は白い光のみで作る
+                        Circle().fill(.clear)
+                            .glassEffect(.regular, in: Circle())
+                    }
+                }
+            } else {
+                // 旧OS: Liquid Glassが無いのですりガラス（Material）で代替
+                Circle().fill(.ultraThinMaterial)
+                    .opacity(0.72)
+            }
         }
     }
 }
@@ -209,11 +180,11 @@ struct UsagePanelView: View {
             HStack(spacing: 7) {
                 ClaudeLogoView(animating: state.isActive, color: .claudeOrange)
                     .frame(width: 16, height: 16)
-                Text("Claude 使用量")
+                Text(L("panel.title"))
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()
                 if state.mode == .floating {
-                    IconButton(systemName: "xmark.circle.fill", help: "メニューバーへ戻す") {
+                    IconButton(systemName: "xmark.circle.fill", help: L("panel.backToMenuBar")) {
                         actions.backToMenuBar()
                     }
                 }
@@ -237,17 +208,17 @@ struct UsagePanelView: View {
                 .padding(.bottom, 12)
             }
 
-            UsageGaugeView(title: "現在のセッション", window: state.usage?.session, baseTint: baseTint)
+            UsageGaugeView(title: L("panel.currentSession"), window: state.usage?.session, baseTint: baseTint)
 
             Hairline().padding(.vertical, 12)
 
-            Text("週間制限")
+            Text(L("panel.weeklyLimit"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 8)
 
             VStack(alignment: .leading, spacing: 12) {
-                UsageGaugeView(title: "すべてのモデル", window: state.usage?.weeklyAll, baseTint: baseTint)
+                UsageGaugeView(title: L("panel.allModels"), window: state.usage?.weeklyAll, baseTint: baseTint)
                 UsageGaugeView(title: state.fableLabel, window: state.usage?.weeklyFable, baseTint: baseTint)
 
                 if let extra = state.usage?.extra, extra.isEnabled {
@@ -262,16 +233,16 @@ struct UsagePanelView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                 Spacer()
-                IconButton(systemName: "arrow.clockwise", help: "今すぐ更新") { actions.refresh() }
-                IconButton(systemName: "gearshape.fill", help: "設定") { actions.settings() }
+                IconButton(systemName: "arrow.clockwise", help: L("panel.refreshNow")) { actions.refresh() }
+                IconButton(systemName: "gearshape.fill", help: L("panel.settings")) { actions.settings() }
                 IconButton(
                     systemName: "pin",
-                    help: state.mode == .floating ? "メニューバー直下に戻す" : "オーバーレイモード（常に手前に表示）",
+                    help: state.mode == .floating ? L("panel.backBelowMenuBar") : L("panel.overlayMode"),
                     activeState: state.mode == .floating,
                     activeTint: baseTint
                 ) { actions.toOverlay() }
                 IconButton(
-                    help: state.bubbleActive ? "バブルを非表示" : "浮遊モード（バブル）",
+                    help: state.bubbleActive ? L("panel.hideBubble") : L("panel.floatingMode"),
                     activeState: state.bubbleActive,
                     activeTint: baseTint,
                     icon: BubbleSparkleIcon()
@@ -286,10 +257,10 @@ struct UsagePanelView: View {
     }
 
     private var updatedText: String {
-        guard let date = state.lastUpdated else { return "未取得" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "H:mm 更新"
-        return formatter.string(from: date)
+        guard let date = state.lastUpdated else { return L("panel.notFetched") }
+        // 時刻はロケール準拠（日本語 "15:45"／英語(US) "3:45 PM"）にし、
+        // 「更新」の語順は .strings 側で決める（英語は "Updated 3:45 PM"）
+        return L("panel.updatedAt", UsageGaugeView.resetText(date))
     }
 }
 
@@ -302,11 +273,11 @@ struct LoginSetupTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("アカウント連携", systemImage: "person.crop.circle.badge.checkmark")
+            Label(L("login.title"), systemImage: "person.crop.circle.badge.checkmark")
                 .font(.caption.weight(.semibold))
             Text(cliInstalled
-                ? "Claude Codeの公式ログインで連携します。パスワードがこのアプリを経由することはありません"
-                : "連携にはClaude Codeが必要です（未検出）。①でインストールしてから②でログインしてください")
+                ? L("login.description")
+                : L("login.needsClaudeCode"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -315,7 +286,7 @@ struct LoginSetupTile: View {
                     LoginHelper.copyInstallCommand()
                     copied = true
                 } label: {
-                    Label(copied ? "コピーしました — ターミナルで実行してください" : "① インストールコマンドをコピー",
+                    Label(copied ? L("login.copied") : L("login.copyInstall"),
                           systemImage: copied ? "checkmark" : "doc.on.doc")
                         .font(.caption.weight(.semibold))
                 }
@@ -325,7 +296,7 @@ struct LoginSetupTile: View {
             Button {
                 actions.login()
             } label: {
-                Label(cliInstalled ? "Claude Codeにログイン" : "② Claude Codeにログイン", systemImage: "terminal")
+                Label(cliInstalled ? L("login.signIn") : L("login.signInStep"), systemImage: "terminal")
                     .font(.caption.weight(.semibold))
             }
             .buttonStyle(.borderless)
@@ -348,7 +319,7 @@ struct ExtraUsageRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("追加利用")
+            Text(L("panel.extraUsage"))
                 .font(.system(size: 12))
             Spacer()
             Text(amountText)
@@ -468,6 +439,85 @@ struct HoverPressIconStyle: ButtonStyle {
     }
 }
 
+/// バブルの可読性スタイル。ライト/ダークで**別々の値**を持つ（1箇所に集約）。
+///
+/// 前提: ガラスは素通しなので、文字の背後には「アプリの外観と無関係な」
+/// 画面内容が来る（ライトモードでも黒いエディタの上に浮くことがある）。
+/// 文字色は外観に従う(.primary)ため、反対色のハロー+下地で
+/// どんな背景でも読めるようにする。外観ごとに強さを変えられる
+struct BubbleStyle {
+    /// 文字色。外観によらず白（コントロールセンターと同じ白抜き）。
+    /// 外観に従う黒文字+白ハロー方式はライトモードで中心を白く濁らせ、
+    /// 黒背景では沈むという二重の不利があった
+    var textColor: Color
+    /// 文字の縁取り色（常に暗色。白文字を明るい背景でも成立させる）
+    var haloColor: Color
+    /// 縁取り3層の不透明度（細い縁 / 中間 / 広いにじみ）
+    var haloOpacities: (tight: Double, mid: Double, wide: Double)
+    /// 文字直下の下地（ぼかした小さな円）。全面の暗幕に加えて局所的に効かせる
+    /// （全面だけで4.5:1を狙うと球が不透明な円盤になるため、局所で稼ぐ）
+    var padColor: Color
+    var padOpacity: Double
+    /// 控えめな文字（リセット時刻・キャプション）の不透明度
+    var secondaryTextOpacity: Double
+    /// ロゴ（Claudeスパーク）の待機色。白文字より一段引いた明るいグレー
+    /// （消費中はClaudeオレンジで、これは外観によらず共通）
+    var logoIdleColor: Color
+
+    static func resolve(_ scheme: ColorScheme) -> BubbleStyle {
+        switch scheme {
+        case .dark:
+            // ダークモードは球も背景も暗いので白文字。
+            // ライトモードの黒文字と対で、外観に素直に従う
+            return BubbleStyle(
+                textColor: .white,
+                haloColor: .black,
+                haloOpacities: (0, 0, 0),
+                padColor: .black,
+                padOpacity: 0.55,
+                secondaryTextOpacity: 0.85,
+                logoIdleColor: Color(white: 0.78)
+            )
+        default:
+            // ライトモードでも白文字。明るい背景では暗い縁取りと下地で成立させる
+            return BubbleStyle(
+                textColor: Color(white: 0.12),
+                haloColor: .white,
+                haloOpacities: (0, 0, 0),
+                padColor: .white,
+                padOpacity: 0.55,
+                secondaryTextOpacity: 0.75,
+                logoIdleColor: Color(white: 0.62)
+            )
+        }
+    }
+}
+
+/// 素通しの膜の上でも文字が読めるようにする縁取りハロー（BubbleStyleに従う）。
+/// 細い縁取り+中間+広いにじみの3層で、反対色の背景上でも字幕のように浮かせる
+struct BubbleTextHalo: ViewModifier {
+    var colorScheme: ColorScheme
+
+    func body(content: Content) -> some View {
+        let style = BubbleStyle.resolve(colorScheme)
+        return content
+            .shadow(color: style.haloColor.opacity(style.haloOpacities.tight), radius: 0.8)
+            .shadow(color: style.haloColor.opacity(style.haloOpacities.mid), radius: 2)
+            .shadow(color: style.haloColor.opacity(style.haloOpacities.wide), radius: 4.5)
+    }
+}
+
+extension Color {
+    /// 使用量リングの終端色。バー内で色が転ばないよう、ごく僅かに締めるだけ
+    /// （以前は彩度1.3倍・明度0.8倍で、青→紫のように色相が動いて見えていた）
+    var ringDeepened: Color {
+        guard let ns = NSColor(self).usingColorSpace(.sRGB) else { return self }
+        var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        ns.getHue(&h, saturation: &sat, brightness: &b, alpha: &a)
+        return Color(hue: h, saturation: min(1, sat * 1.06), brightness: b * 0.95, opacity: a)
+    }
+}
+
 // MARK: - バブル（浮遊モード）
 
 struct BubbleView: View {
@@ -476,11 +526,6 @@ struct BubbleView: View {
     var actions: PanelActions
     @Environment(\.colorScheme) private var colorScheme
 
-    /// 中央の下地色。ダークモードでは黒ベースで一段暗くする
-    private var hazeCore: Color {
-        colorScheme == .dark ? .black : Color(nsColor: .windowBackgroundColor)
-    }
-    private var hazeCoreOpacity: Double { colorScheme == .dark ? 0.38 : 0.25 }
 
     private var usageWindow: UsageWindow? { state.usage?.window(for: settings.bubbleMetric) }
     private var value: Double { usageWindow?.utilization ?? 0 }
@@ -492,7 +537,7 @@ struct BubbleView: View {
     private var metricCaption: String? {
         switch settings.bubbleMetric {
         case .session: return nil
-        case .weekly: return "週間"
+        case .weekly: return L("panel.weekly")
         case .fable: return state.fableLabel
         }
     }
@@ -503,129 +548,89 @@ struct BubbleView: View {
         return settings.useSystemAccent ? Color(nsColor: .controlAccentColor) : .claudeOrange
     }
 
-    /// 使用量に応じて風船のように膨らむ（10%ごとに+2%、100%で1.2倍）
+    /// 使用量に応じて風船のように膨らむ（10%ごとに+1%、100%で1.1倍）
     private var sizeFactor: CGFloat {
         PanelController.bubbleScaleFactor(for: value)
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            ZStack {
-                // ヘイズ: 中心にも薄い乳白を敷いて文字の下地を安定させる
-                // （どんな背景でも%が読める。縁に向かってCC風の曇りへ繋がる）
-                Circle()
-                    .fill(EllipticalGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: hazeCore.opacity(hazeCoreOpacity), location: 0),
-                            .init(color: hazeCore.opacity(hazeCoreOpacity - 0.03), location: 0.4),
-                            .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.06), location: 0.65),
-                            .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.4), location: 0.88),
-                            .init(color: Color(nsColor: .windowBackgroundColor).opacity(0.5), location: 1),
-                        ]),
-                        center: .center,
-                        startRadiusFraction: 0, endRadiusFraction: 0.5
-                    ))
-                    .blur(radius: 2)
-                // 球面の照り（左上光源）— 抑えめにしてガラスの透明感を残す
-                Circle()
-                    .fill(RadialGradient(
-                        colors: [.white.opacity(0.15), .white.opacity(0.04), .clear],
-                        center: UnitPoint(x: 0.32, y: 0.28),
-                        startRadius: 2, endRadius: 46 * sizeFactor
-                    ))
-                // 上縁の深度シェーディング — 球の丸みを出す暗がり
-                Circle()
-                    .trim(from: 0.5, to: 1.0)
-                    .stroke(Color.black.opacity(0.15), style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                    .blur(radius: 5)
-                // 底に溜まる透過光（コースティクス）— ガラス玉が光を集める表現
-                Circle()
-                    .trim(from: 0.1, to: 0.4)
-                    .stroke(Color.white.opacity(0.6), style: StrokeStyle(lineWidth: 9, lineCap: .round))
-                    .blur(radius: 5)
-                Circle()
-                    .fill(RadialGradient(
-                        colors: [.white.opacity(0.35), .clear],
-                        center: UnitPoint(x: 0.5, y: 0.9),
-                        startRadius: 1, endRadius: 26 * sizeFactor
-                    ))
-                // 使用量リング。溝は描かず進捗アークだけを見せる
-                Circle()
-                    .trim(from: 0, to: max(0.003, min(value, 100) / 100))
-                    .stroke(
-                        LinearGradient(
-                            colors: [tint.opacity(0.55), tint],
-                            startPoint: .leading, endPoint: .trailing
-                        ),
-                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .padding(4)
+        ZStack {
+            // ガラス（Liquid Glass）に透過と屈折を全て任せる。
+            // 上に敷く膜・照り・コースティクスは、ガラスが透かした像を
+            // 塗り潰してしまうため全廃した（曇って見えた原因）
+            BubbleDepthUnderlay(s: sizeFactor)
+            // 使用量リング。溝は描かず進捗アークだけを見せる
+            Circle()
+                .trim(from: 0, to: max(0.003, min(value, 100) / 100))
+                .stroke(
+                    // ほぼ均一。バー内で色が変わると進捗ではなく装飾に見えるため、
+                    // 立体感が出る最小限の差だけ残す
+                    LinearGradient(
+                        colors: [tint, tint.ringDeepened],
+                        startPoint: .leading, endPoint: .trailing
+                    ),
+                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .padding(4)
+            // 中身のゆらぎはCAAnimation常駐（WobbleHost）。
+            // 旧TimelineView(30fps)のbody再評価は待機中CPU約7%の主因だった
+            WobbleHost {
                 VStack(spacing: 0) {
                     // 待機中は通常色・消費中だけClaudeオレンジ（オレンジ=消費中のシグナルを守る）。
                     // 視認性は色ではなくサイズで確保（16ptで光条も太くなる）
                     ClaudeLogoView(
                         animating: state.isActive,
-                        color: state.isActive ? .claudeOrange : .primary
+                        color: state.isActive ? .claudeOrange : BubbleStyle.resolve(colorScheme).logoIdleColor
                     )
                     .frame(width: 16, height: 16)
                     Text(percentText)
                         .font(.system(size: 13))
                         .monospacedDigit()
+                        .foregroundStyle(BubbleStyle.resolve(colorScheme).textColor)
                         .contentTransition(.numericText())
                         .animation(.snappy(duration: 0.4), value: percentText)
+                        .modifier(BubbleTextHalo(colorScheme: colorScheme))
                     if let metricCaption {
                         Text(metricCaption)
                             .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(BubbleStyle.resolve(colorScheme).textColor.opacity(BubbleStyle.resolve(colorScheme).secondaryTextOpacity))
+                            .modifier(BubbleTextHalo(colorScheme: colorScheme))
                     }
-                    // リミットのリセット時刻 — 控えめだが読める階調
+                    // リミットのリセット時刻
                     if let resets = usageWindow?.resetsAt {
-                        Text("↺ \(UsageGaugeView.resetText(resets))")
+                        // バブル内は時刻だけ（↺は狭い球の中では記号が潰れて読みにくい。
+                        // ホバーHUDは複数行の一覧なので、あちらには記号を残す）
+                        Text(UsageGaugeView.resetText(resets))
                             .font(.system(size: 9))
                             .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(BubbleStyle.resolve(colorScheme).textColor.opacity(BubbleStyle.resolve(colorScheme).secondaryTextOpacity))
+                            .modifier(BubbleTextHalo(colorScheme: colorScheme))
                             .padding(.top, 1)
                     }
                 }
-                .rotationEffect(.degrees(sin(t * 0.9) * 3))
-
-                // 主ハイライト: 大きく柔らかいブルーム + 小さく鋭いスポット（左上光源）
-                Ellipse()
-                    .fill(.white.opacity(0.55))
-                    .frame(width: 24 * sizeFactor, height: 14 * sizeFactor)
-                    .rotationEffect(.degrees(-35))
-                    .offset(x: -13 * sizeFactor, y: -17 * sizeFactor)
-                    .blur(radius: 4)
-                Circle()
-                    .fill(.white.opacity(0.95))
-                    .frame(width: 6 * sizeFactor, height: 6 * sizeFactor)
-                    .offset(x: -19 * sizeFactor, y: -13 * sizeFactor)
-                    .blur(radius: 0.6)
-                // 対向の小さなグリント
-                Circle()
-                    .fill(.white.opacity(0.28))
-                    .frame(width: 5 * sizeFactor, height: 5 * sizeFactor)
-                    .offset(x: 15 * sizeFactor, y: 19 * sizeFactor)
-                    .blur(radius: 0.8)
             }
-            .padding(3)
+
+            // 立体感と光沢は単体/3つ表示で共通のコンポーネント（BubbleDecoration.swift）。
+            // 深度層はリングと文字の下、光沢層は最前面に置く
+            BubbleGlossOverlay(s: sizeFactor)
         }
+        .padding(3)
         // フレームだけ拡大し、リングの太さ・ぼかし・中身（ロゴ/%）は固定サイズを保つ。
         // 3つ表示の BubbleSphere は装飾ごとスケールする別方針なので共通化していない
         .frame(width: 72 * sizeFactor, height: 72 * sizeFactor)
         .animation(.bouncy(duration: 0.4), value: sizeFactor)
-        // 素のLiquid Glass（.clear = 透明度の高いガラス玉。旧OSはすりガラスにフォールバック）
-        .modifier(AdaptiveBubbleGlass())
-        .modifier(BubbleRimGlow())
+        // ガラス玉は薄めに（26=Liquid Glass / 旧OS=すりガラス）。背景が透けて
+        // 水晶玉のように見えるところまで落としている
+        .modifier(SingleBubbleGlass())
+        // 縁の光と虹は BubbleGlossOverlay（フレネル+薄膜干渉）に統合済み
         .contentShape(Circle())
         .contextMenu {
-            Button("パネルに展開") { actions.expand() }
-            Button("バブルを閉じる") { actions.toBubble() }
+            Button(L("bubble.expandToPanel")) { actions.expand() }
+            Button(L("bubble.closeBubble")) { actions.toBubble() }
             Divider()
-            Button("設定…") { actions.settings() }
-            Button("終了") { actions.quit() }
+            Button(L("bubble.settingsMenu")) { actions.settings() }
+            Button(L("bubble.quit")) { actions.quit() }
         }
         .onChange(of: value) { _, newValue in
             if newValue >= 100 { actions.pop() }
@@ -635,7 +640,7 @@ struct BubbleView: View {
             try? await Task.sleep(for: .seconds(1.2))
             if value >= 100 { actions.pop() }
         }
-        .help("クリックでポヨン・3連打で破裂・ドラッグで移動・パネルはメニューバーから")
+        .help(L("bubble.helpSingle"))
     }
 }
 
