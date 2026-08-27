@@ -60,6 +60,9 @@ brew install --cask sagaway3105/tap/claudebar
 
 Either way, you're done once `–% ✳` shows up in the menu bar. Updates after that arrive through the in-app updater (Sparkle).
 
+> [!IMPORTANT]
+> **If you extracted a v1.0.0–v1.5.2 zip**: those archives shipped with stray AppleDouble (`._*`) files that can break the app's code signature depending on how you extract them. If you see “cannot verify the developer” or auto-update never finishes, see the [recovery steps in Issue #1](https://github.com/sagaway3105/claude-bar/issues/1). Zips from v1.5.3 onward are clean.
+
 ## No extra charges
 
 ClaudeBar **reads your existing Claude Code subscription credentials (OAuth token) read-only**. It never uses an API key (pay-per-token). Usage is fetched from the same read-only endpoint that Claude Code's own `/usage` uses, and it does not consume any tokens.

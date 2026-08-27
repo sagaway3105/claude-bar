@@ -28,11 +28,26 @@ echo "✅ codesign検証OK"
 
 ZIP="build/ClaudeBar-v${VERSION}.zip"
 rm -f "$ZIP"
+
+# zip内に AppleDouble（._*）が1件でもあれば即中断する。
+# ._* は展開時に署名シールを壊す直接原因（Issue #1 / v1.3.0〜v1.5.2 で実際に発生）。
+# --norsrc --noextattr の付け忘れ・ditto以外でのzip化・将来の変更をここで検知する
+assert_no_appledouble() {
+  local entries
+  entries=$(zipinfo -1 "$ZIP" | grep -E '(^|/)\._' || true)
+  if [[ -n "$entries" ]]; then
+    echo "❌ 配布zipに AppleDouble（._*）が混入しています（署名破壊の原因）:" >&2
+    echo "$entries" | head >&2
+    exit 1
+  fi
+  echo "✅ zip内 AppleDouble（._*）0件"
+}
 # ditto はシンボリックリンク（Sparkle.frameworkのVersions等）を保った macOS 標準の zip 化手段。
 # --norsrc --noextattr は必須: 付けないと拡張属性が AppleDouble（._*）として同梱され、
 # unzip で展開した人だけ「a sealed resource is missing or invalid」で署名が壊れる。
 # （Dropbox配下でビルドしていると com.dropbox.attrs が全ファイルに付くため必ず踏む）
 ditto -c -k --keepParent --norsrc --noextattr build/ClaudeBar.app "$ZIP"
+assert_no_appledouble
 
 # Developer ID署名済み かつ notary認証情報（claudebar-notary プロファイル）があれば公証する
 # ※ grep -q はpipefail下でSIGPIPE(141)になるため変数に受けてから判定する
@@ -47,6 +62,7 @@ if [[ "$SIGN_INFO" == *"Developer ID"* ]] &&
   # ステープル済みアプリでzipを作り直す
   rm -f "$ZIP"
   ditto -c -k --keepParent --norsrc --noextattr build/ClaudeBar.app "$ZIP"
+assert_no_appledouble
   # build/ のappだけ検証していると「zip化の過程で壊れる」事故を見逃すため、
   # 実際に配る zip を展開し直して確認する。ユーザーの展開方法はFinder(=ditto)と
   # unzip の両方があり得るので両方試す（片方だけ壊れるパターンが実在する）

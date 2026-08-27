@@ -32,17 +32,28 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
         reply(choice)
     }
 
+    /// 裏で準備完了（install on quit 待ち）になった更新を今すぐ適用するか確認する。
+    /// UpdaterService の willInstallUpdateOnQuit デリゲートから呼ばれる。
+    /// 常駐アプリは「終了時にインストール」の機会が事実上訪れないため、ここで一度だけ聞く。
+    func confirmImmediateInstall(version: String?) -> Bool {
+        let url = version.flatMap { URL(string: "https://github.com/sagaway3105/claude-bar/releases/tag/v\($0)") }
+            ?? URL(string: "https://github.com/sagaway3105/claude-bar/releases")
+        let accepted = runUpdateAlert(detailsURL: url) == .install
+        if accepted { userAcceptedUpdate = true }
+        return accepted
+    }
+
     /// アプリアイコン＋メッセージ＋2択だけの確認ダイアログ。
     /// 詳細を知りたい人向けにリリースページへのテキストリンクだけ添える
     private func runUpdateAlert(detailsURL: URL?) -> SPUUserUpdateChoice {
         let alert = NSAlert()
         if let icon = Self.appIcon { alert.icon = icon }
-        alert.messageText = "新しいバージョンのClaudeBarがご利用できます！"
+        alert.messageText = L("update.available")
         if let detailsURL {
             alert.accessoryView = Self.makeDetailsLink(to: detailsURL)
         }
-        alert.addButton(withTitle: "インストールして再起動")
-        alert.addButton(withTitle: "後にする")
+        alert.addButton(withTitle: L("update.installAndRelaunch"))
+        alert.addButton(withTitle: L("update.later"))
         NSApp.activate(ignoringOtherApps: true)
         return alert.runModal() == .alertFirstButtonReturn ? .install : .dismiss
     }
@@ -59,7 +70,7 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
     /// 「詳しいアップデート内容を見る」リンク（クリックでブラウザが開く。ダイアログは開いたまま）
     private static func makeDetailsLink(to url: URL) -> NSView {
         let text = NSAttributedString(
-            string: "詳しいアップデート内容を見る",
+            string: L("update.releaseNotes"),
             attributes: [
                 .link: url,
                 .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
@@ -81,8 +92,8 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
         if userInitiated {
             let alert = NSAlert()
             if let icon = Self.appIcon { alert.icon = icon }
-            alert.messageText = "最新バージョンです"
-            alert.informativeText = "アップデートはありません。"
+            alert.messageText = L("update.upToDateTitle")
+            alert.informativeText = L("update.upToDateBody")
             alert.addButton(withTitle: "OK")
             alert.runModal()
         }
@@ -96,8 +107,8 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
             if let icon = Self.appIcon { alert.icon = icon }
             alert.alertStyle = .warning
             alert.messageText = userAcceptedUpdate
-                ? "アップデートをインストールできませんでした"
-                : "アップデートを確認できませんでした"
+                ? L("update.installFailed")
+                : L("update.checkFailed")
             alert.informativeText = error.localizedDescription
             alert.addButton(withTitle: "OK")
             alert.runModal()
@@ -122,7 +133,16 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
     func showDownloadDidReceiveData(ofLength length: UInt64) {}
     func showDownloadDidStartExtractingUpdate() {}
     func showExtractionReceivedProgress(_ progress: Double) {}
-    func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {}
+    /// インストーラがアプリの終了を待っている段階。
+    /// メニューバー常駐アプリはユーザーが自発的に終了しないため、終了要求が
+    /// （モーダル表示中などで）取りこぼされると Autoupdate が無期限に待ち続ける（Issue #1）。
+    /// 未終了なら数回リトライして確実に終了へ導く（Sparkle 2.3+ は複数回呼び出し可）。
+    func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {
+        guard !applicationTerminated else { return }
+        for delay: TimeInterval in [2, 6, 15] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: retryTerminatingApplication)
+        }
+    }
 
     func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) {
         acknowledgement()

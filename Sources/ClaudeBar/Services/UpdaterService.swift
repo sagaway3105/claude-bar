@@ -32,13 +32,13 @@ final class UpdaterService: NSObject {
         guard Bundle.main.bundleURL.pathExtension == "app" else { return }
         // 標準UI（リリースノート付きウィンドウ）ではなく自前の最小ダイアログを使う
         let driver = SimpleUpdateDriver()
-        let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: nil)
+        let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: self)
         do {
             try updater.start()
             self.driver = driver
             self.updater = updater
         } catch {
-            NSLog("Sparkleを開始できませんでした: \(error.localizedDescription)")
+            NSLog(L("update.sparkleFailed", error.localizedDescription))
         }
     }
 
@@ -50,5 +50,23 @@ final class UpdaterService: NSObject {
     /// 定期チェックと同じサイレント確認（自動ダウンロード→「再起動して適用」の流れに乗る）
     func checkForUpdatesInBackground() {
         updater?.checkForUpdatesInBackground()
+    }
+}
+
+extension UpdaterService: SPUUpdaterDelegate {
+    /// 自動ダウンロードで更新がステージ済みになり「アプリ終了時にインストール」待ちに入った時。
+    ///
+    /// メニューバー常駐アプリはユーザーが自発的に終了しないため、放置すると
+    /// Autoupdate プロセスが何日も待ち続け、その間に macOS が更新キャッシュを
+    /// 掃除して壊れた状態になることがある（Issue #1 で3日間滞留を確認）。
+    /// ここで最小ダイアログを一度だけ出し、承諾されたら即インストール＋再起動する。
+    /// 見送られたら NO を返して Sparkle のスケジューラに任せる（終了時インストールは維持され、
+    /// 一定期間後に再提示される）。
+    func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
+        guard let driver, driver.confirmImmediateInstall(version: item.displayVersionString) else {
+            return false
+        }
+        immediateInstallHandler()
+        return true
     }
 }

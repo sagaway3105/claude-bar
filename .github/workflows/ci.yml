@@ -37,3 +37,31 @@ jobs:
 
       - name: 生成した .app の署名を検証
         run: codesign --verify --deep --strict build/ClaudeBar.app
+
+      # ───────────────────────────────────────────────────────────
+      # 配布zipの健全性ガード（Issue #1: v1.3.0〜v1.5.2 で AppleDouble 混入 →
+      # 展開時に署名シールが壊れ「開発元を検証できない」事故が発生した再発防止）
+      - name: 配布zipに AppleDouble（._*）が混入しないか
+        run: |
+          ditto -c -k --keepParent --norsrc --noextattr build/ClaudeBar.app build/ClaudeBar-ci.zip
+          ENTRIES=$(zipinfo -1 build/ClaudeBar-ci.zip | grep -E '(^|/)\._' || true)
+          if [ -n "$ENTRIES" ]; then
+            echo "❌ AppleDouble（._*）が混入（展開時に署名が壊れます）:"
+            echo "$ENTRIES" | head
+            exit 1
+          fi
+          echo "✅ ._ エントリ 0 件"
+
+      - name: zip展開後も署名が有効か（ditto / unzip 両系統）
+        # Finder/アーカイブユーティリティは ditto と同じ Bomb 系展開のため ditto で代表させる
+        run: |
+          for TOOL in ditto unzip; do
+            WORK=$(mktemp -d)
+            case "$TOOL" in
+              ditto) ditto -x -k build/ClaudeBar-ci.zip "$WORK" ;;
+              unzip) unzip -qq build/ClaudeBar-ci.zip -d "$WORK" ;;
+            esac
+            codesign --verify --deep --strict "$WORK/ClaudeBar.app"
+            rm -rf "$WORK"
+            echo "✅ ${TOOL} 展開後の署名OK"
+          done
