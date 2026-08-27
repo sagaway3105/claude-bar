@@ -88,9 +88,6 @@ struct TripleBubbleView: View {
             settings: settings,
             isPrimary: slot == .session
         )
-        // 材質は単体バブルと同一の .regular。かつての .clear（AdaptiveBubbleGlass）は
-        // 適応能力を持たず明るい背景で消えるため、単体に揃えた
-        .modifier(TripleBubbleGlass())
         .scaleEffect(cluster.bounceScales[slot.index])
         // 割れた球は上の if で丸ごと外れるので、ここに opacity/scale の
         // 破裂演出は置かない（ガラスへの .opacity() は屈折を殺すので厳禁）
@@ -104,42 +101,32 @@ struct TripleBubbleView: View {
 /// 背景の円ではなく content 自身へ適用する — GlassEffectContainer 配下では
 /// `.background` に置いたガラスが中身より前面へ持ち上がって内容を隠すため。
 struct TripleBubbleGlass: ViewModifier {
+    /// 使用量リングの進捗（0-1）。マスクが弧の真下だけ磨りを復元するのに使う
+    var ringFraction: Double = 0
+
     func body(content: Content) -> some View {
+        // コンテナ配下ではガラスを content 形式で掛けるしかないため、マスクは
+        // リング・文字・装飾ごと掛かる。BubbleClarityMask は文字コラムとリング帯を
+        // 保護する設計なので、実際に薄まるのはクリアパッチの場所だけ
+        // （パッチ位置の薄膜が少し暗くなるのは実物の膜ムラと同じで許容）。
+        // なおリングを兄弟レイヤーへ出す案は不可 — コンテナがガラスを兄弟より
+        // 前面へ集約するため、リングが磨りガラス越しのボケた塊になる（2026-08-27実測）
         if #available(macOS 26.0, *), !forceLegacyUI {
             content.glassEffect(.regular, in: Circle())
+                .mask(BubbleClarityMask(ringFraction: ringFraction))
         } else {
-            content.background(Circle().fill(.ultraThinMaterial).opacity(0.72))
+            content.background(
+                Circle().fill(.ultraThinMaterial).opacity(0.72)
+                    .mask(BubbleClarityMask(ringFraction: ringFraction))
+            )
         }
     }
 }
 
-/// 単体バブル（BubbleView）と同じレイヤー構成のガラス玉。中身だけ差し替えて使う。
-/// 基準径72ptを1とするスケール s で、装飾も余白も一律に拡縮する
-/// ＝「単体バブルを別の大きさで描いたもの」になる。
-///
-/// ガラス（TripleBubbleGlass）はこのビューの外側で敷く。装飾の .screen /
-/// .plusLighter がガラスと背景に対して加算で効くのは、ガラスが同じ合成文脈の
-/// 背後にいるときだけなので、drawingGroup で焼いてはいけない（加算が箱の中で
-/// 閉じてしまい、光ではなく白い膜として乗る）。
-struct BubbleSphere<Content: View>: View {
-    var diameter: CGFloat
-    @ViewBuilder var content: () -> Content
-
-    /// 基準径（単体バブルと同じ72pt）を1としたスケール
-    private var s: CGFloat { diameter / 72 }
-
-    var body: some View {
-        ZStack {
-            BubbleDepthUnderlay(s: s)
-            content()
-            BubbleGlossOverlay(s: s)
-        }
-        .padding(3 * s)
-        .frame(width: diameter, height: diameter)
-    }
-}
-
-/// 球の中身。ガラス玉の内側に見える情報（使用量リング・ロゴ・%・キャプション）
+/// 球1つぶんの見た目。単体バブル（BubbleView）と同じレイヤー構成を
+/// 基準径72pt=1のスケール s で一律に拡縮する（＝単体を別の大きさで描いたもの）。
+/// 装飾の .screen / .plusLighter はガラスが同じ合成文脈の背後にいるときだけ
+/// 加算で効くので、drawingGroup で焼いてはいけない（光ではなく白い膜になる）
 struct BubbleFace: View {
     var slot: TripleBubbleCluster.Slot
     var diameter: CGFloat
@@ -165,19 +152,14 @@ struct BubbleFace: View {
     }
 
     var body: some View {
-        BubbleSphere(diameter: diameter) {
+        // 単体バブル（BubbleView）と同じ層構成:
+        //   ガラス(クリア化マスク付き) → 拡散照明 → 文字 → 光沢/虹 → リング
+        // ただし GlassEffectContainer 配下では文字をガラスと同じ部分木に置く必要が
+        // ある（コンテナはガラスを非ガラスの兄弟より前面へ集約するため）ので、
+        // 「照明+文字」にガラスを掛け、光沢とリングは兄弟レイヤーとして上に重ねる
+        ZStack {
             ZStack {
-                // 使用量リング。単体バブル（72ptで線幅4・余白4）と同じ比率でスケールする
-                Circle()
-                    .trim(from: 0, to: max(0.003, min(value, 100) / 100))
-                    .stroke(
-                        LinearGradient(colors: [tint, tint.ringDeepened],
-                                       startPoint: .leading, endPoint: .trailing),
-                        style: StrokeStyle(lineWidth: 4 * s, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .padding(4 * s)
-
+                BubbleDepthUnderlay(s: s)
                 WobbleHost(
                     // 球ごとに振れ幅・周期・開始位相の全てをずらして
                     // 「それぞれが独立に生きている」ゆらぎにする
@@ -210,7 +192,27 @@ struct BubbleFace: View {
                             .modifier(BubbleTextHalo(colorScheme: colorScheme))
                     }
                 }
+                // 光沢・虹は必ずガラスと同じ部分木に置く（.screen加算はガラスが
+                // 同じ合成文脈の背後にいる時だけ光として効く。兄弟に出すと
+                // コンテナがガラスを引き剥がし、透明背景に対してフル彩度で乗る）
+                BubbleGlossOverlay(s: s)
+
+                // 使用量リング。単体バブル（72ptで線幅4・余白4）と同じ比率。
+                // 虹より前面に置き、ゲージの色が虹に染まらないようにする。
+                // 兄弟レイヤーには出せない（上記コンテナ制約でボケるため部分木内の最前面）
+                Circle()
+                    .trim(from: 0, to: max(0.003, min(value, 100) / 100))
+                    .stroke(
+                        LinearGradient(colors: [tint, tint.ringDeepened],
+                                       startPoint: .leading, endPoint: .trailing),
+                        style: StrokeStyle(lineWidth: 4 * s, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .padding(4 * s)
             }
+            .padding(3 * s)
+            .frame(width: diameter, height: diameter)
+            .modifier(TripleBubbleGlass(ringFraction: min(value, 100) / 100))
         }
     }
 }

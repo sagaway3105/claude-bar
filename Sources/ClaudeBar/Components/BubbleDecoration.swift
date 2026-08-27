@@ -43,15 +43,95 @@ private func fresnelStops(peak: Double) -> [Gradient.Stop] {
 /// 72ptの球では知覚できないため、干渉が見える帯として意図的に広げている
 /// （実物のシャボン玉も縁から内側へかけて虹が滲んで見える）
 private func filmBandStops(peak: Double) -> [Gradient.Stop] {
+    // 2026-08-27: 帯を内側へ広げ、中間の濃度も引き上げ（虹をもう少し見せる要望）
     [
         .init(color: .white.opacity(0), location: 0.00),
-        .init(color: .white.opacity(0.04 * peak), location: 0.55),
-        .init(color: .white.opacity(0.22 * peak), location: 0.74),
-        .init(color: .white.opacity(0.55 * peak), location: 0.86),
-        .init(color: .white.opacity(0.90 * peak), location: 0.94),
+        .init(color: .white.opacity(0.06 * peak), location: 0.48),
+        .init(color: .white.opacity(0.28 * peak), location: 0.68),
+        .init(color: .white.opacity(0.62 * peak), location: 0.82),
+        .init(color: .white.opacity(0.94 * peak), location: 0.92),
         .init(color: .white.opacity(1.00 * peak), location: 0.985),
-        .init(color: .white.opacity(0.75 * peak), location: 1.00),
+        .init(color: .white.opacity(0.80 * peak), location: 1.00),
     ]
+}
+
+/// ガラスの局所クリア化マスク（alpha=ガラスの残存率）。
+/// 磨りのコアを「重なり合う複数のぼけた楕円＝雲」で作り、境界が真円に
+/// ならないようにする（綺麗な同心円はシールっぽく見えるという指摘への対応）。
+/// クリアパッチが外周寄りをさらに素通しにし、実物の膜ムラのような表情を出す。
+/// 3つ表示ではこのマスクがリングにも掛かるため、実際に描かれている弧の
+/// 真下だけを ringFraction で保護する（円環全体を保護すると円形の痕跡が残る）
+struct BubbleClarityMask: View {
+    /// 使用量リングの進捗（0-1）。弧の下だけ磨りを復元する。単体バブルは
+    /// リングがマスクの外にあるので 0 のままでよい
+    var ringFraction: Double = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            let d = min(geo.size.width, geo.size.height)
+            ZStack {
+                // ごく薄い全体のベール（完全な素通しは球として消えるため）。
+                // あくまでシャボン玉: 透明が主役で、磨りは膜のムラ程度に留める
+                Color.white.opacity(0.18)
+                // 磨りの雲: 大きさ・角度・中心をずらした楕円の重なり。
+                // 文字コラム（中央の縦帯）は複数枚が必ず覆う配置にする
+                frostCloud(w: 0.50, h: 0.62, x: 0.50, y: 0.47, angle: 8, opacity: 0.95, d: d)
+                frostCloud(w: 0.42, h: 0.30, x: 0.42, y: 0.62, angle: -16, opacity: 0.78, d: d)
+                frostCloud(w: 0.36, h: 0.26, x: 0.62, y: 0.41, angle: 24, opacity: 0.70, d: d)
+                frostCloud(w: 0.28, h: 0.20, x: 0.46, y: 0.29, angle: -8, opacity: 0.64, d: d)
+                // クリアパッチ: 外周寄りのアルファを削って「ところどころ素通し」に
+                clearPatch(w: 0.40, h: 0.24, x: 0.24, y: 0.70, angle: -22, strength: 0.90, d: d)
+                clearPatch(w: 0.34, h: 0.22, x: 0.80, y: 0.36, angle: 30, strength: 0.85, d: d)
+                clearPatch(w: 0.28, h: 0.18, x: 0.74, y: 0.76, angle: -38, strength: 0.78, d: d)
+                // 縁の帯: 薄膜・フレネルの土台。最外周の円形は縁の光と同化するので許容
+                Circle()
+                    .fill(RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .clear, location: 0.84),
+                            .init(color: .white.opacity(0.75), location: 0.92),
+                            .init(color: .white.opacity(0.85), location: 1.0),
+                        ]),
+                        center: .center, startRadius: 0, endRadius: d / 2
+                    ))
+                // リング保護（3つ表示用）: 描かれている弧の真下だけ磨りを復元。
+                // 弧の外には何も描かないので円形の痕跡は出ない
+                if ringFraction > 0 {
+                    Circle()
+                        .trim(from: 0, to: max(0.003, ringFraction))
+                        .stroke(.white, style: StrokeStyle(lineWidth: 0.10 * d, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .padding(0.093 * d)
+                }
+            }
+            // マスクは静的な形なので1枚のテクスチャに焼く。ライブのblurツリーの
+            // ままだと、ガラスの再描画（漂いで背景が毎フレーム変わる）のたびに
+            // 7枚のぼかし楕円を再合成してGPUを食う（実測で単体0.62→焼き後は下記参照）
+            .drawingGroup()
+        }
+    }
+
+    /// 磨りの雲1枚（白を足す）
+    private func frostCloud(w: CGFloat, h: CGFloat, x: CGFloat, y: CGFloat,
+                            angle: Double, opacity: Double, d: CGFloat) -> some View {
+        Ellipse()
+            .fill(Color.white.opacity(opacity))
+            .frame(width: w * d, height: h * d)
+            .rotationEffect(.degrees(angle))
+            .blur(radius: 0.06 * d)
+            .position(x: x * d, y: y * d)
+    }
+
+    /// クリアパッチ1枚。destinationOutでアルファを削る（strength=素通し度）
+    private func clearPatch(w: CGFloat, h: CGFloat, x: CGFloat, y: CGFloat,
+                            angle: Double, strength: Double, d: CGFloat) -> some View {
+        Ellipse()
+            .fill(Color.white.opacity(strength))
+            .frame(width: w * d, height: h * d)
+            .rotationEffect(.degrees(angle))
+            .blur(radius: 0.07 * d)
+            .position(x: x * d, y: y * d)
+            .blendMode(.destinationOut)
+    }
 }
 
 /// 薄膜干渉の色。膜厚250→560nm（1オーダー分）を上→下に並べる。
@@ -67,12 +147,36 @@ private let filmStops: [Gradient.Stop] = [
     .init(color: Color(red: 0.99, green: 0.60, blue: 0.71), location: 1.000), // 560nm ピンク
 ]
 
+/// 白背景での視認性検証用（暫定A/B）: CLAUDEBAR_EDGE=hairline|limb|shadow|combo
+/// 既存の装飾は全て加算合成（screen/plusLighter）のため白背景では原理的に見えない。
+/// ここだけは「暗くする」要素なので通常合成で描く
+enum BubbleEdgeVariant {
+    static let value = ProcessInfo.processInfo.environment["CLAUDEBAR_EDGE"] ?? "off"
+    static var hairline: Bool { value == "hairline" || value == "combo" }
+    static var limb: Bool { value == "limb" }
+    static var shadow: Bool { value == "shadow" || value == "combo" }
+}
+
 /// contentの下に敷く層: 球全体の拡散照明（加算）
 struct BubbleDepthUnderlay: View {
     /// 基準72ptに対するスケール
     var s: CGFloat
 
     var body: some View {
+        // 白背景で球が消えないための落ち影（検証中）。本体シルエットをくり抜き、
+        // 輪郭の外（主に下側）にだけ柔らかく見える。黒背景では自然に消える
+        if BubbleEdgeVariant.shadow {
+            Circle()
+                .fill(Color.black.opacity(BubbleEdgeVariant.value == "combo" ? 0.14 : 0.20))
+                .blur(radius: 4 * s)
+                .offset(y: 2.5 * s)
+                .mask {
+                    Rectangle()
+                        .padding(-30 * s)
+                        .overlay(Circle().blendMode(.destinationOut))
+                        .compositingGroup()
+                }
+        }
         // 空からの広い淡い照明。加算なので背景の模様は残ったまま明るくなる
         Circle()
             .fill(RadialGradient(
@@ -85,6 +189,21 @@ struct BubbleDepthUnderlay: View {
                 center: UnitPoint(x: 0.33, y: 0.28),
                 startRadius: 0, endRadius: 46 * s
             ))
+            .blendMode(.screen)
+            .opacity(BubbleDecorationStrength.value)
+        // 文字コラムの白パッド: 中央をもう一段白くして可読性と磨り感を上げる
+        // （2026-08-27要望。加算なので背景の模様は透けたまま）
+        Ellipse()
+            .fill(RadialGradient(
+                gradient: Gradient(stops: [
+                    .init(color: .white.opacity(0.13), location: 0),
+                    .init(color: .white.opacity(0.08), location: 0.6),
+                    .init(color: .clear, location: 1),
+                ]),
+                center: .center, startRadius: 0, endRadius: 24 * s
+            ))
+            .frame(width: 44 * s, height: 58 * s)
+            .position(x: 36 * s, y: 36 * s)
             .blendMode(.screen)
             .opacity(BubbleDecorationStrength.value)
     }
@@ -165,6 +284,30 @@ struct BubbleGlossOverlay: View {
                 .position(x: 47 * s, y: 49 * s)
                 .blur(radius: 1.6 * s)
                 .blendMode(.screen)
+
+            // ── 縁の減光帯（検証中）: 実物の膜は縁で透過率が落ちる（フレネル反射の裏返し）。
+            //    加算の装飾が効かない白背景でも輪郭がうっすら灰色に立つ。通常合成
+            if BubbleEdgeVariant.limb {
+                Circle()
+                    .fill(RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .clear, location: 0.82),
+                            .init(color: .black.opacity(0.05), location: 0.92),
+                            .init(color: .black.opacity(0.13), location: 1.0),
+                        ]),
+                        center: .center, startRadius: 0, endRadius: 36 * s
+                    ))
+            }
+
+            // ── 極細の暗い輪郭線（検証中）: 白背景での視認性担保。
+            //    黒背景では暗線が沈んで自然に見えなくなるため外観検出は不要。通常合成
+            if BubbleEdgeVariant.hairline {
+                Circle()
+                    .strokeBorder(
+                        Color.black.opacity(BubbleEdgeVariant.value == "combo" ? 0.12 : 0.18),
+                        lineWidth: 0.75
+                    )
+            }
         }
         .frame(width: 72 * s, height: 72 * s)
         .opacity(BubbleDecorationStrength.value)

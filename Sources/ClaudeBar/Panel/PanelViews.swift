@@ -114,12 +114,15 @@ struct SingleBubbleGlass: ViewModifier {
                         // 球体表現は白い光のみで作る
                         Circle().fill(.clear)
                             .glassEffect(.regular, in: Circle())
+                            // 文字のない外周ほどガラスを素通しに（中央の磨りは可読性用に残す）
+                            .mask(BubbleClarityMask())
                     }
                 }
             } else {
                 // 旧OS: Liquid Glassが無いのですりガラス（Material）で代替
                 Circle().fill(.ultraThinMaterial)
                     .opacity(0.72)
+                    .mask(BubbleClarityMask())
             }
         }
     }
@@ -558,21 +561,10 @@ struct BubbleView: View {
             // ガラス（Liquid Glass）に透過と屈折を全て任せる。
             // 上に敷く膜・照り・コースティクスは、ガラスが透かした像を
             // 塗り潰してしまうため全廃した（曇って見えた原因）
+            // 拡散照明にもクリア化マスクを掛ける（3つ表示はガラス部分木ごと
+            // マスクされるので、掛けないと単体だけパッチが白く濁って揃わない）
             BubbleDepthUnderlay(s: sizeFactor)
-            // 使用量リング。溝は描かず進捗アークだけを見せる
-            Circle()
-                .trim(from: 0, to: max(0.003, min(value, 100) / 100))
-                .stroke(
-                    // ほぼ均一。バー内で色が変わると進捗ではなく装飾に見えるため、
-                    // 立体感が出る最小限の差だけ残す
-                    LinearGradient(
-                        colors: [tint, tint.ringDeepened],
-                        startPoint: .leading, endPoint: .trailing
-                    ),
-                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .padding(4)
+                .mask(BubbleClarityMask())
             // 中身のゆらぎはCAAnimation常駐（WobbleHost）。
             // 旧TimelineView(30fps)のbody再評価は待機中CPU約7%の主因だった
             WobbleHost {
@@ -612,8 +604,24 @@ struct BubbleView: View {
             }
 
             // 立体感と光沢は単体/3つ表示で共通のコンポーネント（BubbleDecoration.swift）。
-            // 深度層はリングと文字の下、光沢層は最前面に置く
+            // 深度層はリングと文字の下、光沢層は文字の上に置く
             BubbleGlossOverlay(s: sizeFactor)
+
+            // 使用量リング。溝は描かず進捗アークだけを見せる。
+            // 虹（薄膜干渉）より前面に置き、ゲージの色が虹に染まらないようにする
+            Circle()
+                .trim(from: 0, to: max(0.003, min(value, 100) / 100))
+                .stroke(
+                    // ほぼ均一。バー内で色が変わると進捗ではなく装飾に見えるため、
+                    // 立体感が出る最小限の差だけ残す
+                    LinearGradient(
+                        colors: [tint, tint.ringDeepened],
+                        startPoint: .leading, endPoint: .trailing
+                    ),
+                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .padding(4)
         }
         .padding(3)
         // フレームだけ拡大し、リングの太さ・ぼかし・中身（ロゴ/%）は固定サイズを保つ。
