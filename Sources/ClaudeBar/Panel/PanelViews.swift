@@ -114,15 +114,15 @@ struct SingleBubbleGlass: ViewModifier {
                         // 球体表現は白い光のみで作る
                         Circle().fill(.clear)
                             .glassEffect(.regular, in: Circle())
-                            // 文字のない外周ほどガラスを素通しに（中央の磨りは可読性用に残す）
-                            .mask(BubbleClarityMask())
+                            // 局所クリア化（既定オフ）。オンにすると外周ほどガラスを削る
+                            .bubbleClarity()
                     }
                 }
             } else {
                 // 旧OS: Liquid Glassが無いのですりガラス（Material）で代替
                 Circle().fill(.ultraThinMaterial)
                     .opacity(0.72)
-                    .mask(BubbleClarityMask())
+                    .bubbleClarity()
             }
         }
     }
@@ -564,7 +564,7 @@ struct BubbleView: View {
             // 拡散照明にもクリア化マスクを掛ける（3つ表示はガラス部分木ごと
             // マスクされるので、掛けないと単体だけパッチが白く濁って揃わない）
             BubbleDepthUnderlay(s: sizeFactor)
-                .mask(BubbleClarityMask())
+                .bubbleClarity()
             // 中身のゆらぎはCAAnimation常駐（WobbleHost）。
             // 旧TimelineView(30fps)のbody再評価は待機中CPU約7%の主因だった
             WobbleHost {

@@ -24,6 +24,60 @@ enum BubbleDecorationStrength {
     static let value: Double = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_DECO"] ?? "100")! / 100
 }
 
+/// 虹（薄膜干渉）の濃さ。1.0で従来どおり、下げるほど帯が控えめになる。
+/// 検証用: CLAUDEBAR_RAINBOW=0-100（既定90＝「ほんの少し抑えた」状態）
+enum BubbleRainbowStrength {
+    static let value: Double = {
+        let raw = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_RAINBOW"] ?? "90") ?? 90
+        return min(max(raw, 0), 100) / 100
+    }()
+}
+
+/// 虹の減算側（multiply）の濃さ。加算（screen）の虹は白背景では原理的に見えないため、
+/// 明るい背景用に「透過光から補色を抜く」層を足す。検証用: CLAUDEBAR_RAINBOW_SUB=0-100
+enum BubbleRainbowSubtractive {
+    static let value: Double = {
+        let raw = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_RAINBOW_SUB"] ?? "35") ?? 35
+        return min(max(raw, 0), 100) / 100
+    }()
+}
+
+/// ガラスの局所クリア化の強さ（0=クリア化しない＝Liquid Glassを全面にそのまま残す、
+/// 1.0=2026-08-27の「有機的な局所透明化」）。検証用: CLAUDEBAR_CLARITY=0-100
+///
+/// 局所クリア化は「透明にする」のではなく**ガラスを削る**操作なので、削った場所は
+/// ぼかし・明度適応・縁レンズごと消えて生のデスクトップになる（＝Liquid Glassが無くなる）。
+/// ガラスの質感を優先するため既定は 0（マスク自体を外す）
+enum BubbleClarity {
+    static let value: Double = {
+        let raw = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_CLARITY"] ?? "0") ?? 0
+        return min(max(raw, 0), 100) / 100
+    }()
+    /// 完全にオフ。マスク（ぼかし楕円7枚＋drawingGroup）ごと外せる
+    static var isOff: Bool { value <= 0.001 }
+}
+
+extension View {
+    /// ガラスの局所クリア化を掛ける。オフのときはマスクを付けない
+    /// （ぼかしツリーと drawingGroup の合成コストも消える）
+    func bubbleClarity(ringFraction: Double = 0) -> some View {
+        modifier(BubbleClarityModifier(ringFraction: ringFraction))
+    }
+}
+
+struct BubbleClarityModifier: ViewModifier {
+    var ringFraction: Double
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if BubbleClarity.isOff {
+            content
+        } else {
+            content.mask(BubbleClarityMask(ringFraction: ringFraction))
+        }
+    }
+}
+
 /// フレネル反射のプロファイル。最外周だけが急に明るくなる。
 /// F0=0.02（水）で F = 0.02 + 0.98(1-√(1-u²))^5 を実測値として離散化したもの
 private func fresnelStops(peak: Double) -> [Gradient.Stop] {
@@ -43,15 +97,17 @@ private func fresnelStops(peak: Double) -> [Gradient.Stop] {
 /// 72ptの球では知覚できないため、干渉が見える帯として意図的に広げている
 /// （実物のシャボン玉も縁から内側へかけて虹が滲んで見える）
 private func filmBandStops(peak: Double) -> [Gradient.Stop] {
-    // 2026-08-27: 帯を内側へ広げ、中間の濃度も引き上げ（虹をもう少し見せる要望）
+    // 2026-08-27: 一度は帯を内側へ広げたが「9.9.9（拡大前）の見た目が好み」との
+    // 判断で拡大前の分布へ戻した。さらに「ほんの少し抑える」ぶんは
+    // BubbleRainbowStrength（既定0.9）で peak 側から掛ける
     [
         .init(color: .white.opacity(0), location: 0.00),
-        .init(color: .white.opacity(0.06 * peak), location: 0.48),
-        .init(color: .white.opacity(0.28 * peak), location: 0.68),
-        .init(color: .white.opacity(0.62 * peak), location: 0.82),
-        .init(color: .white.opacity(0.94 * peak), location: 0.92),
+        .init(color: .white.opacity(0.04 * peak), location: 0.55),
+        .init(color: .white.opacity(0.22 * peak), location: 0.74),
+        .init(color: .white.opacity(0.55 * peak), location: 0.86),
+        .init(color: .white.opacity(0.90 * peak), location: 0.94),
         .init(color: .white.opacity(1.00 * peak), location: 0.985),
-        .init(color: .white.opacity(0.80 * peak), location: 1.00),
+        .init(color: .white.opacity(0.75 * peak), location: 1.00),
     ]
 }
 
@@ -93,6 +149,12 @@ struct BubbleClarityMask: View {
                         ]),
                         center: .center, startRadius: 0, endRadius: d / 2
                     ))
+                // ガラスの下限: クリア化の強さを下げるほど、削った場所へ
+                // ガラスを戻す（source-over なのでアルファの床として効く）。
+                // destinationOut のパッチより前面に置くことが必須
+                if BubbleClarity.value < 1 {
+                    Color.white.opacity(1 - BubbleClarity.value)
+                }
                 // リング保護（3つ表示用）: 描かれている弧の真下だけ磨りを復元。
                 // 弧の外には何も描かないので円形の痕跡は出ない
                 if ringFraction > 0 {
@@ -147,35 +209,65 @@ private let filmStops: [Gradient.Stop] = [
     .init(color: Color(red: 0.99, green: 0.60, blue: 0.71), location: 1.000), // 560nm ピンク
 ]
 
-/// 白背景での視認性検証用（暫定A/B）: CLAUDEBAR_EDGE=hairline|limb|shadow|combo
-/// 既存の装飾は全て加算合成（screen/plusLighter）のため白背景では原理的に見えない。
-/// ここだけは「暗くする」要素なので通常合成で描く
+/// 落ち影の倍率（1.0で標準）。既存の装飾は全て加算合成（screen/plusLighter）のため
+/// 白背景では原理的に見えず、球が消える。落ち影だけは「暗くする」要素なので
+/// 通常合成で描く。**ライト/ダークどちらでも付ける**（2026-08-27ユーザー指定）。
+/// 検証用: CLAUDEBAR_SHADOW=0-300（%・0で無効）
+enum BubbleShadowStrength {
+    static let value: Double = {
+        let raw = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_SHADOW"] ?? "100") ?? 100
+        return min(max(raw, 0), 300) / 100
+    }()
+    static var isOn: Bool { value > 0.001 }
+
+    /// ぼかし半径の倍率。広げるほど「軽い」影になる（同じ濃さでも重く見えない）。
+    /// 検証用: CLAUDEBAR_SHADOW_BLUR=50-400（%）
+    static let blur: Double = {
+        let raw = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_SHADOW_BLUR"] ?? "100") ?? 100
+        return min(max(raw, 25), 400) / 100
+    }()
+}
+
+/// 白背景での視認性検証用（暫定A/B）: CLAUDEBAR_EDGE=hairline|limb
 enum BubbleEdgeVariant {
     static let value = ProcessInfo.processInfo.environment["CLAUDEBAR_EDGE"] ?? "off"
     static var hairline: Bool { value == "hairline" || value == "combo" }
     static var limb: Bool { value == "limb" }
-    static var shadow: Bool { value == "shadow" || value == "combo" }
 }
 
-/// contentの下に敷く層: 球全体の拡散照明（加算）
+/// contentの下に敷く層: 落ち影（通常合成）＋球全体の拡散照明（加算）
 struct BubbleDepthUnderlay: View {
     /// 基準72ptに対するスケール
     var s: CGFloat
 
+    /// 影から本体シルエットをくり抜く型。影が球の中へ回り込むと
+    /// 「黒いブラー」になって一気に安っぽくなる
+    static func silhouetteKnockout(s: CGFloat) -> some View {
+        Rectangle()
+            .padding(-60 * s)
+            .overlay(Circle().blendMode(.destinationOut))
+            .compositingGroup()
+    }
+
     var body: some View {
-        // 白背景で球が消えないための落ち影（検証中）。本体シルエットをくり抜き、
-        // 輪郭の外（主に下側）にだけ柔らかく見える。黒背景では自然に消える
-        if BubbleEdgeVariant.shadow {
+        // 白背景で球が消えないための落ち影。2層に分けるのは実物の影と同じ理由で、
+        // 広く淡い環境光の影が「浮いている」感を、狭く濃いキーライトの影が輪郭を作る。
+        // 1層だけだと「濃くすると汚い／薄くすると見えない」の両立ができない。
+        // 光源は左上（グロスの位置）なので影は右下へ流す。
+        // 本体シルエットをくり抜くので球の中は暗くならない（黒いブラーは却下済み）
+        if BubbleShadowStrength.isOn {
+            // 環境光の影: 非常に広く淡い。半径を大きく取るほど同じ濃さでも軽く見える
             Circle()
-                .fill(Color.black.opacity(BubbleEdgeVariant.value == "combo" ? 0.14 : 0.20))
-                .blur(radius: 4 * s)
-                .offset(y: 2.5 * s)
-                .mask {
-                    Rectangle()
-                        .padding(-30 * s)
-                        .overlay(Circle().blendMode(.destinationOut))
-                        .compositingGroup()
-                }
+                .fill(Color.black.opacity(0.09 * BubbleShadowStrength.value))
+                .blur(radius: 22 * s * BubbleShadowStrength.blur)
+                .offset(y: 2 * s)
+                .mask { Self.silhouetteKnockout(s: s) }
+            // キーライトの影: 相対的に狭いが、これも十分ぼかす
+            Circle()
+                .fill(Color.black.opacity(0.21 * BubbleShadowStrength.value))
+                .blur(radius: 11 * s * BubbleShadowStrength.blur)
+                .offset(x: 1.5 * s, y: 5 * s)
+                .mask { Self.silhouetteKnockout(s: s) }
         }
         // 空からの広い淡い照明。加算なので背景の模様は残ったまま明るくなる
         Circle()
@@ -191,21 +283,24 @@ struct BubbleDepthUnderlay: View {
             ))
             .blendMode(.screen)
             .opacity(BubbleDecorationStrength.value)
-        // 文字コラムの白パッド: 中央をもう一段白くして可読性と磨り感を上げる
-        // （2026-08-27要望。加算なので背景の模様は透けたまま）
-        Ellipse()
-            .fill(RadialGradient(
-                gradient: Gradient(stops: [
-                    .init(color: .white.opacity(0.13), location: 0),
-                    .init(color: .white.opacity(0.08), location: 0.6),
-                    .init(color: .clear, location: 1),
-                ]),
-                center: .center, startRadius: 0, endRadius: 24 * s
-            ))
-            .frame(width: 44 * s, height: 58 * s)
-            .position(x: 36 * s, y: 36 * s)
-            .blendMode(.screen)
-            .opacity(BubbleDecorationStrength.value)
+        // 文字コラムの白パッド: 局所クリア化でガラスを削ったときに、文字の背後だけ
+        // 磨りを取り戻すための補償。クリア化オフ（＝ガラスが全面にある）では
+        // 白く曇るだけなので出さない
+        if !BubbleClarity.isOff {
+            Ellipse()
+                .fill(RadialGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: .white.opacity(0.13), location: 0),
+                        .init(color: .white.opacity(0.08), location: 0.6),
+                        .init(color: .clear, location: 1),
+                    ]),
+                    center: .center, startRadius: 0, endRadius: 24 * s
+                ))
+                .frame(width: 44 * s, height: 58 * s)
+                .position(x: 36 * s, y: 36 * s)
+                .blendMode(.screen)
+                .opacity(BubbleDecorationStrength.value)
+        }
     }
 }
 
@@ -220,11 +315,26 @@ struct BubbleGlossOverlay: View {
             Circle()
                 .fill(LinearGradient(stops: filmStops, startPoint: .top, endPoint: .bottom))
                 .mask(Circle().fill(RadialGradient(
-                    gradient: Gradient(stops: filmBandStops(peak: 1.0)),
+                    gradient: Gradient(stops: filmBandStops(peak: BubbleRainbowStrength.value)),
                     center: .center, startRadius: 0, endRadius: 36 * s
                 )))
                 .blendMode(.screen)
                 .opacity(1.0)
+
+            // ── 薄膜干渉（減算側）: 白い背景では screen(白, 色) = 白 で加算の虹が
+            //    完全に消える。実物の膜は反射（加算）と同時に透過光から補色を
+            //    抜くので、同じ帯を multiply でも重ねる。暗い背景では
+            //    「暗い値 × 色 ≒ 暗い値」でほぼ無効になり、見た目を壊さない
+            if BubbleRainbowSubtractive.value > 0.001 {
+                Circle()
+                    .fill(LinearGradient(stops: filmStops, startPoint: .top, endPoint: .bottom))
+                    .mask(Circle().fill(RadialGradient(
+                        gradient: Gradient(stops: filmBandStops(peak: BubbleRainbowStrength.value)),
+                        center: .center, startRadius: 0, endRadius: 36 * s
+                    )))
+                    .blendMode(.multiply)
+                    .opacity(BubbleRainbowSubtractive.value)
+            }
 
             // ── フレネル縁: 最外周だけが鋭く光る。方位で明暗を付けて
             //    「上が明るく側面が落ちる」自然な光の回り方にする

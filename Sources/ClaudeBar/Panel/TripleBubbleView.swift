@@ -113,11 +113,11 @@ struct TripleBubbleGlass: ViewModifier {
         // 前面へ集約するため、リングが磨りガラス越しのボケた塊になる（2026-08-27実測）
         if #available(macOS 26.0, *), !forceLegacyUI {
             content.glassEffect(.regular, in: Circle())
-                .mask(BubbleClarityMask(ringFraction: ringFraction))
+                .bubbleClarity(ringFraction: ringFraction)
         } else {
             content.background(
                 Circle().fill(.ultraThinMaterial).opacity(0.72)
-                    .mask(BubbleClarityMask(ringFraction: ringFraction))
+                    .bubbleClarity(ringFraction: ringFraction)
             )
         }
     }

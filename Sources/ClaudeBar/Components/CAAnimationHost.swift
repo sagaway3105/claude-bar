@@ -81,6 +81,12 @@ class CAAnimationHostView: NSView {
 
     /// ガード付きインストール。Reduce Motion時は装飾アニメーションを付けない
     func installAnimationsIfNeeded() {
+        #if DEBUG
+        let trace = ProcessInfo.processInfo.environment["CLAUDEBAR_TRACE_ANIM"] == "1"
+        if trace {
+            FileHandle.standardError.write("ANIM \(type(of: self)) layer=\(hosting.layer != nil) frame=\(frame) hostingFrame=\(hosting.frame)\n".data(using: .utf8)!)
+        }
+        #endif
         guard let layer = hosting.layer else { return }
         guard let first = animationKeys.first, layer.animation(forKey: first) == nil else { return }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { return }
@@ -88,6 +94,21 @@ class CAAnimationHostView: NSView {
         CATransaction.setDisableActions(true)
         installAnimations(on: layer)
         CATransaction.commit()
+        #if DEBUG
+        if trace {
+            let keys = layer.animationKeys() ?? []
+            FileHandle.standardError.write("ANIM installed \(type(of: self)) keys=\(keys) pos=\(layer.position)\n".data(using: .utf8)!)
+            let tag = "\(type(of: self))#\(UInt(bitPattern: ObjectIdentifier(self).hashValue) % 1000)"
+            for n in 1...6 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double(n) * 0.5) { [weak self] in
+                    guard let self else { return }
+                    let p = self.hosting.layer?.presentation()?.position ?? .zero
+                    let sp = self.layer?.presentation()?.position ?? .zero
+                    FileHandle.standardError.write("ANIM pres \(tag) hosting=(\(String(format: "%.2f", p.x)),\(String(format: "%.2f", p.y))) self=(\(String(format: "%.2f", sp.x)),\(String(format: "%.2f", sp.y)))\n".data(using: .utf8)!)
+                }
+            }
+        }
+        #endif
     }
 
     // MARK: - サブクラスが実装する

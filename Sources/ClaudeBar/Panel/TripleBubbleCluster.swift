@@ -110,17 +110,28 @@ final class TripleBubbleCluster {
     /// 球ごとに違う振幅・周期。さらにX/Yで周期をずらすことで、
     /// 3つが同じ動きに揃わず、それぞれ独立にふわふわ漂って見える。
     /// 振幅は塊全体の浮遊（±8.5pt）に埋もれない大きさにして「球ごとに生きてる」相対運動を見せる
-    private static let driftAmplitudeX: [CGFloat] = [3.5, -4.5, 4]
-    private static let driftAmplitudeY: [CGFloat] = [4.5, 3.5, -4]
+    // 2026-08-27: 「それぞれ独立して動いて見えない」ため振幅を約2倍にした。
+    // ただし macOS 26 の glassEffect 経路ではこの漂い自体が描画に反映されない
+    // （ガラスがウィンドウ単位のグループへ持ち上げられ、SwiftUI内側のレイヤー
+    //   アニメーションを無視する。旧OSのMaterial経路では効く）。詳細は
+    //   docs/BUBBLE_RENDERING.md の「3つ表示の独立漂い」節
+    private static let driftAmplitudeX: [CGFloat] = [7.5, -9.5, 8.5]
+    private static let driftAmplitudeY: [CGFloat] = [9.5, 7.5, -8.5]
     private static let driftDurationX: [Double] = [3.4, 4.5, 3.8]
     private static let driftDurationY: [Double] = [5.0, 3.1, 5.5] // Xと違う周期にして円運動にしない
     private static let driftDelay: [Double] = [0, 0.9, 1.7]       // 開始位相もずらす
+    /// 球ごとの漂いの倍率（検証・調整用: CLAUDEBAR_DRIFT_GAIN=%）
+    static let driftGain: CGFloat = {
+        let raw = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_DRIFT_GAIN"] ?? "100") ?? 100
+        return CGFloat(min(max(raw, 0), 1000) / 100)
+    }()
 
     /// 球ごとの漂いパラメータ（DriftHost用）。振幅・周期・開始位相の組
     func driftParams(for slot: Slot) -> (ax: CGFloat, dx: Double, ay: CGFloat, dy: Double, phase: Double) {
         let i = slot.index
-        return (Self.driftAmplitudeX[i], Self.driftDurationX[i],
-                Self.driftAmplitudeY[i], Self.driftDurationY[i], Self.driftDelay[i])
+        let gain = Self.driftGain
+        return (Self.driftAmplitudeX[i] * gain, Self.driftDurationX[i],
+                Self.driftAmplitudeY[i] * gain, Self.driftDurationY[i], Self.driftDelay[i])
     }
 
     // MARK: - ヒットテストとドラッグ
