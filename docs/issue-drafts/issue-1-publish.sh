@@ -29,14 +29,19 @@ MILD='> [!WARNING]
 CORRECTION='**【2026-08-27 訂正】** 上記で「Finderでのダブルクリック展開・Homebrew・アプリ内の自動アップデートは影響を受けていません」と記載しましたが、**Finder（アーカイブユーティリティ）での展開も v1.3.0〜v1.5.2 では署名が壊れる**ことを確認しました。訂正してお詫びします。原因は `Sparkle.framework` 内のシンボリックリンクに対する `._*` が実ファイルとして残るためです。詳細と復旧手順は [Issue #1](https://github.com/sagaway3105/claude-bar/issues/1) をご覧ください。'
 
 annotate() {
-  local tag=$1 note=$2 body
+  # macOS 標準の bash 3.2 は `local a=$1 b=$2` を set -u 下で誤って unbound 扱いすることがあるため分けて宣言する
+  local tag
+  local note
+  local body
+  tag="$1"
+  note="$2"
   body=$(gh release view "$tag" --repo "$REPO" --json body --jq .body)
   if [[ "$body" == *AppleDouble* ]]; then
-    echo "スキップ: $tag（追記済み）"
+    echo "スキップ: ${tag}（追記済み）"
     return
   fi
   printf '%s\n%s' "$note" "$body" | gh release edit "$tag" --repo "$REPO" --notes-file -
-  echo "✏️  $tag に警告を追記しました"
+  echo "✏️  ${tag} に警告を追記しました"
 }
 
 for v in v1.3.0 v1.4.0 v1.4.1 v1.4.2 v1.5.0 v1.5.1 v1.5.2; do annotate "$v" "$STRONG"; done
