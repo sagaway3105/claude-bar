@@ -71,7 +71,7 @@
 "settings.bubble" = "Bubble";
 "settings.bubblesShown" = "Bubbles Shown";
 "settings.one" = "One";
-"settings.three" = "Three (Session + %@ + Weekly)";
+"settings.three" = "Three";
 "settings.metricShown" = "Usage Shown";
 "settings.metricSession" = "Current Session";
 "settings.metricWeeklyAll" = "Weekly (All Models)";

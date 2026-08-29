@@ -120,7 +120,7 @@ struct SettingsView: View {
         Section {
             Picker(L("settings.bubblesShown"), selection: $settings.bubbleCount) {
                 Text(L("settings.one")).tag(1)
-                Text(L("settings.three", fableLabel)).tag(3)
+                Text(L("settings.three")).tag(3)
             }
             Picker(L("settings.metricShown"), selection: $settings.bubbleMetric) {
                 Text(L("settings.metricSession")).tag(BubbleMetric.session)
