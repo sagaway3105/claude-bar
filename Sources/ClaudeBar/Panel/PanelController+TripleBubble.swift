@@ -137,8 +137,7 @@ extension PanelController {
         strainingSlots.insert(slot.index)
 
         // 「ぐぐ...パチン」: 音を鳴らしてその球だけ膨らませ、パチンの瞬間に割る
-        Self.popSound?.stop()
-        Self.popSound?.play()
+        playPopSound()
         tripleCluster.strain(slot)
 
         Task { [weak self] in

@@ -641,9 +641,9 @@ extension PanelController {
             lastBubbleCenter = NSPoint(x: onScreen.midX, y: onScreen.midY)
         }
 
-        // 「ぐぐ...パチン」。音の前半（軋み）に合わせて球を膨らませ、パチンで割る
-        Self.popSound?.stop()
-        Self.popSound?.play()
+        // 「ぐぐ...パチン」。音の前半（軋み）に合わせて球を膨らませ、パチンで割る。
+        // 音を切っていても**溜めと破裂の見た目はそのまま**（演出まで消すと手応えが無くなる）
+        playPopSound()
         strainBubble(assembly)
 
         bubbleHideGeneration += 1
@@ -772,6 +772,13 @@ extension PanelController {
             // それでも100%のまま → 次のリセット時刻が取れていれば予約し直す
             self?.scheduleRevivalIfNeeded()
         }
+    }
+
+    /// 破裂音を鳴らす（設定でオフにできる）。連続破裂では鳴らし直す
+    func playPopSound() {
+        guard settings.popSound else { return }
+        PanelController.popSound?.stop()
+        PanelController.popSound?.play()
     }
 
     /// 破裂前の「ぐぐぐ」: 球がじわっと膨らみ、最後に一段強く張る。

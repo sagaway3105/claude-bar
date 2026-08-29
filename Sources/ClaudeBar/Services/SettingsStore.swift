@@ -30,6 +30,11 @@ final class SettingsStore {
         didSet { persist(reviveBubble, "reviveBubble") }
     }
 
+    /// 破裂音を鳴らすか（見た目の演出は鳴らさなくても行う）
+    var popSound: Bool {
+        didSet { persist(popSound, "popSound") }
+    }
+
     var bubbleMetric: BubbleMetric {
         didSet { persist(bubbleMetric.rawValue, "bubbleMetric") }
     }
@@ -67,6 +72,7 @@ final class SettingsStore {
             "notifyThresholds": true,
             "pollIntervalMinutes": 2,
             "reviveBubble": true,
+            "popSound": true,
             "bubbleMetric": BubbleMetric.session.rawValue,
             "bubbleCount": 1,
             "useSystemAccent": true,
@@ -75,6 +81,7 @@ final class SettingsStore {
         notifyThresholds = Self.defaults.bool(forKey: "notifyThresholds")
         pollIntervalMinutes = Self.defaults.integer(forKey: "pollIntervalMinutes")
         reviveBubble = Self.defaults.bool(forKey: "reviveBubble")
+        popSound = Self.defaults.bool(forKey: "popSound")
         bubbleMetric = BubbleMetric(rawValue: Self.defaults.string(forKey: "bubbleMetric") ?? "") ?? .session
         bubbleCount = Self.defaults.integer(forKey: "bubbleCount") == 3 ? 3 : 1
         useSystemAccent = Self.defaults.bool(forKey: "useSystemAccent")

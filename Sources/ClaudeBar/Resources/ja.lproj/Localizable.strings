@@ -78,6 +78,7 @@
 "settings.metricWeeklyModel" = "%@（週間）";
 "settings.tripleNote" = "3つ表示中は3種類すべてが並ぶため、選択は使いません";
 "settings.reviveBubble" = "割れた後、リセット時に復活";
+"settings.popSound" = "バブルが割れる音をならす";
 "settings.notifications" = "通知";
 "settings.notifyThresholds" = "80% / 95% 到達時に通知";
 "settings.system" = "システム";

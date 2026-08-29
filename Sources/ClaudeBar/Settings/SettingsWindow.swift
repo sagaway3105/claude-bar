@@ -134,6 +134,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Toggle(L("settings.reviveBubble"), isOn: $settings.reviveBubble)
+            Toggle(L("settings.popSound"), isOn: $settings.popSound)
         }
     }
 

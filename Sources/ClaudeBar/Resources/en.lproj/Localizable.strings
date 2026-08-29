@@ -78,6 +78,7 @@
 "settings.metricWeeklyModel" = "%@ (Weekly)";
 "settings.tripleNote" = "Not used while three bubbles are shown — all three appear together";
 "settings.reviveBubble" = "Revive after popping, on reset";
+"settings.popSound" = "Play a sound when a bubble pops";
 "settings.notifications" = "Notifications";
 "settings.notifyThresholds" = "Notify at 80% / 95%";
 "settings.system" = "System";
