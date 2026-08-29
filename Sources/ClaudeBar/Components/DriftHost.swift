@@ -52,6 +52,13 @@ final class DriftHostView: CAAnimationHostView {
 
     override var animationKeys: [String] { ["drift-x", "drift-y"] }
 
+    /// 現在の漂いによる見た目のズレ（AppKit座標・モデル位置は常に原点なので
+    /// presentation の位置がそのままズレになる）。当たり判定や破裂の位置合わせに使う
+    var driftOffset: CGSize {
+        guard let position = hosting.layer?.presentation()?.position else { return .zero }
+        return CGSize(width: position.x, height: position.y)
+    }
+
     override func installAnimations(on layer: CALayer) {
         func drift(_ keyPath: String, amplitude: CGFloat, duration: TimeInterval, extraPhase: TimeInterval) -> CABasicAnimation {
             let animation = CABasicAnimation(keyPath: keyPath)

@@ -60,6 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updater = UpdaterService()
         settingsController = SettingsWindowController(settings: settings, updater: updater)
         settingsController.state = state
+        #if DEBUG
+        settingsController.onToggleLegacy = { [weak self] in self?.panelController.toggleLegacyRendering() }
+        #endif
         panelController = PanelController(state: state, usageService: usageService, settings: settings)
         statusController = StatusItemController(state: state, panelController: panelController)
         panelController.updater = updater

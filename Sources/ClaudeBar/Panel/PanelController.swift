@@ -35,7 +35,14 @@ final class PanelController: NSObject, NSWindowDelegate {
     var bubblePanel: NSPanel?
     var bubbleAssembly: NSView?
     var bubbleHosting: NSHostingView<BubbleRootView>?
+    /// 3つ表示の球ごとのホスト（背面＝週間 → 前面＝セッションの順）。
+    /// 1枚のホスティングビューに3球を入れると glassEffect の持ち上げで
+    /// 球ごとの漂いが描画に出ないため、球ごとに分ける（TripleBallCanvas 参照）
+    var tripleHosts: [DriftHostView] = []
     var bubbleHideGeneration = 0 // 遅延orderOutと再表示の競合ガード
+    /// 破裂前の「ぐぐぐ」実行中の球（3つ表示）。使用量更新のたびに
+    /// popTripleBall が呼ばれても二重に走らせないためのガード
+    var strainingSlots: Set<Int> = []
 
     var attachedOrigin = NSPoint.zero
     var isProgrammaticMove = false
@@ -77,13 +84,32 @@ final class PanelController: NSObject, NSWindowDelegate {
     // レイアウト定数
     let panelWidth: CGFloat = 300
     let panelWindowHeight: CGFloat = 460 // 固定（内容はSwiftUIが上詰めで描き、余りは完全透明）
-    let bubbleDiameter: CGFloat = 72
+    /// 1つ表示のバブルの直径。**64pt以下**であること — Liquid Glass は65pt以上だと
+    /// 「大きい要素」扱いになり、背景に応じた light/dark 反転をしなくなる
+    /// 破裂音「ぐぐ...パチン」。膜が張る軋み（0.70秒）→ 破裂の過渡音、という構成で、
+    /// **音の前半に合わせて球を膨らませてから割る**（`popStrainDuration`）。
+    /// 自前合成の音源を同梱している（システムの "Pop" は溜めが無く、この演出に合わない）
+    static let popSound: NSSound? = {
+        guard let url = Bundle.module.url(forResource: "bubble-pop", withExtension: "aiff") else { return nil }
+        return NSSound(contentsOf: url, byReference: true)
+    }()
+
+    /// 破裂前の「ぐぐぐ」＝球が膨らむ時間。同梱音源の軋み部分の長さと一致させる
+    static let popStrainDuration: TimeInterval = 0.70
+
+    static let bubbleDiameter: CGFloat = {
+        // 検証用: CLAUDEBAR_SINGLE_D で直径を差し替える（64pt以下＝自動反転する側）
+        if let raw = ProcessInfo.processInfo.environment["CLAUDEBAR_SINGLE_D"], let d = Double(raw), d > 0 {
+            return CGFloat(d)
+        }
+        return 64
+    }()
     let singleBubbleWindowSize: CGFloat = 150 // 最大バブル(72*1.1)+浮遊・ポヨンのマージン
 
     /// バブルウィンドウの大きさ（3つ表示モードでは塊が収まる大きさになる）
     var bubbleWindowFrameSize: NSSize {
         settings.isTripleBubble
-            ? NSSize(width: TripleBubbleView.windowSize.width, height: TripleBubbleView.windowSize.height)
+            ? NSSize(width: TripleBallCanvas.windowSize.width, height: TripleBallCanvas.windowSize.height)
             : NSSize(width: singleBubbleWindowSize, height: singleBubbleWindowSize)
     }
 
@@ -107,13 +133,16 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     /// 使用量に応じたバブルの拡大率: 10%ごとに+1%、100%で1.1倍（風船のように膨らむ）
-    static func bubbleScaleFactor(for utilization: Double) -> CGFloat {
-        1 + 0.01 * CGFloat((min(max(utilization, 0), 100) / 10).rounded(.down))
-    }
+    /// 使用量に応じた膨張率。**2026-08-28に一旦オフ（常に1.0）**。
+    /// Liquid Glass は直径64ptを境に材質の扱いが変わり（65pt以上は背景に応じた
+    /// light/dark 反転をしない）、膨張すると使用率10%でこの境界をまたいで
+    /// 見た目が突然切り替わってしまうため。復活させるときは、膨らんでも
+    /// 64pt を超えない基準径にすること
+    static func bubbleScaleFactor(for utilization: Double) -> CGFloat { 1 }
 
     /// 現在の使用量に応じたバブルの直径
     var currentBubbleDiameter: CGFloat {
-        bubbleDiameter * Self.bubbleScaleFactor(for: bubbleUsageWindow?.utilization ?? 0)
+        Self.bubbleDiameter * Self.bubbleScaleFactor(for: bubbleUsageWindow?.utilization ?? 0)
     }
 
     /// バブルアセンブリの現在のスクリーン座標（アニメーション中はpresentation layerが真実）
@@ -235,9 +264,57 @@ final class PanelController: NSObject, NSWindowDelegate {
             pop: { [weak self] in self?.popBubble() },
             settings: { [weak self] in self?.onOpenSettings?() },
             login: { LoginHelper.openLoginTerminal() },
-            contentHeightChanged: { [weak self] height in self?.contentHeightChanged(height) }
+            contentHeightChanged: { [weak self] height in self?.contentHeightChanged(height) },
+            toggleLegacy: { [weak self] in
+                #if DEBUG
+                self?.toggleLegacyRendering()
+                #endif
+            }
         )
     }
+
+    #if DEBUG
+    /// 旧OS表示（Liquid Glass 無しのフォールバック）を実行中に切り替える検証用スイッチ。
+    /// 分岐は `#available` と `forceLegacyUI` をビュー構築時に見るだけなので、
+    /// 切り替えたらウィンドウごと作り直して描き直す
+    func toggleLegacyRendering() {
+        forceLegacyUI.toggle()
+        let bubbleWasActive = state.bubbleActive
+        let bubbleCenter = bubblePanel.map { NSPoint(x: $0.frame.midX, y: $0.frame.midY) }
+
+        // バブル: ウィンドウごと破棄して作り直す
+        stopFloating()
+        stopMouseTracking()
+        removeBubbleMouseMonitor()
+        if let observer = bubbleOcclusionObserver {
+            NotificationCenter.default.removeObserver(observer)
+            bubbleOcclusionObserver = nil
+        }
+        bubblePanel?.orderOut(nil)
+        bubblePanel = nil
+        bubbleAssembly = nil
+        bubbleHosting = nil
+        tripleHosts = []
+
+        // パネル: 表示していないときだけ破棄する（次に開くと新しい分岐で作り直される）。
+        // 表示中に消すと、切り離し中のパネルが黙って消えてしまうので触らない
+        if panel?.isVisible != true {
+            panel?.orderOut(nil)
+            panel = nil
+            containerView = nil
+            assemblyView = nil
+            contentHosting = nil
+        }
+
+        if bubbleWasActive {
+            if let bubbleCenter {
+                showBubble(at: bubbleCenter)
+            } else {
+                showBubbleNearStatusItem()
+            }
+        }
+    }
+    #endif
 
     // MARK: - attached（メニューバー直下）
 

@@ -21,7 +21,7 @@ import SwiftUI
 
 /// 装飾の濃さ。1.0で標準、下げるほど球が透ける
 enum BubbleDecorationStrength {
-    static let value: Double = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_DECO"] ?? "100")! / 100
+    static let value: Double = envPercent("CLAUDEBAR_DECO", default: 100)
 }
 
 /// 虹（薄膜干渉）の濃さ。1.0で従来どおり、下げるほど帯が控えめになる。
@@ -40,6 +40,20 @@ enum BubbleRainbowSubtractive {
         let raw = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_RAINBOW_SUB"] ?? "35") ?? 35
         return min(max(raw, 0), 100) / 100
     }()
+}
+
+/// 立体感の陰（減算）の強さ。加算の光だけでは**明るい外観で球が平らに見える**ため、
+/// 縁の減光（limb darkening）と右下の陰を入れる。ダークではガラス自体が暗く
+/// コントラストが足りているので弱める。検証用: CLAUDEBAR_SHADING=0-200
+enum BubbleShadingStrength {
+    static let value: Double = {
+        let raw = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_SHADING"] ?? "100") ?? 100
+        return min(max(raw, 0), 200) / 100
+    }()
+    /// 外観ごとの倍率。ライトを主役にする
+    static func scaled(for scheme: ColorScheme) -> Double {
+        value * (scheme == .dark ? 0.35 : 1.0)
+    }
 }
 
 /// ガラスの局所クリア化の強さ（0=クリア化しない＝Liquid Glassを全面にそのまま残す、
@@ -196,18 +210,38 @@ struct BubbleClarityMask: View {
     }
 }
 
-/// 薄膜干渉の色。膜厚250→560nm（1オーダー分）を上→下に並べる。
+/// 薄膜干渉の色（膜厚250→560nm、1オーダー分）の素の値。
 /// 停止位置が上下端で詰まっているのは球の幾何（画面上のyは sinφ に比例）由来で、
 /// これが実物のシャボン玉の「上下で縞が詰まる」見え方そのもの
-private let filmStops: [Gradient.Stop] = [
-    .init(color: Color(red: 0.00, green: 0.62, blue: 0.91), location: 0.000), // 250nm シアン
-    .init(color: Color(red: 0.71, green: 0.91, blue: 0.58), location: 0.067), // 302nm 緑
-    .init(color: Color(red: 0.98, green: 0.66, blue: 0.26), location: 0.250), // 353nm 橙
-    .init(color: Color(red: 0.71, green: 0.04, blue: 0.85), location: 0.500), // 405nm マゼンタ
-    .init(color: Color(red: 0.00, green: 0.69, blue: 0.76), location: 0.750), // 457nm ティール
-    .init(color: Color(red: 0.52, green: 0.87, blue: 0.27), location: 0.933), // 508nm 緑
-    .init(color: Color(red: 0.99, green: 0.60, blue: 0.71), location: 1.000), // 560nm ピンク
+private let filmBaseColors: [(r: Double, g: Double, b: Double, at: Double)] = [
+    (0.00, 0.62, 0.91, 0.000), // 250nm シアン
+    (0.71, 0.91, 0.58, 0.067), // 302nm 緑
+    (0.98, 0.66, 0.26, 0.250), // 353nm 橙
+    (0.71, 0.04, 0.85, 0.500), // 405nm マゼンタ
+    (0.00, 0.69, 0.76, 0.750), // 457nm ティール
+    (0.52, 0.87, 0.27, 0.933), // 508nm 緑
+    (0.99, 0.60, 0.71, 1.000), // 560nm ピンク
 ]
+
+/// 虹の彩度。1.0で素の干渉色、下げるほど同じ明るさのまま色味だけ薄くなる
+/// （輝度を保って灰色へ寄せる＝加算側の明るさ・減算側の暗さは変えない）。
+/// 検証用: CLAUDEBAR_RAINBOW_SAT=0-100
+enum BubbleRainbowSaturation {
+    static let value: Double = {
+        let raw = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_RAINBOW_SAT"] ?? "85") ?? 85
+        return min(max(raw, 0), 100) / 100
+    }()
+}
+
+/// 彩度を落とした薄膜干渉の色。輝度（Rec.709）を軸に灰色へ寄せる
+private let filmStops: [Gradient.Stop] = filmBaseColors.map { c in
+    let s = BubbleRainbowSaturation.value
+    let y = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+    return Gradient.Stop(
+        color: Color(red: y + (c.r - y) * s, green: y + (c.g - y) * s, blue: y + (c.b - y) * s),
+        location: c.at
+    )
+}
 
 /// 落ち影の倍率（1.0で標準）。既存の装飾は全て加算合成（screen/plusLighter）のため
 /// 白背景では原理的に見えず、球が消える。落ち影だけは「暗くする」要素なので
@@ -300,6 +334,55 @@ struct BubbleDepthUnderlay: View {
                 .position(x: 36 * s, y: 36 * s)
                 .blendMode(.screen)
                 .opacity(BubbleDecorationStrength.value)
+        }
+    }
+}
+
+/// contentの上・光沢の下に敷く層: 立体感の陰（減算合成）。
+///
+/// 装飾はすべて加算（screen/plusLighter）なので、ガラスが明るく描かれる
+/// ライト外観では「光を足しても白に埋もれて平らに見える」。球に見せるには
+/// **暗くする側**が要る。黒ではなく寒色グレーを multiply で薄く乗せると、
+/// 濁らずにガラスの厚みとして読める（黒いブラーは過去に却下済み）。
+///  ① 縁の減光: 実物の膜も縁ほど透過率が落ちる（フレネル反射の裏返し）
+///  ② 右下の陰: 光源は左上（グロスの位置）なので陰は対角へ
+struct BubbleShadingOverlay: View {
+    /// 基準72ptに対するスケール
+    var s: CGFloat
+    /// 外観ぶんを掛けた強さ
+    var strength: Double
+
+    /// 陰の色。黒だと「汚れ」に見えるので、ガラスらしい寒色グレーにする
+    private let shade = Color(red: 0.34, green: 0.39, blue: 0.50)
+
+    var body: some View {
+        if strength > 0.001 {
+            ZStack {
+                // ① 縁の減光（limb darkening）
+                Circle()
+                    .fill(RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .clear, location: 0.55),
+                            .init(color: shade.opacity(0.07 * strength), location: 0.80),
+                            .init(color: shade.opacity(0.21 * strength), location: 0.93),
+                            .init(color: shade.opacity(0.34 * strength), location: 1.0),
+                        ]),
+                        center: .center, startRadius: 0, endRadius: 36 * s
+                    ))
+                // ② 右下の陰（光源の対角）。中心を外して球の丸みを作る
+                Circle()
+                    .fill(RadialGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .clear, location: 0.0),
+                            .init(color: shade.opacity(0.08 * strength), location: 0.55),
+                            .init(color: shade.opacity(0.20 * strength), location: 1.0),
+                        ]),
+                        center: UnitPoint(x: 0.74, y: 0.78),
+                        startRadius: 0, endRadius: 52 * s
+                    ))
+            }
+            .frame(width: 72 * s, height: 72 * s)
+            .blendMode(.multiply)
         }
     }
 }

@@ -43,12 +43,23 @@ extension PanelController {
         updateFloatBounds(around: NSPoint(x: p.frame.midX, y: p.frame.midY))
     }
 
-    /// 球のスクリーン座標中心（破裂演出の位置決め用）。浮遊ぶんも補正して見た目に合わせる
+    /// 球ごとの漂い（DriftHost）による見た目のズレ。ビュー座標（左上原点）。
+    /// 塊の漂い `tripleFloatOffset` とは別で、こちらは球1つぶん
+    func tripleBallDrift(_ slot: TripleBubbleCluster.Slot) -> CGSize {
+        guard tripleHosts.indices.contains(slot.index) else { return .zero }
+        let offset = tripleHosts[slot.index].driftOffset
+        // AppKit座標(下原点)のズレをビュー座標(上原点)へ反転
+        return CGSize(width: offset.width, height: -offset.height)
+    }
+
+    /// 球のスクリーン座標中心（破裂演出の位置決め用）。塊と球それぞれの漂いを補正して見た目に合わせる
     private func tripleBallScreenCenter(_ slot: TripleBubbleCluster.Slot) -> NSPoint? {
         guard let p = bubblePanel else { return nil }
         let home = tripleCluster.home(for: slot)
         let drag = tripleCluster.dragOffsets[slot.index]
-        let float = tripleFloatOffset
+        let ball = tripleBallDrift(slot)
+        let group = tripleFloatOffset
+        let float = CGSize(width: group.width + ball.width, height: group.height + ball.height)
         // ビュー座標(左上原点) → スクリーン座標(左下原点)
         return NSPoint(
             x: p.frame.origin.x + home.x + drag.width + float.width,
@@ -68,7 +79,9 @@ extension PanelController {
         for slot in visible {
             let home = tripleCluster.home(for: slot)
             let drag = tripleCluster.dragOffsets[slot.index]
+            // 球ごとの漂いで home からずれる分も含める（画面端で欠けない・HUDがずれない）
             let radius = tripleCluster.diameter(for: slot, state: state) / 2
+                + TripleBubbleCluster.maxDriftAmplitude
             minX = min(minX, home.x + drag.width - radius)
             maxX = max(maxX, home.x + drag.width + radius)
             minY = min(minY, home.y + drag.height - radius)
@@ -119,7 +132,30 @@ extension PanelController {
         // 掴んでいる最中の球は割らない（掴んだまま消えて空ドラッグになる。
         // 放した後の次の使用量判定で改めて割れる）
         guard tripleCluster.draggingSlot != slot else { return }
-        NSSound(named: "Pop")?.play()
+        // 二重起動を防ぐ（使用量更新は繰り返し来るが、膨張中はまだ割れていない）
+        guard !strainingSlots.contains(slot.index) else { return }
+        strainingSlots.insert(slot.index)
+
+        // 「ぐぐ...パチン」: 音を鳴らしてその球だけ膨らませ、パチンの瞬間に割る
+        Self.popSound?.stop()
+        Self.popSound?.play()
+        tripleCluster.strain(slot)
+
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(PanelController.popStrainDuration))
+            guard let self else { return }
+            self.strainingSlots.remove(slot.index)
+            guard self.state.bubbleActive,
+                  !self.tripleCluster.poppedSlots.contains(slot.index) else {
+                self.tripleCluster.relaxStrain(slot)
+                return
+            }
+            self.finishTriplePop(slot)
+        }
+    }
+
+    /// 「パチン」の瞬間の処理（破裂の演出と後始末）
+    private func finishTriplePop(_ slot: TripleBubbleCluster.Slot) {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
         if let center = tripleBallScreenCenter(slot) {
             let utilization = state.usage?.window(for: slot.metric)?.utilization ?? 0
@@ -130,6 +166,7 @@ extension PanelController {
             tripleCluster.poppedResetsAt[slot.index] = resets
         }
         tripleCluster.pop(slot)
+        tripleCluster.bounceScales[slot.index] = 1   // 次に生まれ直すときのために戻す
         refreshTripleFloatBounds()
         if tripleCluster.allPopped {
             // 3つとも割れたらバブル自体を畳み、復活を予約する。

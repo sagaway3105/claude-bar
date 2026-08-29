@@ -27,12 +27,19 @@ final class TripleBubbleCluster {
         }
 
         /// 基準の直径（重要度順に少しずつ小さく）。
-        /// 主役のセッションは1つ表示のバブル（72pt）と同じ大きさ・同じ膨張率
+        /// 主役のセッションは1つ表示のバブル（64pt）と同じ大きさ
         var baseDiameter: CGFloat {
+            // 検証用: CLAUDEBAR_TRIPLE_SIZES="72,62,50" で基準径を差し替えられる
+            if let raw = ProcessInfo.processInfo.environment["CLAUDEBAR_TRIPLE_SIZES"] {
+                let parts = raw.split(separator: ",").compactMap { Double($0) }
+                if parts.count == 3 { return CGFloat(parts[index]) }
+            }
+            // 3球とも64pt以下。Liquid Glass は65pt以上で「大きい要素」扱いになり、
+            // 背景に応じた light/dark 反転をしなくなる（＝球ごとに見え方が割れる）
             switch self {
-            case .session: return 72
-            case .fable: return 62
-            case .weekly: return 50
+            case .session: return 64
+            case .fable: return 56
+            case .weekly: return 48
             }
         }
 
@@ -49,10 +56,14 @@ final class TripleBubbleCluster {
     /// 縦一列に伸びないよう三角形に寄せて「ぎゅっと一塊」にする。
     /// 3ペアとも縁が約2pt重なる密着配置（3ptはやや深い・5ptは窮屈＝ユーザー確認済み）。
     /// 融合（くびれ）は廃止済みなので、重なりは単に手前の球が奥の球を隠すだけになる
+    /// 2026-08-29: 直径を 72/62/50 → 64/56/48 にしたので、**この配置も取り直した**。
+    /// 旧配置のままだと3ペアとも縁が +2.2〜+5.2pt 離れ、「密着した一塊」が崩れる。
+    /// 3ペアとも縁が約2pt重なるよう三角形を解き直し、外接矩形の中心を
+    /// ウィンドウ(220x210)の中心に合わせてある
     static let homes: [CGPoint] = [
-        CGPoint(x: 80, y: 81),   // セッション（最上・最大・やや左）
-        CGPoint(x: 141, y: 104), // Fable（右へ振る）
-        CGPoint(x: 98, y: 137),  // 週間（最下・最小）
+        CGPoint(x: 84.9, y: 83.1),   // セッション（最上・最大・やや左）
+        CGPoint(x: 139.1, y: 103.6), // Fable（右へ振る）
+        CGPoint(x: 100.2, y: 134.9), // 週間（最下・最小）
     ]
 
     /// 個別ドラッグで動かせる範囲（リーシュ）。これを超えると塊ごと動く
@@ -67,7 +78,7 @@ final class TripleBubbleCluster {
     /// クリックのポヨン用スケール
     var bounceScales: [CGFloat] = [1, 1, 1]
 
-    /// バブルの表示世代。showBubbleごとに進み、TripleBubbleViewはこれをidにして
+    /// バブルの表示世代。showBubbleごとに進み、TripleBallCanvasはこれをidにして
     /// ビューを作り直す。ウィンドウを隠すと宣言的アニメーション（球ごとの漂い）が
     /// レンダーサーバから破棄され、再表示では復元されないため、毎回始め直す
     var showGeneration = 0
@@ -110,16 +121,22 @@ final class TripleBubbleCluster {
     /// 球ごとに違う振幅・周期。さらにX/Yで周期をずらすことで、
     /// 3つが同じ動きに揃わず、それぞれ独立にふわふわ漂って見える。
     /// 振幅は塊全体の浮遊（±8.5pt）に埋もれない大きさにして「球ごとに生きてる」相対運動を見せる
-    // 2026-08-27: 「それぞれ独立して動いて見えない」ため振幅を約2倍にした。
-    // ただし macOS 26 の glassEffect 経路ではこの漂い自体が描画に反映されない
-    // （ガラスがウィンドウ単位のグループへ持ち上げられ、SwiftUI内側のレイヤー
-    //   アニメーションを無視する。旧OSのMaterial経路では効く）。詳細は
-    //   docs/BUBBLE_RENDERING.md の「3つ表示の独立漂い」節
-    private static let driftAmplitudeX: [CGFloat] = [7.5, -9.5, 8.5]
-    private static let driftAmplitudeY: [CGFloat] = [9.5, 7.5, -8.5]
+    // 2026-08-27: 球ごとのホスト化で**実際に描画されるようになった**ため、
+    // 一度2倍にした振幅は元の値へ戻した（描画されるようになった途端に
+    // 「動きが激しい」＝v1.5.3くらいがちょうどいい、というユーザー判断）。
+    // 見た目の総移動量は「塊の漂い＋球ごとの漂い」なので、塊側（startFloating）を
+    // 3つ表示のときだけ下げて合計を v1.5.3 相当に保つ
+    private static let driftAmplitudeX: [CGFloat] = [3.5, -4.5, 4]
+    private static let driftAmplitudeY: [CGFloat] = [4.5, 3.5, -4]
     private static let driftDurationX: [Double] = [3.4, 4.5, 3.8]
     private static let driftDurationY: [Double] = [5.0, 3.1, 5.5] // Xと違う周期にして円運動にしない
     private static let driftDelay: [Double] = [0, 0.9, 1.7]       // 開始位相もずらす
+    /// 球が home からずれ得る最大距離。外接矩形と当たり判定の余裕に使う
+    static var maxDriftAmplitude: CGFloat {
+        let m = zip(driftAmplitudeX, driftAmplitudeY).map { max(abs($0), abs($1)) }.max() ?? 0
+        return m * driftGain
+    }
+
     /// 球ごとの漂いの倍率（検証・調整用: CLAUDEBAR_DRIFT_GAIN=%）
     static let driftGain: CGFloat = {
         let raw = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_DRIFT_GAIN"] ?? "100") ?? 100
@@ -145,7 +162,7 @@ final class TripleBubbleCluster {
             let center = home(for: slot)
             let drag = dragOffsets[slot.index]
             let c = CGPoint(x: center.x + drag.width, y: center.y + drag.height)
-            let r = diameter(for: slot, state: state) / 2 + 8 // 漂いぶんの余裕
+            let r = diameter(for: slot, state: state) / 2 + Self.maxDriftAmplitude + 3 // 漂いぶんの余裕
             if hypot(point.x - c.x, point.y - c.y) <= r { return slot }
         }
         return nil
@@ -229,6 +246,21 @@ final class TripleBubbleCluster {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.45)) {
                 self?.bounceScales[slot.index] = 1
             }
+        }
+    }
+
+    /// 破裂前の「ぐぐぐ」: その球だけがじわっと膨らむ。
+    /// 音源の軋み部分（PanelController.popStrainDuration）と長さを合わせる
+    func strain(_ slot: Slot) {
+        withAnimation(.timingCurve(0.35, 0, 0.75, 1, duration: PanelController.popStrainDuration)) {
+            bounceScales[slot.index] = 1.16
+        }
+    }
+
+    /// 膨張を戻す（破裂が取り消されたとき用）
+    func relaxStrain(_ slot: Slot) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            bounceScales[slot.index] = 1
         }
     }
 

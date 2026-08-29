@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// SwiftUIコンテンツをNSHostingViewで包み、そのレイヤーにCAAnimationを
-/// 常駐させるホストの共通基盤（WobbleHostView / DriftHostView が継承）。
+/// 常駐させるホストの共通基盤（DriftHostView が継承）。
 ///
 /// - アニメーションはレンダーサーバで無限補間され、アプリのCPUを使わない
 /// - ウィンドウが隠れるとレンダーサーバがアニメーションを破棄するため、
@@ -44,7 +44,15 @@ class CAAnimationHostView: NSView {
         }
     }
 
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// クリック/右クリックを外側へ素通しするか。
+    /// SwiftUIの中に埋めて使うときは true（操作は外側のSwiftUIとイベントモニタが持つ）。
+    /// AppKit側へ直接ぶら下げるとき（3つ表示の球ホスト）は false にして、
+    /// 中のSwiftUI（コンテキストメニュー・ツールチップ）まで届かせる
+    var passesMouseThrough = true
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        passesMouseThrough ? nil : super.hitTest(point)
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()

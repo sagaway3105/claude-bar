@@ -2,11 +2,37 @@ import AppKit
 import SwiftUI
 
 // macOS 14互換シム。15+の専用APIを使う箇所はここを経由する。
-// （glassEffectの26分岐は PanelViews の AdaptivePanelGlass / SingleBubbleGlass、TripleBubbleView の TripleBubbleGlass 参照）
+// （glassEffectの26分岐は PanelViews の AdaptivePanelGlass / SingleBubbleGlass 参照。1つ表示と3つ表示で共通）
 
 /// 旧OS分岐の検証用: CLAUDEBAR_FORCE_LEGACY=1 で全ての新API分岐を旧OS側に倒す
-/// （新しいmacOS上ではフォールバックが実行されず目視確認できないため）
+/// （新しいmacOS上ではフォールバックが実行されず目視確認できないため）。
+/// デバッグビルドでは実行中にも切り替えられる（バブルの右クリックメニュー /
+/// デバッグブリッジの `legacy`）。切り替え後はウィンドウを作り直すこと
+#if DEBUG
+nonisolated(unsafe) var forceLegacyUI = ProcessInfo.processInfo.environment["CLAUDEBAR_FORCE_LEGACY"] == "1"
+#else
 let forceLegacyUI = ProcessInfo.processInfo.environment["CLAUDEBAR_FORCE_LEGACY"] == "1"
+#endif
+
+/// 検証用の環境変数（パーセント指定）を読む共通ヘルパ。
+/// **数値でない値が来ても落とさない**（開発者が手で打つものなので、
+/// `Double(...)!` にすると `CLAUDEBAR_PLATE_D=70%` のような打ち間違いで即クラッシュする）
+func envPercent(_ key: String, default fallback: Double, range: ClosedRange<Double> = 0...300) -> Double {
+    guard let raw = ProcessInfo.processInfo.environment[key], let value = Double(raw) else {
+        return fallback / 100
+    }
+    return min(max(value, range.lowerBound), range.upperBound) / 100
+}
+
+/// Liquid Glass（macOS 26）の経路を使っているか。
+/// 旧OS（14/15）と `forceLegacyUI` のときは false。
+/// **旧OSでは背景に応じた light/dark の自動反転が無い**ので、文字の可読性は
+/// 自前で担保する必要がある（`BubbleStyle.haloGain` 参照）
+@MainActor
+var usesLiquidGlass: Bool {
+    if #available(macOS 26.0, *), !forceLegacyUI { return true }
+    return false
+}
 
 /// サイズ監視: 15+は onGeometryChange、14は GeometryReader + PreferenceKey
 struct SizeReader: ViewModifier {

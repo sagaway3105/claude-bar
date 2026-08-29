@@ -1,17 +1,28 @@
 import SwiftUI
 
-/// トリプルバブル（設計は TRIPLE_BUBBLE.md。2026-08-21に融合廃止で再設計）。
+/// トリプルバブル（設計は TRIPLE_BUBBLE.md。2026-08-21に融合廃止、2026-08-27に
+/// 「球ごとに独立したホスティングビュー」へ再設計）。
 ///
 /// 3つの使用量（セッション / Fable週間 / 週間すべて）を重要度順の大きさで浮かべる。
-/// かつての表面張力（融合＝メタボールのくびれ）は廃止した: 融合があると球の位置を
-/// SwiftUI値で動かすしかなく、球ごとの漂いはどの実装でも7-13%CPUを食い続けたため（実測）。
-/// 現在は球ごとに DriftHost（レンダーサーバ常駐のCAAnimation）で独立に漂わせ、約1%CPUで済む。
-/// ※ GlassEffectContainer 自体は今も使う（融合はさせない）— 理由は unifiedBody を参照。
+///
+/// **球は1枚のSwiftUIツリーにまとめない。** `glassEffect` の描画は最も外側の
+/// NSHostingViewを基準にウィンドウ単位のガラス群へ持ち上げられ、その内側のレイヤー
+/// アニメーションを完全に無視する（2026-08-27実測。詳細は docs/BUBBLE_RENDERING.md）。
+/// 1枚にまとめると球ごとの漂い（DriftHost）が画面に出ない。
+/// そこで **球ごとに独立した `DriftHostView`（＝独立したNSHostingView）をアセンブリ直下の
+/// 兄弟として並べ**、各ホストのレイヤーにCAAnimationを張る（PanelController+Bubble の
+/// `configureBubbleContent`）。持ち上げ先が球ごとに分かれるため、3球とも背後を採取しつつ
+/// それぞれ独立に漂う。融合（GlassEffectContainer）はもう使わない。
 ///
 /// 描画は「単体バブル（BubbleView）を3つ、違う大きさで並べたもの」であること。
-/// レイヤー構成・ガラス・装飾は BubbleSphere / BubbleDecoration.swift で単体と共有し、
+/// レイヤー構成・ガラス・装飾は BubbleFace / BubbleDecoration.swift で単体と共有し、
 /// 3つ表示だけの独自レイヤーは持たない（詳細は docs/BUBBLE_RENDERING.md）。
-struct TripleBubbleView: View {
+
+/// 球1つぶんのキャンバス。ウィンドウ全体と同じ大きさを持ち、その中の
+/// ホーム位置に球を1つだけ置く（重なり順はホストの追加順＝AppKit側が決める）。
+/// 位置・個別ドラッグのズレ・ポヨン・破裂/復活は今までどおりSwiftUIが持つ
+struct TripleBallCanvas: View {
+    var slot: TripleBubbleCluster.Slot
     var state: AppState
     var settings: SettingsStore
     var cluster: TripleBubbleCluster
@@ -21,69 +32,21 @@ struct TripleBubbleView: View {
     static let windowSize = CGSize(width: 220, height: 210)
 
     var body: some View {
-        unifiedBody
-        .frame(width: Self.windowSize.width, height: Self.windowSize.height)
-        // 再表示のたびにビューを作り直して漂いを始め直す（隠している間に
-        // レンダーサーバから破棄された宣言的アニメーションは自動では戻らない）
-        .id(cluster.showGeneration)
-        .contextMenu {
-            Button(L("bubble.expandToPanel")) { actions.expand() }
-            Button(L("bubble.closeBubble")) { actions.toBubble() }
-            Divider()
-            Button(L("bubble.settingsMenu")) { actions.settings() }
-            Button(L("bubble.quit")) { actions.quit() }
-        }
-        .help(L("bubble.helpTriple"))
-    }
-
-    /// 全OS共通の本体（球ごとのDriftHost漂い+静的配置）。
-    ///
-    /// GlassEffectContainer で括るのが必須（2026-08-27実測）: 透明ウィンドウ内で
-    /// 素の `.glassEffect` を複数置くと、背後を採取するのは最前面の1つだけで、
-    /// 残りはただの素通しになる（3つ表示で2番目・3番目の球だけガラスが消えた）。
-    /// spacing: 0 なので融合（メタボールのくびれ）は起きず、球はそれぞれ独立に見える。
-    /// かつて融合を使っていた頃のCPU問題は「球の位置をSwiftUI値で動かす」ことが原因で、
-    /// コンテナ自体ではない — 位置は今も DriftHost（CAAnimation）が動かす
-    @ViewBuilder
-    private var unifiedBody: some View {
-        if #available(macOS 26.0, *), !forceLegacyUI {
-            GlassEffectContainer(spacing: 0) { balls }
-        } else {
-            balls
-        }
-    }
-
-    private var balls: some View {
-        // 漂いは球ごとの DriftHost（レンダーサーバ常駐のCAAnimation）が担当する。
-        // SwiftUIの宣言的アニメーションで動かすと待機中7-13%CPUを食う（実測）
         ZStack {
-            ForEach(TripleBubbleCluster.Slot.allCases, id: \.self) { slot in
-                if !cluster.poppedSlots.contains(slot.index) {
-                    let p = cluster.driftParams(for: slot)
-                    DriftHost(
-                        amplitudeX: p.ax, durationX: p.dx,
-                        amplitudeY: p.ay, durationY: p.dy,
-                        phase: p.phase
-                    ) {
-                        ball(slot)
-                            .frame(width: Self.windowSize.width, height: Self.windowSize.height)
-                    }
-                    // 優先度どおりの重なり: セッションが常に手前、週間が最背面
-                    .zIndex(Double(TripleBubbleCluster.Slot.allCases.count - slot.index))
-                }
+            if !cluster.contentParked, !cluster.poppedSlots.contains(slot.index) {
+                ball
             }
         }
+        .frame(width: Self.windowSize.width, height: Self.windowSize.height)
+        // 再表示のたびにビューを作り直して中身のアニメーションを始め直す
+        // （隠している間にレンダーサーバから破棄された宣言的アニメーションは戻らない）
+        .id(cluster.showGeneration)
     }
 
-    /// 球1つ。単体バブルと同じ「装飾ZStack + ガラス玉」の組で、3つ表示だけの
-    /// 縁レイヤー（旧 BubbleIridescentEdge / GlassTubeRim）は持たない
-    /// — それらは単体バブル側で BubbleGlossOverlay のフレネル+薄膜干渉に統合済み
-    @ViewBuilder
-    private func ball(_ slot: TripleBubbleCluster.Slot) -> some View {
-        let diameter = cluster.diameter(for: slot, state: state)
+    private var ball: some View {
         BubbleFace(
             slot: slot,
-            diameter: diameter,
+            diameter: cluster.diameter(for: slot, state: state),
             state: state,
             settings: settings,
             isPrimary: slot == .session
@@ -94,39 +57,28 @@ struct TripleBubbleView: View {
         .position(cluster.home(for: slot))
         .offset(cluster.dragOffsets[slot.index])
         .animation(.spring(response: 0.45, dampingFraction: 0.7), value: cluster.dragOffsets[slot.index])
-    }
-}
-
-/// 3つ表示のガラス玉。単体バブルの SingleBubbleGlass と同じ `.regular` を使うが、
-/// 背景の円ではなく content 自身へ適用する — GlassEffectContainer 配下では
-/// `.background` に置いたガラスが中身より前面へ持ち上がって内容を隠すため。
-struct TripleBubbleGlass: ViewModifier {
-    /// 使用量リングの進捗（0-1）。マスクが弧の真下だけ磨りを復元するのに使う
-    var ringFraction: Double = 0
-
-    func body(content: Content) -> some View {
-        // コンテナ配下ではガラスを content 形式で掛けるしかないため、マスクは
-        // リング・文字・装飾ごと掛かる。BubbleClarityMask は文字コラムとリング帯を
-        // 保護する設計なので、実際に薄まるのはクリアパッチの場所だけ
-        // （パッチ位置の薄膜が少し暗くなるのは実物の膜ムラと同じで許容）。
-        // なおリングを兄弟レイヤーへ出す案は不可 — コンテナがガラスを兄弟より
-        // 前面へ集約するため、リングが磨りガラス越しのボケた塊になる（2026-08-27実測）
-        if #available(macOS 26.0, *), !forceLegacyUI {
-            content.glassEffect(.regular, in: Circle())
-                .bubbleClarity(ringFraction: ringFraction)
-        } else {
-            content.background(
-                Circle().fill(.ultraThinMaterial).opacity(0.72)
-                    .bubbleClarity(ringFraction: ringFraction)
-            )
+        .contextMenu {
+            #if DEBUG
+            Button(forceLegacyUI ? "検証: 旧OS表示 → 通常へ戻す" : "検証: 旧OS表示に切り替え") {
+                actions.toggleLegacy()
+            }
+            Divider()
+            #endif
+            Button(L("bubble.expandToPanel")) { actions.expand() }
+            Button(L("bubble.closeBubble")) { actions.toBubble() }
+            Divider()
+            Button(L("bubble.settingsMenu")) { actions.settings() }
+            Button(L("bubble.quit")) { actions.quit() }
         }
+        .help(L("bubble.helpTriple"))
     }
 }
 
 /// 球1つぶんの見た目。単体バブル（BubbleView）と同じレイヤー構成を
 /// 基準径72pt=1のスケール s で一律に拡縮する（＝単体を別の大きさで描いたもの）。
 /// 装飾の .screen / .plusLighter はガラスが同じ合成文脈の背後にいるときだけ
-/// 加算で効くので、drawingGroup で焼いてはいけない（光ではなく白い膜になる）
+/// 加算で効くので、drawingGroup で焼いてはいけない（光ではなく白い膜になる）。
+/// ガラスは単体バブルと同じ SingleBubbleGlass（背景に敷く）
 struct BubbleFace: View {
     var slot: TripleBubbleCluster.Slot
     var diameter: CGFloat
@@ -153,27 +105,23 @@ struct BubbleFace: View {
 
     var body: some View {
         // 単体バブル（BubbleView）と同じ層構成:
-        //   ガラス(クリア化マスク付き) → 拡散照明 → 文字 → 光沢/虹 → リング
-        // ただし GlassEffectContainer 配下では文字をガラスと同じ部分木に置く必要が
-        // ある（コンテナはガラスを非ガラスの兄弟より前面へ集約するため）ので、
-        // 「照明+文字」にガラスを掛け、光沢とリングは兄弟レイヤーとして上に重ねる
+        //   ガラス(背景) → 拡散照明 → 文字 → 光沢/虹 → リング
         ZStack {
             ZStack {
                 BubbleDepthUnderlay(s: s)
-                WobbleHost(
-                    // 球ごとに振れ幅・周期・開始位相の全てをずらして
-                    // 「それぞれが独立に生きている」ゆらぎにする
-                    amplitudeDegrees: [3.0, 2.4, 3.6][slot.index],
-                    period: 2 * .pi / 0.9 * [1.0, 1.17, 0.86][slot.index],
-                    phase: [0, 0.37, 0.71][slot.index]
-                ) {
+                    .bubbleClarity()
+                // 旧OSだけ、文字の裏にぼかしグレーを敷く（26は自動反転で足りる）
+                BubbleTextPlate(s: s)
+                // 中身のゆらぎ（WobbleHost）は廃止（2026-08-28ユーザー判断）。
+                // ガラスを content 側へ掛ける構成では描画に出ないため
+                Group {
                     VStack(spacing: 0) {
                         if isPrimary {
                             // 主役のセッションだけロゴを出す（小さい球は%だけで詰まらせない）。
                             // サイズは単体バブルと同じ16pt
                             ClaudeLogoView(
                                 animating: state.isActive,
-                                color: state.isActive ? .claudeOrange : BubbleStyle.resolve(colorScheme).logoIdleColor
+                                color: state.isActive ? .claudeOrange : Color.primary.opacity(0.72)
                             )
                             .frame(width: 16, height: 16)
                         }
@@ -182,37 +130,41 @@ struct BubbleFace: View {
                             // 単体バブルが膨らんでも文字サイズを固定するのと同じ考え方
                             .font(.system(size: isPrimary ? 13 : 11))
                             .monospacedDigit()
-                            .foregroundStyle(BubbleStyle.resolve(colorScheme).textColor)
+                            .foregroundStyle(.primary)
                             .contentTransition(.numericText())
                             .animation(.snappy(duration: 0.4), value: percentText)
                             .modifier(BubbleTextHalo(colorScheme: colorScheme))
                         Text(slot.caption(fableLabel: state.fableLabel))
                             .font(.system(size: isPrimary ? 9 : 8))
-                            .foregroundStyle(BubbleStyle.resolve(colorScheme).textColor.opacity(BubbleStyle.resolve(colorScheme).secondaryTextOpacity))
+                            .foregroundStyle(.primary.opacity(0.75))
                             .modifier(BubbleTextHalo(colorScheme: colorScheme))
                     }
                 }
-                // 光沢・虹は必ずガラスと同じ部分木に置く（.screen加算はガラスが
-                // 同じ合成文脈の背後にいる時だけ光として効く。兄弟に出すと
-                // コンテナがガラスを引き剥がし、透明背景に対してフル彩度で乗る）
+                // 光沢・虹はガラスと同じ合成文脈に置く（.screen加算はガラスが
+                // 背後にいる時だけ「光」として効く。切り離すと透明背景に対して
+                // フル彩度で乗る）
+                BubbleShadingOverlay(s: s, strength: BubbleShadingStrength.scaled(for: colorScheme))
                 BubbleGlossOverlay(s: s)
 
                 // 使用量リング。単体バブル（72ptで線幅4・余白4）と同じ比率。
-                // 虹より前面に置き、ゲージの色が虹に染まらないようにする。
-                // 兄弟レイヤーには出せない（上記コンテナ制約でボケるため部分木内の最前面）
+                // 虹より前面に置き、ゲージの色が虹に染まらないようにする
                 Circle()
                     .trim(from: 0, to: max(0.003, min(value, 100) / 100))
                     .stroke(
                         LinearGradient(colors: [tint, tint.ringDeepened],
                                        startPoint: .leading, endPoint: .trailing),
-                        style: StrokeStyle(lineWidth: 4 * s, lineCap: .round)
+                        style: StrokeStyle(lineWidth: 3.4 * s, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
                     .padding(4 * s)
             }
             .padding(3 * s)
             .frame(width: diameter, height: diameter)
-            .modifier(TripleBubbleGlass(ringFraction: min(value, 100) / 100))
+            // ガラスは1つ表示と同じ SingleBubbleGlass（content へ掛ける）。
+            // これでシステムの「小さい要素は背景に応じて light/dark を反転し、
+            // 上に載る文字も一緒に反転する」挙動に乗る
+            .modifier(SingleBubbleGlass())
         }
     }
 }
+

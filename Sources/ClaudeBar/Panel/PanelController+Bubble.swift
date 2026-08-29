@@ -75,6 +75,51 @@ extension PanelController {
         return p
     }
 
+    /// アセンブリの中身を現在の表示個数に合わせて組み直す。
+    ///
+    /// **3つ表示は球ごとに独立したホスティングビューを兄弟として並べる。**
+    /// `glassEffect` の描画は最も外側のNSHostingViewを基準にウィンドウ単位のガラス群へ
+    /// 持ち上げられ、その内側のレイヤーアニメーションを無視するため、1枚のホスティング
+    /// ビューに3球を入れると球ごとの漂い（DriftHost）が画面に出ない（2026-08-27実測）。
+    /// ホストを分ければ持ち上げ先も分かれ、3球とも背後を採取しつつ独立に漂う。
+    /// 重なり順はサブビューの追加順（最後＝最前面）で作る
+    func configureBubbleContent(in assembly: NSView) {
+        if settings.isTripleBubble {
+            bubbleHosting?.removeFromSuperview()
+            if tripleHosts.isEmpty {
+                // 配列は**スロット順**（セッション/Fable/週間）で持つ。
+                // 幾何の計算で `tripleHosts[slot.index]` を引けるようにするため。
+                // 重なり順は addSubview の順（背面＝週間から）で作る
+                tripleHosts = TripleBubbleCluster.Slot.allCases.map { slot in
+                    let p = tripleCluster.driftParams(for: slot)
+                    let host = DriftHostView(
+                        rootView: AnyView(TripleBallCanvas(
+                            slot: slot, state: state, settings: settings,
+                            cluster: tripleCluster, actions: uiActions
+                        )),
+                        amplitudeX: p.ax, durationX: p.dx,
+                        amplitudeY: p.ay, durationY: p.dy,
+                        phase: p.phase
+                    )
+                    // 球の上のクリック/右クリックは中のSwiftUIへ届かせる
+                    host.passesMouseThrough = false
+                    return host
+                }
+            }
+            for host in tripleHosts.reversed() {   // 週間 → Fable → セッションの順に積む
+                host.frame = assembly.bounds
+                host.hosting.frame = host.bounds
+                if host.superview !== assembly { assembly.addSubview(host) }
+            }
+        } else {
+            for host in tripleHosts { host.removeFromSuperview() }
+            tripleHosts = []
+            guard let hosting = bubbleHosting else { return }
+            hosting.frame = assembly.bounds
+            if hosting.superview !== assembly { assembly.addSubview(hosting) }
+        }
+    }
+
     // MARK: - トグル（🫧ボタン）
 
     /// 🫧ボタン: OFF→ぽわんっと出現 / ON→消える。パネルはそのまま
@@ -132,7 +177,7 @@ extension PanelController {
             assembly.frame = NSRect(x: margin, y: margin, width: diameter, height: diameter)
         }
         assembly.alphaValue = 1
-        bubbleHosting?.frame = assembly.bounds
+        configureBubbleContent(in: assembly)
 
         updateFloatBounds(around: point)
         // 新しいモードのサイズで画面からはみ出す位置なら押し込む
@@ -427,10 +472,13 @@ extension PanelController {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        layer.add(floatAnimation("position.x", amplitude: 6, duration: 3.7, phase: 0), forKey: "float-x1")
-        layer.add(floatAnimation("position.x", amplitude: 2.5, duration: 6.1, phase: 1.7), forKey: "float-x2")
-        layer.add(floatAnimation("position.y", amplitude: 7, duration: 4.4, phase: 1.1), forKey: "float-y1")
-        layer.add(floatAnimation("position.y", amplitude: 2.5, duration: 7.9, phase: 3.0), forKey: "float-y2")
+        // 3つ表示は球ごとの漂い（DriftHost）が上に乗るので、塊側を下げて
+        // 見た目の総移動量を1つ表示（＝v1.5.3の体感）と同じくらいに保つ
+        let g: CGFloat = settings.isTripleBubble ? 0.55 : 1
+        layer.add(floatAnimation("position.x", amplitude: 6 * g, duration: 3.7, phase: 0), forKey: "float-x1")
+        layer.add(floatAnimation("position.x", amplitude: 2.5 * g, duration: 6.1, phase: 1.7), forKey: "float-x2")
+        layer.add(floatAnimation("position.y", amplitude: 7 * g, duration: 4.4, phase: 1.1), forKey: "float-y1")
+        layer.add(floatAnimation("position.y", amplitude: 2.5 * g, duration: 7.9, phase: 3.0), forKey: "float-y2")
         CATransaction.commit()
     }
 
@@ -593,24 +641,37 @@ extension PanelController {
             lastBubbleCenter = NSPoint(x: onScreen.midX, y: onScreen.midY)
         }
 
-        NSSound(named: "Pop")?.play()
-        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
-        if let center = lastBubbleCenter {
-            showPopBurst(centeredOn: center, scale: Self.bubbleScaleFactor(for: bubbleUsageWindow?.utilization ?? 0))
-        }
+        // 「ぐぐ...パチン」。音の前半（軋み）に合わせて球を膨らませ、パチンで割る
+        Self.popSound?.stop()
+        Self.popSound?.play()
+        strainBubble(assembly)
 
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.2
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            assembly.animator().alphaValue = 0
-        }
         bubbleHideGeneration += 1
         let generation = bubbleHideGeneration
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(0.8))
-            guard let self else { return }
-            self.isPopping = false
+            try? await Task.sleep(for: .seconds(PanelController.popStrainDuration))
+            guard let self, self.bubbleHideGeneration == generation else { return }
+            // ここが「パチン」の瞬間。中心は**この時点で**取り直す
+            // （溜めの前に取った位置を使うと、破裂が球からずれて出る）
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+            if let onScreen = self.bubbleScreenFrame {
+                self.lastBubbleCenter = NSPoint(x: onScreen.midX, y: onScreen.midY)
+            }
+            if let center = self.lastBubbleCenter {
+                self.showPopBurst(
+                    centeredOn: center,
+                    // 溜めで膨らんだぶん、破裂も一回り大きく出す
+                    scale: Self.bubbleScaleFactor(for: self.bubbleUsageWindow?.utilization ?? 0) * 1.16
+                )
+            }
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.12
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                assembly.animator().alphaValue = 0
+            }, completionHandler: nil)
+            try? await Task.sleep(for: .seconds(0.6))
             guard self.bubbleHideGeneration == generation else { return }
+            self.isPopping = false
             completion()
         }
     }
@@ -713,21 +774,47 @@ extension PanelController {
         }
     }
 
+    /// 破裂前の「ぐぐぐ」: 球がじわっと膨らみ、最後に一段強く張る。
+    /// SwiftUIのscaleEffectはガラスの円形マスクで切れるため、レイヤー変形で行う
+    /// （`bounceBubble` と同じ流儀）
+    func strainBubble(_ assembly: NSView) {
+        guard let layer = assembly.layer else { return }
+        let cx = assembly.bounds.width / 2
+        let cy = assembly.bounds.height / 2
+        func scaled(_ s: CGFloat) -> CATransform3D {
+            var m = CATransform3DMakeTranslation(cx * (1 - s), cy * (1 - s), 0)
+            m = CATransform3DScale(m, s, s, 1)
+            return m
+        }
+        let strain = CAKeyframeAnimation(keyPath: "transform")
+        // ゆっくり張る → 最後に一段ふくらむ（音の軋みが速くなるところに合わせる）
+        strain.values = [scaled(1.0), scaled(1.035), scaled(1.06), scaled(1.10), scaled(1.16)]
+        strain.keyTimes = [0, 0.35, 0.6, 0.85, 1]
+        strain.timingFunctions = Array(
+            repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: 4
+        )
+        strain.duration = PanelController.popStrainDuration
+        strain.fillMode = .forwards
+        strain.isRemovedOnCompletion = false
+        layer.add(strain, forKey: "pop-strain")
+    }
+
     func showPopBurst(centeredOn center: NSPoint, scale: CGFloat = 1) {
         let size: CGFloat = 240 * scale
-        let w = NSWindow(
-            contentRect: NSRect(x: center.x - size / 2, y: center.y - size / 2, width: size, height: size),
-            styleMask: .borderless, backing: .buffered, defer: false
-        )
-        w.backgroundColor = .clear
-        w.isOpaque = false
-        w.hasShadow = false
+        // **UnconstrainedPanel を使うこと**。素の NSWindow だと AppKit の
+        // `constrainFrameRect` が「上端はメニューバーの下」へ黙ってクランプし、
+        // メニューバー付近のバブルを割ったときに破裂だけ下へずれて出る（実測で最大65pt）
+        let w = makeOverlayPanel(size: NSSize(width: size, height: size), level: .floating, hasShadow: false)
+        w.setFrameOrigin(NSPoint(x: center.x - size / 2, y: center.y - size / 2))
         w.ignoresMouseEvents = true
-        w.level = .floating
-        w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        w.isReleasedWhenClosed = false
         w.contentView = NSHostingView(rootView: PopBurstView(burstScale: scale))
         w.orderFrontRegardless()
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["CLAUDEBAR_TRACE_POP"] == "1" {
+            FileHandle.standardError.write(
+                "POP center=\(center) size=\(size) windowFrame=\(w.frame)\n".data(using: .utf8)!)
+        }
+        #endif
         // 連続破裂（2球がほぼ同時に100%到達など）: 前のバーストを参照ごと潰さず、
         // それぞれのウィンドウが自分の演出を全うしてから片付ける
         popWindow = w

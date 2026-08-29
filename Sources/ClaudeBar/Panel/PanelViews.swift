@@ -11,6 +11,8 @@ struct PanelActions {
     var settings: () -> Void = {}
     var login: () -> Void = {}
     var contentHeightChanged: (CGFloat) -> Void = { _ in }
+    /// 旧OS表示（Liquid Glass無し）の切替。デバッグビルドのみ
+    var toggleLegacy: () -> Void = {}
 }
 
 // MARK: - ルート（パネル/バブルは別ウィンドウ）
@@ -32,7 +34,10 @@ struct PanelRootView: View {
     }
 }
 
-/// バブル専用ウィンドウのルート（バブルはパネルと独立したウィンドウで共存する）
+/// バブル専用ウィンドウのルート（バブルはパネルと独立したウィンドウで共存する）。
+/// **1つ表示のみ**を描く — 3つ表示は球ごとに独立したホスティングビューを
+/// AppKit側で並べる（glassEffectが内側のレイヤーアニメーションを無視するため。
+/// 経緯は TripleBallCanvas のコメント）
 struct BubbleRootView: View {
     var state: AppState
     var settings: SettingsStore
@@ -44,8 +49,6 @@ struct BubbleRootView: View {
             if cluster.contentParked {
                 // 非表示中は中身ごと畳む（無限アニメーションのCPU評価を止める）
                 Color.clear
-            } else if settings.isTripleBubble {
-                TripleBubbleView(state: state, settings: settings, cluster: cluster, actions: actions)
             } else {
                 BubbleView(state: state, settings: settings, actions: actions)
             }
@@ -57,15 +60,92 @@ struct BubbleRootView: View {
 // MARK: - OS適応ガラス
 // macOS 26 = Liquid Glass（純正メニューと同じ質感）/ それ以前 = 従来のすりガラス(Material)
 
-/// パネル背景: 26はLiquid Glass+乳白ティント、旧OSはultraThinMaterial+同じティント。
-/// ダークモードではwindowBackgroundColorがほぼ黒でガラスが純正パネルより暗く濁るため、
-/// ティントを付けず素のガラスにする（純正のサウンドパネル等と同じ見え方）
+/// パネルの背景に敷く**標準マテリアル**（`NSVisualEffectView`）。
+///
+/// HIG「Materials」は素材を「Liquid Glass」と「standard materials」の2種類に分け、
+/// **"Don't use Liquid Glass in the content layer. Instead, use Standard materials for
+/// elements in the content layer, such as app backgrounds."** と明記している。
+/// macOS の standard materials の開発者向け参照先は今も `NSVisualEffectView.Material`
+/// （macOS 26.5 SDK でも .menu / .popover / .sidebar / .hudWindow は非推奨ではない）。
+/// Liquid Glass はバブルやボタンのような「浮いている要素」だけに使う。
+///
+/// `.behindWindow` はウィンドウの**背後**（デスクトップや他アプリ）とブレンドする指定で、
+/// メニューやポップオーバーと同じ仕組み。角丸は maskImage で付ける
+/// （SwiftUI 側で clip すると背後採取と噛み合わないことがあるため）
+struct PanelBackdrop: NSViewRepresentable {
+    var material: NSVisualEffectView.Material
+    var cornerRadius: CGFloat = 18
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.state = .active   // 非アクティブでも素材を保つ（メニューバーのパネルは常に前面扱い）
+        view.material = material
+        view.maskImage = Self.mask(cornerRadius: cornerRadius)
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        if view.material != material { view.material = material }
+    }
+
+    /// 角丸のマスク。中央を伸縮させるので1枚で任意サイズに効く
+    private static func mask(cornerRadius radius: CGFloat) -> NSImage {
+        let edge = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
+    }
+}
+
+/// パネル背景に使う素材。既定は **`.menu`**。
+///
+/// 白/黒背景でパネル内の輝度を実測して選んだ（2026-08-29）:
+/// | 素材 | 白背景 | 黒背景 | 背景の通し量 |
+/// | --- | --- | --- | --- |
+/// | 旧: Liquid Glass + ティント20% | 106 | 41 | 26% |
+/// | **.menu** | **105** | **37** | **26%** |
+/// | .popover | 125 | 33 | 36%（透けすぎ） |
+/// | .hudWindow | 166 | 26 | 55%（透けすぎ） |
+///
+/// `.menu` は「メニューバー由来のパネル」という意味論にも合い、調整済みのガラスと
+/// 同じ濃さになる（HIG:「Choose materials based on semantic meaning」）。
+/// 検証用: CLAUDEBAR_PANEL_MATERIAL=menu|popover|hud|sidebar|glass
+enum PanelMaterialChoice {
+    static let raw = ProcessInfo.processInfo.environment["CLAUDEBAR_PANEL_MATERIAL"] ?? "menu"
+    static var usesGlass: Bool { raw == "glass" }
+    static var material: NSVisualEffectView.Material {
+        switch raw {
+        case "popover": return .popover
+        case "hud": return .hudWindow
+        case "sidebar": return .sidebar
+        default: return .menu
+        }
+    }
+}
+
+/// パネル背景: 26はLiquid Glass+ティント、旧OSはultraThinMaterial+同じティント。
+/// ティント量はライト45% / ダーク20%。ダークを一度0（素のガラス）にしていたが、
+/// 素通しが強すぎてシステムのコントロールセンター系パネルより明るく見えるため戻した
+/// （`.tint(Color.clear)` は「ティント無し」と完全に同一であることも実測済み）
 struct AdaptivePanelGlass: ViewModifier {
     @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
-        let tint = Color(nsColor: .windowBackgroundColor).opacity(scheme == .dark ? 0 : 0.45)
-        if #available(macOS 26.0, *), !forceLegacyUI {
+        // ダークのティント量（検証用: CLAUDEBAR_PANEL_TINT=0-100・既定20）。
+        // 0だと素通しが強すぎて、システムのコントロールセンター系パネルより明るく見える
+        // （2026-08-29に縞背景で0/20/35を撮り比べて20を採用。背景の模様は残しつつ落ち着く）
+        let darkTint = envPercent("CLAUDEBAR_PANEL_TINT", default: 20)
+        let tint = Color(nsColor: .windowBackgroundColor).opacity(scheme == .dark ? darkTint : 0.45)
+        if !PanelMaterialChoice.usesGlass {
+            // 本線: 標準マテリアル（HIG準拠）。旧OSでも同じ経路なので分岐が要らない
+            content.background(PanelBackdrop(material: PanelMaterialChoice.material))
+        } else if #available(macOS 26.0, *), !forceLegacyUI {
             content.glassEffect(.regular.tint(tint), in: RoundedRectangle(cornerRadius: 18))
         } else {
             content.background(
@@ -78,10 +158,19 @@ struct AdaptivePanelGlass: ViewModifier {
     }
 }
 
-/// 単体バブル専用のガラス玉。ガラスを content ではなく背景の円に敷き、
+/// バブルのガラス玉（1つ表示・3つ表示で共通）。
+///
+/// **ガラスは背景ではなく content へ掛ける。** Liquid Glass は64pt以下の小さい図形を
+/// 「背景に応じて light/dark を反転する」材質として扱い、そのとき**ガラスの上に載る
+/// 文字や記号も一緒に反転させる**（HIG: symbols and text on these elements follow a
+/// monochromatic color scheme）。文字をガラスの content に入れて `.primary` で描くと、
+/// 白い背景では自動で黒く、暗い背景では白くなる（2026-08-28実測）。
+/// 背景に敷く方式ではこの自動反転が効かない。
+///
+/// 旧コメント（背景に敷いていた頃）: 単体バブル専用のガラス玉。ガラスを content ではなく背景の円に敷き、
 /// 2倍で描いて0.5倍に縮める縮小レンズ合成を行う（%やリセット時刻は不透明のまま前面）。
-/// 3つ表示（TripleBubbleGlass）に縮小合成を入れていないのは、150ptウィンドウ前提の
-/// 2倍サンプリング領域が220ptウィンドウ+隣接球でどう干渉するか未検証のため
+/// 3つ表示も同じこのモディファイアを使う（球ごとにホスティングビューが分かれた
+/// 2026-08-27の再設計以降、単体と完全に同じ組みにできるようになった）
 struct SingleBubbleGlass: ViewModifier {
     /// 検証用: CLAUDEBAR_GLASS=clear で旧構成（.clear+縮小レンズ）に戻す
     static let useClear = ProcessInfo.processInfo.environment["CLAUDEBAR_GLASS"] == "clear"
@@ -90,7 +179,19 @@ struct SingleBubbleGlass: ViewModifier {
     /// 下地の入れ方（検証用: back / front / tint）
     static let mode = ProcessInfo.processInfo.environment["CLAUDEBAR_MODE"] ?? "back"
 
+    @ViewBuilder
     func body(content: Content) -> some View {
+        if #available(macOS 26.0, *), !forceLegacyUI, !Self.useClear {
+            // 本線: content へ掛ける（システムの自動反転に乗せるため）
+            content
+                .glassEffect(.regular, in: Circle())
+                .bubbleClarity()
+        } else {
+            legacy(content)
+        }
+    }
+
+    private func legacy(_ content: Content) -> some View {
         content.background {
             if #available(macOS 26.0, *), !forceLegacyUI {
                 if Self.useClear {
@@ -119,7 +220,9 @@ struct SingleBubbleGlass: ViewModifier {
                     }
                 }
             } else {
-                // 旧OS: Liquid Glassが無いのですりガラス（Material）で代替
+                // 旧OS: Liquid Glassが無いのですりガラス（Material）で代替。
+                // **背景に応じた自動反転が無い**ので、素材の濃さで外観側へ寄せる
+                // （薄すぎると「ダーク外観×明るい背景」で白文字が沈む）
                 Circle().fill(.ultraThinMaterial)
                     .opacity(0.72)
                     .bubbleClarity()
@@ -380,29 +483,42 @@ extension IconButton where Icon == Image {
 
 /// 単体のシャボン玉+キラキラ（線の十字）。SF Symbolsに無い組み合わせなのでPathで自前描画
 struct BubbleSparkleIcon: View {
+    /// 右上のキラキラ（十字）を描くか。設定ツールバーのアイコンでは
+    /// プラス記号に見えてしまうため落とす
+    var showsSparkle = true
+    /// 線の太さの倍率。ツールバーでは隣に並ぶSF Symbolsより太く見えるので細める
+    var lineWidthScale: CGFloat = 1
+
     var body: some View {
-        let center = CGPoint(x: 6.2, y: 9.8)
+        // キラキラを出すときは右上を空けるため球を左下へ寄せて小さくする。
+        // 出さないとき（ツールバー用）は中央・大きめにして、隣に並ぶSF Symbolsと
+        // 同じ光学サイズに見えるようにする
+        let center = showsSparkle ? CGPoint(x: 6.2, y: 9.8) : CGPoint(x: 8, y: 8)
+        let radius: CGFloat = showsSparkle ? 5 : 6.4
         let sparkle = CGPoint(x: 13.1, y: 3.2)
         let arm: CGFloat = 2.5
         ZStack {
             Path { p in
-                p.addEllipse(in: CGRect(x: center.x - 5, y: center.y - 5, width: 10, height: 10))
+                p.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius,
+                                        width: radius * 2, height: radius * 2))
             }
-            .stroke(style: StrokeStyle(lineWidth: 1.4))
+            .stroke(style: StrokeStyle(lineWidth: 1.4 * lineWidthScale))
             // シャボン玉のハイライト（左上の弧）
             Path { p in
-                p.addArc(center: center, radius: 3.0,
+                p.addArc(center: center, radius: radius * 0.6,
                          startAngle: .degrees(200), endAngle: .degrees(245), clockwise: false)
             }
-            .stroke(style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
+            .stroke(style: StrokeStyle(lineWidth: 1.1 * lineWidthScale, lineCap: .round))
             // キラキラ: 均一な線幅の十字
-            Path { p in
-                p.move(to: CGPoint(x: sparkle.x, y: sparkle.y - arm))
-                p.addLine(to: CGPoint(x: sparkle.x, y: sparkle.y + arm))
-                p.move(to: CGPoint(x: sparkle.x - arm, y: sparkle.y))
-                p.addLine(to: CGPoint(x: sparkle.x + arm, y: sparkle.y))
+            if showsSparkle {
+                Path { p in
+                    p.move(to: CGPoint(x: sparkle.x, y: sparkle.y - arm))
+                    p.addLine(to: CGPoint(x: sparkle.x, y: sparkle.y + arm))
+                    p.move(to: CGPoint(x: sparkle.x - arm, y: sparkle.y))
+                    p.addLine(to: CGPoint(x: sparkle.x + arm, y: sparkle.y))
+                }
+                .stroke(style: StrokeStyle(lineWidth: 1.2 * lineWidthScale, lineCap: .round))
             }
-            .stroke(style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
         }
         .frame(width: 16, height: 16)
     }
@@ -448,11 +564,11 @@ struct HoverPressIconStyle: ButtonStyle {
 /// 画面内容が来る（ライトモードでも黒いエディタの上に浮くことがある）。
 /// 文字色は外観に従う(.primary)ため、反対色のハロー+下地で
 /// どんな背景でも読めるようにする。外観ごとに強さを変えられる
+/// バブルの文字まわりの外観。**文字色そのものはここでは決めない** —
+/// 2026-08-28以降、文字は `.primary` で描き、Liquid Glass の
+/// 「小さい要素は背景に応じて light/dark を反転し、上に載る文字も一緒に反転する」
+/// 仕様に乗せている。ここに残るのはハローと下地（どちらも既定オフ）
 struct BubbleStyle {
-    /// 文字色。外観によらず白（コントロールセンターと同じ白抜き）。
-    /// 外観に従う黒文字+白ハロー方式はライトモードで中心を白く濁らせ、
-    /// 黒背景では沈むという二重の不利があった
-    var textColor: Color
     /// 文字の縁取り色（常に暗色。白文字を明るい背景でも成立させる）
     var haloColor: Color
     /// 縁取り3層の不透明度（細い縁 / 中間 / 広いにじみ）
@@ -461,11 +577,21 @@ struct BubbleStyle {
     /// （全面だけで4.5:1を狙うと球が不透明な円盤になるため、局所で稼ぐ）
     var padColor: Color
     var padOpacity: Double
-    /// 控えめな文字（リセット時刻・キャプション）の不透明度
-    var secondaryTextOpacity: Double
-    /// ロゴ（Claudeスパーク）の待機色。白文字より一段引いた明るいグレー
-    /// （消費中はClaudeオレンジで、これは外観によらず共通）
-    var logoIdleColor: Color
+
+    /// 文字の縁取りハローの強さ。既定0＝使わない
+    /// （旧OSの可読性は縁取りではなく「文字の裏のぼかしグレー」= BubbleTextPlate で担保する）。
+    /// 検証用: CLAUDEBAR_HALO=0-100
+    /// 環境変数は開発者が手で打つので、数値でない値が来ても落ちないようにする
+    static let haloGain: Double = envPercent("CLAUDEBAR_HALO", default: 0)
+
+    /// 文字裏の下地（旧OS用）の調整ノブ: CLAUDEBAR_PLATE_D / CLAUDEBAR_PLATE_L（不透明度%）
+    static let plateOpacityDark = envPercent("CLAUDEBAR_PLATE_D", default: 70)
+    static let plateOpacityLight = envPercent("CLAUDEBAR_PLATE_L", default: 68)
+    static let plateWhiteDark = envPercent("CLAUDEBAR_PLATEW_D", default: 8)
+    static let plateWhiteLight = envPercent("CLAUDEBAR_PLATEW_L", default: 93)
+
+    static func plateOpacity(dark: Bool) -> Double { dark ? plateOpacityDark : plateOpacityLight }
+    static func plateWhite(dark: Bool) -> Double { dark ? plateWhiteDark : plateWhiteLight }
 
     static func resolve(_ scheme: ColorScheme) -> BubbleStyle {
         switch scheme {
@@ -473,25 +599,43 @@ struct BubbleStyle {
             // ダークモードは球も背景も暗いので白文字。
             // ライトモードの黒文字と対で、外観に素直に従う
             return BubbleStyle(
-                textColor: .white,
                 haloColor: .black,
-                haloOpacities: (0, 0, 0),
-                padColor: .black,
-                padOpacity: 0.55,
-                secondaryTextOpacity: 0.85,
-                logoIdleColor: Color(white: 0.78)
+                haloOpacities: (0.62 * haloGain, 0.42 * haloGain, 0.30 * haloGain),
+                // 文字の裏に敷くぼかしグレー（旧OS用）。黒だと穴が空いて見えるのでグレー
+                padColor: Color(white: BubbleStyle.plateWhite(dark: true)),
+                padOpacity: BubbleStyle.plateOpacity(dark: true)
             )
         default:
             // ライトモードでも白文字。明るい背景では暗い縁取りと下地で成立させる
             return BubbleStyle(
-                textColor: Color(white: 0.12),
                 haloColor: .white,
-                haloOpacities: (0, 0, 0),
-                padColor: .white,
-                padOpacity: 0.55,
-                secondaryTextOpacity: 0.75,
-                logoIdleColor: Color(white: 0.62)
+                haloOpacities: (0.62 * haloGain, 0.42 * haloGain, 0.30 * haloGain),
+                padColor: Color(white: BubbleStyle.plateWhite(dark: false)),
+                padOpacity: BubbleStyle.plateOpacity(dark: false)
             )
+        }
+    }
+}
+
+/// **旧OS専用**: 文字の裏に敷くぼかしたグレーの下地。
+///
+/// macOS 26 では、ガラスが背景に応じて light/dark を反転し、その上に載る文字も
+/// 一緒に反転するので何も要らない。旧OS（14/15）はその仕組みが無く、
+/// 「ダーク外観 × 明るい背景」「ライト外観 × 暗い背景」で文字が沈むため、
+/// 文字コラムの裏だけを外観と同じ側の色でぼかして持ち上げる。
+/// 縁取り（ハロー）ではなく面で支えるので、細い字が汚れて見えない
+struct BubbleTextPlate: View {
+    /// 基準72ptに対するスケール
+    var s: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        if !usesLiquidGlass {
+            let style = BubbleStyle.resolve(colorScheme)
+            Ellipse()
+                .fill(style.padColor.opacity(style.padOpacity))
+                .frame(width: 42 * s, height: 40 * s)
+                .blur(radius: 7 * s)
         }
     }
 }
@@ -551,10 +695,13 @@ struct BubbleView: View {
         return settings.useSystemAccent ? Color(nsColor: .controlAccentColor) : .claudeOrange
     }
 
-    /// 使用量に応じて風船のように膨らむ（10%ごとに+1%、100%で1.1倍）
-    private var sizeFactor: CGFloat {
-        PanelController.bubbleScaleFactor(for: value)
+    /// バブルの直径（膨張率は現在1.0固定）
+    private var diameter: CGFloat {
+        PanelController.bubbleDiameter * PanelController.bubbleScaleFactor(for: value)
     }
+
+    /// 装飾の基準スケール（72ptを1とする）。3つ表示の BubbleFace と同じ流儀
+    private var sizeFactor: CGFloat { diameter / 72 }
 
     var body: some View {
         ZStack {
@@ -565,28 +712,32 @@ struct BubbleView: View {
             // マスクされるので、掛けないと単体だけパッチが白く濁って揃わない）
             BubbleDepthUnderlay(s: sizeFactor)
                 .bubbleClarity()
-            // 中身のゆらぎはCAAnimation常駐（WobbleHost）。
-            // 旧TimelineView(30fps)のbody再評価は待機中CPU約7%の主因だった
-            WobbleHost {
+            // 旧OSだけ、文字の裏にぼかしグレーを敷く（26は自動反転で足りる）
+            BubbleTextPlate(s: sizeFactor)
+            // 中身のゆらぎ（WobbleHost）は廃止した（2026-08-28ユーザー判断）。
+            // ガラスを content 側へ掛ける構成では、球まるごとがウィンドウ単位の
+            // ガラス群へ持ち上げられて内側のレイヤーアニメーションが効かないため、
+            // 残しても描画に出ない
+            Group {
                 VStack(spacing: 0) {
                     // 待機中は通常色・消費中だけClaudeオレンジ（オレンジ=消費中のシグナルを守る）。
                     // 視認性は色ではなくサイズで確保（16ptで光条も太くなる）
                     ClaudeLogoView(
                         animating: state.isActive,
-                        color: state.isActive ? .claudeOrange : BubbleStyle.resolve(colorScheme).logoIdleColor
+                        color: state.isActive ? .claudeOrange : Color.primary.opacity(0.72)
                     )
                     .frame(width: 16, height: 16)
                     Text(percentText)
                         .font(.system(size: 13))
                         .monospacedDigit()
-                        .foregroundStyle(BubbleStyle.resolve(colorScheme).textColor)
+                        .foregroundStyle(.primary)
                         .contentTransition(.numericText())
                         .animation(.snappy(duration: 0.4), value: percentText)
                         .modifier(BubbleTextHalo(colorScheme: colorScheme))
                     if let metricCaption {
                         Text(metricCaption)
                             .font(.system(size: 9))
-                            .foregroundStyle(BubbleStyle.resolve(colorScheme).textColor.opacity(BubbleStyle.resolve(colorScheme).secondaryTextOpacity))
+                            .foregroundStyle(.primary.opacity(0.75))
                             .modifier(BubbleTextHalo(colorScheme: colorScheme))
                     }
                     // リミットのリセット時刻
@@ -596,7 +747,7 @@ struct BubbleView: View {
                         Text(UsageGaugeView.resetText(resets))
                             .font(.system(size: 9))
                             .monospacedDigit()
-                            .foregroundStyle(BubbleStyle.resolve(colorScheme).textColor.opacity(BubbleStyle.resolve(colorScheme).secondaryTextOpacity))
+                            .foregroundStyle(.primary.opacity(0.75))
                             .modifier(BubbleTextHalo(colorScheme: colorScheme))
                             .padding(.top, 1)
                     }
@@ -604,7 +755,8 @@ struct BubbleView: View {
             }
 
             // 立体感と光沢は単体/3つ表示で共通のコンポーネント（BubbleDecoration.swift）。
-            // 深度層はリングと文字の下、光沢層は文字の上に置く
+            // 深度層はリングと文字の下、陰と光沢は文字の上に置く
+            BubbleShadingOverlay(s: sizeFactor, strength: BubbleShadingStrength.scaled(for: colorScheme))
             BubbleGlossOverlay(s: sizeFactor)
 
             // 使用量リング。溝は描かず進捗アークだけを見せる。
@@ -618,22 +770,29 @@ struct BubbleView: View {
                         colors: [tint, tint.ringDeepened],
                         startPoint: .leading, endPoint: .trailing
                     ),
-                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                    style: StrokeStyle(lineWidth: 3.4 * sizeFactor, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .padding(4)
+                .padding(4 * sizeFactor)
         }
-        .padding(3)
-        // フレームだけ拡大し、リングの太さ・ぼかし・中身（ロゴ/%）は固定サイズを保つ。
-        // 3つ表示の BubbleSphere は装飾ごとスケールする別方針なので共通化していない
-        .frame(width: 72 * sizeFactor, height: 72 * sizeFactor)
-        .animation(.bouncy(duration: 0.4), value: sizeFactor)
+        .padding(3 * sizeFactor)
+        // 3つ表示の BubbleFace と同じ比率（基準径72ptを1とするスケール駆動）。
+        // 膨張を廃止したので「リングだけ固定サイズ」にする理由がなくなり、
+        // 同じ64ptなら1つ表示とセッション球が完全に同じ見た目になる
+        .frame(width: diameter, height: diameter)
+        .animation(.bouncy(duration: 0.4), value: diameter)
         // ガラス玉は薄めに（26=Liquid Glass / 旧OS=すりガラス）。背景が透けて
         // 水晶玉のように見えるところまで落としている
         .modifier(SingleBubbleGlass())
         // 縁の光と虹は BubbleGlossOverlay（フレネル+薄膜干渉）に統合済み
         .contentShape(Circle())
         .contextMenu {
+            #if DEBUG
+            Button(forceLegacyUI ? "検証: 旧OS表示 → 通常へ戻す" : "検証: 旧OS表示に切り替え") {
+                actions.toggleLegacy()
+            }
+            Divider()
+            #endif
             Button(L("bubble.expandToPanel")) { actions.expand() }
             Button(L("bubble.closeBubble")) { actions.toBubble() }
             Divider()
@@ -654,41 +813,91 @@ struct BubbleView: View {
 
 // MARK: - 割れる演出（シャボン玉の膜が弾ける）
 
+/// 破裂の演出。**実物のシャボン玉の割れ方**に寄せている:
+/// 膜は一瞬で縁へ引き戻され（虹色のリングが薄く広がって消える）、
+/// その膜が表面張力で**小さな滴に分かれて飛び散る**。
+/// 白い衝撃波のような「爆発」表現は使わない（シャボン玉には無い動き）
 struct PopBurstView: View {
     var burstScale: CGFloat = 1
     @State private var expand = false
 
+    /// 飛び散る滴。角度と距離は固定テーブル（毎回同じでも十分に自然に見える。
+    /// 乱数を使うとプレビューやテストで結果が揺れる）
+    private static let droplets: [(angle: Double, distance: CGFloat, size: CGFloat, delay: Double)] = [
+        (  8, 1.00, 4.8, 0.00), ( 34, 0.82, 3.1, 0.02), ( 61, 1.10, 5.8, 0.00),
+        ( 92, 0.74, 2.6, 0.03), (118, 1.02, 4.2, 0.01), (147, 0.88, 3.7, 0.02),
+        (176, 1.12, 5.4, 0.00), (203, 0.78, 2.9, 0.03), (231, 0.96, 4.5, 0.01),
+        (259, 1.06, 3.4, 0.02), (288, 0.84, 5.1, 0.00), (315, 1.00, 3.0, 0.03),
+        (338, 0.90, 4.0, 0.01),
+    ]
+
     var body: some View {
         ZStack {
-            // 虹色の膜の縁が広がりながら薄れて消える
+            // ① 膜の縁: 虹色のリングがすっと広がって消える（膜が縁へ引かれる瞬間）
             Circle()
                 .stroke(
                     AngularGradient(colors: [
                         .cyan.opacity(0.55), .purple.opacity(0.45), .pink.opacity(0.5),
                         .orange.opacity(0.35), .mint.opacity(0.45), .cyan.opacity(0.55),
                     ], center: .center),
-                    lineWidth: expand ? 1 : 5
+                    lineWidth: expand ? 0.6 : 4
                 )
-                .frame(width: 76 * burstScale, height: 76 * burstScale)
-                .scaleEffect(expand ? 1.55 : 1.0)
-                .opacity(expand ? 0 : 0.9)
+                .frame(width: 74 * burstScale, height: 74 * burstScale)
+                .scaleEffect(expand ? 1.28 : 1.0)
+                .opacity(expand ? 0 : 0.95)
 
-            // 白い衝撃波（ひと回り速く広がる）
+            // ② 飛び散る滴: 膜が表面張力で分かれたもの。外へ飛びながら少し落ちる
+            ForEach(Array(Self.droplets.enumerated()), id: \.offset) { index, drop in
+                Droplet(spec: drop, burstScale: burstScale, expand: expand)
+            }
+
+            // ③ 名残の霧（ごく薄く）
             Circle()
-                .stroke(.white.opacity(expand ? 0 : 0.5), lineWidth: 2)
+                .fill(.white.opacity(expand ? 0 : 0.10))
                 .frame(width: 60 * burstScale, height: 60 * burstScale)
-                .scaleEffect(expand ? 2.0 : 0.8)
-
-            // 霧のようにふわっと消える
-            Circle()
-                .fill(.white.opacity(expand ? 0 : 0.16))
-                .frame(width: 70 * burstScale, height: 70 * burstScale)
-                .scaleEffect(expand ? 1.5 : 0.9)
-                .blur(radius: expand ? 16 : 6)
+                .scaleEffect(expand ? 1.35 : 0.9)
+                .blur(radius: expand ? 14 : 5)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
-            withAnimation(.easeOut(duration: 0.5)) { expand = true }
+            withAnimation(.easeOut(duration: 0.45)) { expand = true }
+        }
+    }
+
+    /// 滴1粒。虹色の膜のかけらなので、わずかに色を持たせる
+    private struct Droplet: View {
+        var spec: (angle: Double, distance: CGFloat, size: CGFloat, delay: Double)
+        var burstScale: CGFloat
+        var expand: Bool
+
+        var body: some View {
+            let radians = spec.angle * .pi / 180
+            // リング（膜の縁）より外まで飛ばす。内側で消えると「弾けた」に見えない
+            let travel = 78 * burstScale * spec.distance
+            let x = cos(radians) * travel
+            // 飛びながら少し落ちる（表面張力で飛んだ滴の弾道）
+            let y = sin(radians) * travel + 7 * burstScale * spec.distance
+            return Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [.white.opacity(0.95), tint.opacity(0.75)],
+                        center: UnitPoint(x: 0.35, y: 0.3),
+                        startRadius: 0, endRadius: spec.size * burstScale
+                    )
+                )
+                .frame(width: spec.size * burstScale, height: spec.size * burstScale)
+                // 出発点は膜の縁（球の輪郭）。そこから外へ散る
+                .offset(x: expand ? x : cos(radians) * 34 * burstScale,
+                        y: expand ? y : sin(radians) * 34 * burstScale)
+                .scaleEffect(expand ? 0.45 : 1)
+                .opacity(expand ? 0 : 1)
+                .animation(.easeOut(duration: 0.5).delay(spec.delay), value: expand)
+        }
+
+        /// 角度ごとに薄膜干渉の色を割り当てる（虹の帯と同じ並び）
+        private var tint: Color {
+            let hue = (spec.angle / 360).truncatingRemainder(dividingBy: 1)
+            return Color(hue: hue, saturation: 0.5, brightness: 1.0)
         }
     }
 }

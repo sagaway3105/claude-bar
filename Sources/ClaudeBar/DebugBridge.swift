@@ -9,6 +9,7 @@ import Foundation
 ///   bubble / tobubble / expand / overlay   （バブル表示・トグル・パネル展開・オーバーレイ）
 ///   pop / resetpop                         （破裂 / リセット破裂→再生成）
 ///   hud / hudoff                           （ホバーHUDの表示・非表示）
+///   legacy                                 （旧OS表示＝Liquid Glass無しの分岐へ切替/復帰）
 ///   checkupdate / bgupdate                 （Sparkleの更新確認）
 ///   usage:<session>,<weekly>,<fable>       例: usage:83,41,12
 ///   active:1 / active:0                    （ロゴアニメのon/off）
@@ -90,6 +91,8 @@ final class DebugBridge {
             panelController.showHoverHUD()
         case "hudoff":
             panelController.hideHoverHUD()
+        case "legacy":
+            panelController.toggleLegacyRendering()
         case "resetpop":
             panelController.popForReset()
         case "hide":
@@ -146,7 +149,9 @@ final class DebugBridge {
             info["panel"] = [frame.origin.x, frame.origin.y, frame.width, frame.height]
             info["visible"] = panelController.isPanelVisible
         }
+        info["appAppearance"] = NSApp.effectiveAppearance.name.rawValue
         if let w = panelController.panel {
+            info["panelAppearance"] = w.effectiveAppearance.name.rawValue
             info["window"] = [w.frame.origin.x, w.frame.origin.y, w.frame.width, w.frame.height]
             let content = w.contentRect(forFrameRect: w.frame)
             info["contentRect"] = [content.width, content.height]
@@ -163,6 +168,15 @@ final class DebugBridge {
         }
         if let h = panelController.contentHosting {
             info["hosting"] = [h.frame.origin.x, h.frame.origin.y, h.frame.width, h.frame.height]
+        }
+        if let f = panelController.bubbleScreenFrame {
+            info["bubbleScreenFrame"] = [f.origin.x, f.origin.y, f.width, f.height]
+        }
+        if let p = panelController.bubblePanel {
+            info["bubbleWindow"] = [p.frame.origin.x, p.frame.origin.y, p.frame.width, p.frame.height]
+        }
+        if let a = panelController.bubbleAssembly {
+            info["bubbleAssemblyFrame"] = [a.frame.origin.x, a.frame.origin.y, a.frame.width, a.frame.height]
         }
         if let bubble = panelController.bubbleAssembly, let pres = bubble.layer?.presentation() {
             info["bubblePresentation"] = [pres.position.x, pres.position.y]
