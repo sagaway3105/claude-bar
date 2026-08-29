@@ -7,6 +7,15 @@
     <language>ja</language>
     <!-- ITEMS -->
     <item>
+      <title>v1.6.0</title>
+      <pubDate>Sun, 30 Aug 2026 00:37:02 +0900</pubDate>
+      <sparkle:version>1.6.0</sparkle:version>
+      <sparkle:shortVersionString>1.6.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<h3>ClaudeBar v1.6.0</h3><p>変更点の詳細は <a href="https://github.com/sagaway3105/claude-bar/releases/tag/v1.6.0">リリースページ</a> をご覧ください。</p>]]></description>
+      <enclosure url="https://github.com/sagaway3105/claude-bar/releases/download/v1.6.0/ClaudeBar-v1.6.0.zip" sparkle:edSignature="HtWQQzVNRJW7MKBYhEBv0hCI0cZKqKOUszcQSXv+BUEyGlD9JUpe9WdytAXKNGJSoqhPWkBnpoJtNn/pLtI5Cw==" length="2129335" type="application/octet-stream" />
+    </item>
+    <item>
       <title>v1.5.3</title>
       <pubDate>Tue, 18 Aug 2026 09:08:39 +0900</pubDate>
       <sparkle:version>1.5.3</sparkle:version>
