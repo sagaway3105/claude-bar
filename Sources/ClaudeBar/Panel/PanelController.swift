@@ -90,7 +90,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// **音の前半に合わせて球を膨らませてから割る**（`popStrainDuration`）。
     /// 自前合成の音源を同梱している（システムの "Pop" は溜めが無く、この演出に合わない）
     static let popSound: NSSound? = {
-        guard let url = Bundle.module.url(forResource: "bubble-pop", withExtension: "aiff") else { return nil }
+        guard let url = AppResources.bundle.url(forResource: "bubble-pop", withExtension: "aiff") else { return nil }
         return NSSound(contentsOf: url, byReference: true)
     }()
 

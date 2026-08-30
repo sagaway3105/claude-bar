@@ -2,13 +2,13 @@ import Foundation
 
 /// ローカライズ済み文字列を引く。
 ///
-/// SPMのリソースは `Bundle.module` に入るため、`NSLocalizedString` の既定
+/// SPMのリソースは `AppResources.bundle` に入るため、`NSLocalizedString` の既定
 /// （`Bundle.main`）ではなくこちらを明示的に見に行く必要がある。
 /// 言語の選択はシステム環境設定に自動追従し、未対応言語は
 /// `defaultLocalization: "en"`（Package.swift）にフォールバックする。
-/// 実際に文字列を引くバンドル（`Bundle.module` の中の `<lang>.lproj`）。
+/// 実際に文字列を引くバンドル（`AppResources.bundle` の中の `<lang>.lproj`）。
 ///
-/// `Bundle.module.localizedString` に任せると、**CFBundle の言語解決が
+/// `AppResources.bundle.localizedString` に任せると、**CFBundle の言語解決が
 /// メインバンドルの `.lproj` / `CFBundleLocalizations` に制限される**ため、
 /// メインバンドルを持たない生の実行ファイル（`swift build` の
 /// `.build/debug/ClaudeBar`）では ja があっても英語に固定されてしまう
@@ -19,11 +19,11 @@ private let localizedBundle: Bundle = {
     // 引数1つの `preferredLocalizations(from:)` はメインバンドルの制約を受けて
     // 「en」を返してしまう（実測）。ユーザーの言語リストを明示的に渡す2引数版を使う
     let preferred = Bundle.preferredLocalizations(
-        from: Bundle.module.localizations,
+        from: AppResources.bundle.localizations,
         forPreferences: Locale.preferredLanguages
     )
     for code in preferred {
-        if let path = Bundle.module.path(forResource: code, ofType: "lproj"),
+        if let path = AppResources.bundle.path(forResource: code, ofType: "lproj"),
            let bundle = Bundle(path: path) {
             return bundle
         }
@@ -31,13 +31,13 @@ private let localizedBundle: Bundle = {
     return .module
 }()
 
-/// 選んだ `.lproj` を先に引き、**キーが無ければ `Bundle.module` に落とす**。
+/// 選んだ `.lproj` を先に引き、**キーが無ければ `AppResources.bundle` に落とす**。
 /// `.lproj` を直接開くと CFBundle の `defaultLocalization`（en）への
 /// フォールバックが効かず、未翻訳のキーがそのまま画面に出てしまうため
 private func localized(_ key: String) -> String {
     let value = localizedBundle.localizedString(forKey: key, value: MissingKey.marker, table: nil)
     if value != MissingKey.marker { return value }
-    return Bundle.module.localizedString(forKey: key, value: nil, table: nil)
+    return AppResources.bundle.localizedString(forKey: key, value: nil, table: nil)
 }
 
 private enum MissingKey {

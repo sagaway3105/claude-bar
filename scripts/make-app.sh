@@ -30,11 +30,21 @@ for LANG_DIR in en ja; do
   : > "$APP/Contents/Resources/$LANG_DIR.lproj/InfoPlist.strings"
 done
 
-# SwiftPMのリソースバンドルを同梱（Localizable.strings が入っている）
-RES_BUNDLE=".build/release/ClaudeBar_ClaudeBar.bundle"
-if [[ -d "$RES_BUNDLE" ]]; then
-  cp -R "$RES_BUNDLE" "$APP/Contents/Resources/"
+# `Bundle.module` の直接使用を禁止する（ResourceBundle.swift の AppResources 経由のみ許可）。
+# SwiftPM のアクセサは Contents/Resources を探さないため、配布 .app で必ず落ちる（Issue #2）
+if grep -rn "Bundle\.module" Sources/ --include='*.swift' | grep -v "ResourceBundle.swift" | grep -v "^\S*:\s*//" ; then
+  echo "❌ Bundle.module を直接使っている箇所があります。AppResources.bundle を使ってください" >&2
+  exit 1
 fi
+
+# SwiftPMのリソースバンドルを同梱（Localizable.strings・効果音）。
+# 無ければ即中断する（黙ってスキップすると、配布先で Bundle 解決に失敗してクラッシュする＝Issue #2）
+RES_BUNDLE=".build/release/ClaudeBar_ClaudeBar.bundle"
+if [[ ! -d "$RES_BUNDLE" ]]; then
+  echo "❌ リソースバンドルが見つかりません: $RES_BUNDLE（swift build -c release を先に）" >&2
+  exit 1
+fi
+cp -R "$RES_BUNDLE" "$APP/Contents/Resources/"
 
 # Sparkle.framework を Contents/Frameworks に同梱（自動アップデート用）
 SPARKLE_FW=".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
@@ -134,6 +144,15 @@ fi
 
 # 本体（entitlementsはDeveloper ID時のみ・ad-hoc/開発署名でも動く）
 codesign --force "${RUNTIME[@]}" --entitlements build/entitlements.plist --sign "${SIGN_ID}" "$APP"
+
+# 組み立て検証: 開発機の .build へのフォールバックに頼らず、Contents/Resources から
+# 文字列と音が実際に引けるかをアプリ自身に確かめさせる（Issue #2 の再発防止。
+# 開発機では常に成功してしまう種類の欠落なので、アプリ側のセルフテストで判定する）
+if ! CLAUDEBAR_SELFTEST=resources "$APP/Contents/MacOS/ClaudeBar"; then
+  echo "❌ 配布 .app のリソース検証に失敗しました（上の ❌ を参照）" >&2
+  exit 1
+fi
+echo "✅ 配布 .app のリソース検証OK（Contents/Resources から解決）"
 
 echo "✅ ${APP} を生成しました"
 echo "   open '${APP}' で起動できます"

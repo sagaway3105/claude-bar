@@ -8,6 +8,10 @@ let claudeBarReopenNotification = Notification.Name("com.sagaway3105.ClaudeBar.r
 @main
 enum ClaudeBarMain {
     static func main() {
+        // 配布 .app の組み立て検証（make-app.sh から呼ばれる）。UIを立ち上げずに終了する
+        if ProcessInfo.processInfo.environment["CLAUDEBAR_SELFTEST"] == "resources" {
+            exit(AppResources.selfTest() ? 0 : 1)
+        }
         // 多重起動ガード（.app起動時のみ）。
         // 黙って消えるのではなく、既存インスタンスにパネル表示を依頼してから退く
         if let bundleID = Bundle.main.bundleIdentifier {

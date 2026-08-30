@@ -98,6 +98,10 @@
   文字も一緒に反転する」。使用量による膨張を廃止したのもこの境界をまたがないため
   （公式の根拠と実測は docs/LIQUID_GLASS_SPEC.md）
 - macOS 26 のウィンドウ角丸は**ツールバーの有無**で2クラスに分かれる（docs/WINDOW_CORNER_RADIUS.md）
+- **リソースは `AppResources.bundle` 経由で引く（`Bundle.module` 直接使用は禁止・make-app.sh が検知）。**
+  SwiftPM のアクセサは `.app` 直下と開発機の絶対パスしか探さず、`Contents/Resources` に置く配布 .app では
+  必ず落ちる。開発機ではフォールバックに救われて再現しない（v1.6.0 で全ユーザーがクラッシュ＝Issue #2）。
+  make-app.sh は `CLAUDEBAR_SELFTEST=resources` でアプリ自身に配布先条件の検証をさせる
 - ウィンドウは固定サイズ（パネル300x460 / バブル150）でリサイズしない。
   内容は上詰め、余白は完全透明。hosting.sizingOptions = [] は必須
 
