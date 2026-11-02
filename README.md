@@ -40,9 +40,9 @@ Claude Codeがトークンを消費している間は、ロゴがClaudeオレン
 
 ## 動作環境
 
-- macOS 14 (Sonoma) 以降 — macOS 26ではLiquid Glass、それ以前は従来のすりガラス表示
+- macOS 14 (Sonoma) 以降 — macOS 26以降ではLiquid Glass、それ以前は従来のすりガラス表示
 - Apple Silicon (arm64)
-- Claude Code がログイン済みであること（Pro / Max プラン）
+- Claude Code がログイン済みであること（Pro / Max / Ultra / Team などのサブスクリプション）
 
 ## インストール
 
@@ -110,6 +110,7 @@ swift test
 ## UI検証用デバッグモード
 
 ```sh
+swift build --build-system native     # 既定のビルド方式では Xcode 27 で起動できない
 CLAUDEBAR_DEBUG=1 CLAUDEBAR_FAKE=1 CLAUDEBAR_CMDFILE=/tmp/cbcmd ./.build/debug/ClaudeBar
 echo "usage:83,41,12" >> /tmp/cbcmd   # フェイクデータ注入
 echo "bubble" >> /tmp/cbcmd           # バブル表示

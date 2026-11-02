@@ -6,6 +6,12 @@ ClaudeBar のバブルとパネルは Liquid Glass（`glassEffect` / `NSGlassEff
 
 実装側の「どう描いているか」は [BUBBLE_RENDERING.md](BUBBLE_RENDERING.md) にある。こちらは「仕様の根拠」。
 
+> **macOS 27 での変更（2026-09-15）**: 以下の「サイズで扱いが変わる」「小さい要素は背景に応じて
+> light/dark を自動反転する」「文字も一緒に反転する」は **macOS 27 では成立しない**。27 ではガラスは
+> 大きさ・背景によらず薄灰で、`.primary` の文字だけが外観に追従する。`.regular.tint(...)` も効かない。
+> ClaudeBar は 27 だけ content 側の膜（`BubbleAppearanceFilm`）で外観側へ寄せている。
+> 実測・出典は [MACOS27_LIQUID_GLASS.md](MACOS27_LIQUID_GLASS.md)。この文書の本文は 26 の記録として残す。
+
 ---
 
 ## 0. 30秒サマリ
@@ -21,6 +27,8 @@ ClaudeBar のバブルとパネルは Liquid Glass（`glassEffect` / `NSGlassEff
 | ガラスに `opacity` を掛ける | **禁止**（公式に明記） | 公式 |
 | ガラスの上にガラス | **禁止**（公式に明記） | 公式 |
 | `.regular` と `.clear` の混在 | **禁止**（公式に明記） | 公式 |
+| **macOS 27 の自動反転** | **無い**（サイズ閾値も消滅。文字色だけ外観追従） | **実測のみ**（MACOS27_LIQUID_GLASS.md） |
+| **macOS 27 の `.tint`** | **効かない**（赤・黒60%・windowBackgroundColor とも明度不変、60〜140pt） | **実測のみ** |
 
 ---
 

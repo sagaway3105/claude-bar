@@ -40,9 +40,9 @@ While Claude Code is burning tokens, the logo spins and pulses in Claude orange.
 
 ## Requirements
 
-- macOS 14 (Sonoma) or later — Liquid Glass on macOS 26, classic frosted glass before that
+- macOS 14 (Sonoma) or later — Liquid Glass on macOS 26 and later, classic frosted glass before that
 - Apple Silicon (arm64)
-- Claude Code signed in with a Pro / Max plan
+- Claude Code signed in with a subscription plan (Pro / Max / Ultra / Team, etc.)
 
 ## Install
 
