@@ -46,7 +46,7 @@ final class UsageService {
 
     private let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private let session = UsageService.makeTokenSession()
-    private var windowlessResponses = 0
+    private var windowlessGuard = WindowlessResponseGuard()
 
     /// トークンを送るリクエスト専用のセッション。URLSession.shared はリクエストごと
     /// Authorization ヘッダをディスクのキャッシュへ残す（v1.6.1 の Cache.db で確認）。
@@ -243,11 +243,9 @@ final class UsageService {
         if let last = state.lastUpdated, asOf.timeIntervalSince(last) < -1.0 { return }
         // 枠の無い応答は一時的な欠けとして無視する。続くなら本当に枠の無いプランへ変わったので受け入れる
         if snapshot.canReplace(state.usage) {
-            windowlessResponses = 0
-        } else {
-            windowlessResponses += 1
-            if windowlessResponses < 3 { return }
-            windowlessResponses = 0
+            windowlessGuard.reset()
+        } else if !windowlessGuard.shouldAccept() {
+            return
         }
         let old = state.usage
         state.usage = snapshot

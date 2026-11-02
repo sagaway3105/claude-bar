@@ -236,6 +236,7 @@ struct UsagePanelView: View {
     var state: AppState
     var settings: SettingsStore
     var actions: PanelActions
+    @State private var dayChanges = 0
 
     /// macOSのアクセントカラー準拠（設定でClaudeオレンジに切り替え可）
     private var baseTint: Color {
@@ -322,6 +323,10 @@ struct UsagePanelView: View {
                 Text(updatedText)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    // 日付が変わったら、昨日の更新に日付を付ける（タイマーは使わない）
+                    .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+                        dayChanges += 1
+                    }
                 Spacer()
                 IconButton(systemName: "arrow.clockwise", help: L("panel.refreshNow")) { actions.refresh() }
                 IconButton(systemName: "gearshape.fill", help: L("panel.settings")) { actions.settings() }
@@ -346,6 +351,7 @@ struct UsagePanelView: View {
     }
 
     private var updatedText: String {
+        _ = dayChanges // 日付の変更で描き直す
         guard let date = state.lastUpdated else { return L("panel.notFetched") }
         // 時刻はロケール準拠（日本語 "15:45"／英語(US) "3:45 PM"）にし、
         // 「更新」の語順は .strings 側で決める（英語は "Updated 3:45 PM"）

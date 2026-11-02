@@ -88,6 +88,7 @@ final class BubbleBackdropSampler {
     private var ownWindowWaits = 0
     private var partialFailures = 0
     private static let maxPartialFailures = 30
+    private static let backoffThreshold = BackdropFailureBackoff.threshold
     private static let maxOwnWindowWaits = 15
     private var screenObserver: NSObjectProtocol?
     /// 許可の問い合わせは1回約5ms掛かるので、許可がある間は聞き直さない（撮影の失敗で聞き直す）
@@ -269,6 +270,7 @@ final class BubbleBackdropSampler {
         // 失敗は球ごとでなく1回の測定につき1回数える（3つ表示で一瞬の失敗を連続失敗と誤認しない）
         // 全部失敗したら一覧から取り直す。一部だけの失敗は、毎秒の取り直しを避けつつ、続くなら取り直す
         if failedAny, !capturedAny {
+            partialFailures = 0
             recordFailure()
         } else if failedAny {
             partialFailures += 1
@@ -283,7 +285,9 @@ final class BubbleBackdropSampler {
             backoff.recordSuccess()
             ownWindowWaits = 0
             let current = targets()
-            isLive = !current.isEmpty && current.allSatisfy { tones[$0.id]?.tone != nil }
+            // 一部の球が撮れ続けないなら、その球の外観は背景に合っていないので膜を戻す
+            isLive = !current.isEmpty && partialFailures < Self.backoffThreshold
+                && current.allSatisfy { tones[$0.id]?.tone != nil }
         }
     }
 

@@ -22,6 +22,32 @@ struct UsageSnapshot {
     var extra: ExtraUsage?
 }
 
+/// 枠の無い応答を受け入れるかの判定。一時的な欠けで正常な表示を消さないよう、
+/// 枠の無い応答が間を空けず一定時間続いた時だけ、本当に枠の無いプランへ変わったとみなす
+struct WindowlessResponseGuard {
+    static let requiredDuration: TimeInterval = 3600
+    /// これより間が空いたら、続いていないものとして数え直す（取得失敗が挟まった場合など）
+    static let maxGap: TimeInterval = 900
+
+    private var firstSeen: Date?
+    private var lastSeen: Date?
+
+    mutating func reset() {
+        firstSeen = nil
+        lastSeen = nil
+    }
+
+    mutating func shouldAccept(now: Date = Date()) -> Bool {
+        if let lastSeen, now.timeIntervalSince(lastSeen) > Self.maxGap { firstSeen = nil }
+        let first = firstSeen ?? now
+        firstSeen = first
+        lastSeen = now
+        guard now.timeIntervalSince(first) >= Self.requiredDuration else { return false }
+        reset()
+        return true
+    }
+}
+
 extension UsageSnapshot {
     var hasNoWindows: Bool { session == nil && weeklyAll == nil && weeklyFable == nil }
 

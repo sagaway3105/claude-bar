@@ -273,6 +273,32 @@ final class ReviewRegressionTests: XCTestCase {
         XCTAssertEqual(try UsageParser.parse(Data(json.utf8)).snapshot.weeklyFableAllowancePercent, 1000)
     }
 
+    // 枠の無い応答は、間を空けず1時間続くまで受け入れない
+    func testWindowlessGuardNeedsSustainedResponses() {
+        var guardState = WindowlessResponseGuard()
+        let start = Date()
+        func at(_ minutes: Double) -> Date { start.addingTimeInterval(minutes * 60) }
+        XCTAssertFalse(guardState.shouldAccept(now: at(0)))
+        XCTAssertFalse(guardState.shouldAccept(now: at(1)))
+        XCTAssertFalse(guardState.shouldAccept(now: at(2))) // 回数だけでは受け入れない
+        for minute in stride(from: 10.0, to: 60, by: 10) {
+            XCTAssertFalse(guardState.shouldAccept(now: at(minute)))
+        }
+        XCTAssertTrue(guardState.shouldAccept(now: at(60)))
+    }
+
+    // 取得失敗などで間が空いたら数え直す。正常な応答でも数え直す
+    func testWindowlessGuardRestartsAfterGapOrGoodResponse() {
+        var guardState = WindowlessResponseGuard()
+        let start = Date()
+        func at(_ minutes: Double) -> Date { start.addingTimeInterval(minutes * 60) }
+        XCTAssertFalse(guardState.shouldAccept(now: at(0)))
+        XCTAssertFalse(guardState.shouldAccept(now: at(300))) // 5時間空いた
+        XCTAssertFalse(guardState.shouldAccept(now: at(310)))
+        guardState.reset()
+        XCTAssertFalse(guardState.shouldAccept(now: at(370)))
+    }
+
     // 今日の更新は時刻だけ、今日以外は日付も出す
     func testUpdatedTextShowsDateWhenNotToday() {
         let now = Date()

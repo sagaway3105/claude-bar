@@ -162,9 +162,8 @@ extension PanelController {
             showPopBurst(centeredOn: center, scale: Self.bubbleScaleFactor(for: utilization) * 0.8)
         }
         // 割れた時点のリセット時刻を控える（新しい期間に入るまで復活させない判定用）
-        if let resets = state.usage?.window(for: slot.metric)?.resetsAt {
-            tripleCluster.poppedResetsAt[slot.index] = resets
-        }
+        // 時刻が無い時も上書きする（前の期間の控えが残ると、次の更新で復活してしまう）
+        tripleCluster.poppedResetsAt[slot.index] = state.usage?.window(for: slot.metric)?.resetsAt
         tripleCluster.pop(slot)
         tripleCluster.bounceScales[slot.index] = 1   // 次に生まれ直すときのために戻す
         refreshTripleFloatBounds()

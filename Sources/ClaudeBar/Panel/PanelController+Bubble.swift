@@ -307,7 +307,7 @@ extension PanelController {
         if !state.bubbleActive, pendingRevival {
             // 1つ表示で割ったまま3つ表示へ: 今の期間を各枠の基準にして、次のリセットまで戻さない
             if settings.isTripleBubble {
-                for slot in TripleBubbleCluster.Slot.allCases where tripleCluster.poppedResetsAt[slot.index] == nil {
+                for slot in TripleBubbleCluster.Slot.allCases {
                     tripleCluster.poppedResetsAt[slot.index] = state.usage?.window(for: slot.metric)?.resetsAt
                 }
             }
@@ -419,13 +419,13 @@ extension PanelController {
             width: p.frame.width, height: lastPanelSize.height
         )
         let isReachable = NSScreen.screens.contains { screen in
-            let visible = screen.visibleFrame.intersection(content)
+            // visibleFrame だと Dock の設定変更だけで動いてしまうので、画面全体で判定する
+            let visible = screen.frame.intersection(content)
             return visible.width >= 40 && visible.height >= 40
         }
         guard !isReachable, let vf = NSScreen.main?.visibleFrame else { return }
         isProgrammaticMove = true
         p.setFrameOrigin(NSPoint(x: vf.maxX - p.frame.width - 8, y: vf.maxY - p.frame.height - 8))
-        syncPanelChromeFrames()
         isProgrammaticMove = false
     }
 
