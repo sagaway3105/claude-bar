@@ -5,7 +5,6 @@
 "panel.backToMenuBar" = "メニューバーへ戻す";
 "panel.currentSession" = "現在のセッション";
 "panel.thisWeek" = "今週";
-"panel.percentUsed" = "%d%% 使用済み";
 "panel.modelAllowance" = "週間の利用上限の最大 %d%%";
 "panel.weekly" = "今週";
 "panel.extraUsage" = "追加利用";

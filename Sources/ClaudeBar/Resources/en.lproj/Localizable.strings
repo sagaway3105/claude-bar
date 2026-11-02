@@ -5,7 +5,6 @@
 "panel.backToMenuBar" = "Back to Menu Bar";
 "panel.currentSession" = "Current Session";
 "panel.thisWeek" = "This Week";
-"panel.percentUsed" = "%d%% used";
 "panel.modelAllowance" = "Up to %d%% of weekly limit";
 "panel.weekly" = "Weekly";
 "panel.extraUsage" = "Extra Usage";

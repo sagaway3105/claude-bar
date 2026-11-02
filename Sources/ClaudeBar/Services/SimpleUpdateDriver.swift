@@ -26,6 +26,11 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
     }
 
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        // 更新が見つかった時に「インストールして再起動」を選んだ手動の経路。ダウンロードが終わっただけなので聞き直さない
+        if userAcceptedUpdate {
+            reply(.install)
+            return
+        }
         // この経路ではバージョン不明のためリリース一覧へ
         let choice = runUpdateAlert(detailsURL: URL(string: "https://github.com/sagaway3105/claude-bar/releases"))
         if choice == .install { userAcceptedUpdate = true }
