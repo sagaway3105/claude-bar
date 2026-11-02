@@ -31,6 +31,12 @@ if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]]; then
   exit 1
 fi
 
+# リリース前チェック（テスト・CI・手動確認）を通ったコミットしか配布しない
+if [[ ! -f "build/preflight/v${VERSION}-$(git rev-parse HEAD)" ]]; then
+  echo "❌ このコミットのリリース前チェックの記録がありません。./scripts/preflight.sh ${VERSION} を先に実行してください" >&2
+  exit 1
+fi
+
 VERSION="$VERSION" ./scripts/make-app.sh
 
 # 署名の完全性チェック（壊れた署名のまま配布しない）
