@@ -103,57 +103,25 @@ struct PanelBackdrop: NSViewRepresentable {
     }
 }
 
-/// パネル背景に使う素材。既定は **`.menu`**。
+/// パネル背景。システムのメニューと同じ見た目にするため、調整を足さない（2026-11-02 ユーザー判断）。
 ///
-/// 白/黒背景でパネル内の輝度を実測して選んだ（2026-08-29）:
-/// | 素材 | 白背景 | 黒背景 | 背景の通し量 |
-/// | --- | --- | --- | --- |
-/// | 旧: Liquid Glass + ティント20% | 106 | 41 | 26% |
-/// | **.menu** | **105** | **37** | **26%** |
-/// | .popover | 125 | 33 | 36%（透けすぎ） |
-/// | .hudWindow | 166 | 26 | 55%（透けすぎ） |
+/// macOS 27.2 のライト / ダーク外観で背景の通し量を実測した（2026-11-02）:
+/// | 素材 | ライト | ダーク |
+/// | --- | --- | --- |
+/// | **本物の NSMenu** | **40%** | **41%** |
+/// | **`.glassEffect(.regular)`（採用）** | **36%** | **42%** |
+/// | `.menu`（〜v1.6） | 19% | 30% |
+/// | `.popover` | 30% | 39% |
 ///
-/// `.menu` は「メニューバー由来のパネル」という意味論にも合い、調整済みのガラスと
-/// 同じ濃さになる（HIG:「Choose materials based on semantic meaning」）。
-/// 検証用: CLAUDEBAR_PANEL_MATERIAL=menu|popover|hud|sidebar|glass
-enum PanelMaterialChoice {
-    static let raw = ProcessInfo.processInfo.environment["CLAUDEBAR_PANEL_MATERIAL"] ?? "menu"
-    static var usesGlass: Bool { raw == "glass" }
-    static var material: NSVisualEffectView.Material {
-        switch raw {
-        case "popover": return .popover
-        case "hud": return .hudWindow
-        case "sidebar": return .sidebar
-        default: return .menu
-        }
-    }
-}
-
-/// パネル背景: 26はLiquid Glass+ティント、旧OSはultraThinMaterial+同じティント。
-/// ティント量はライト45% / ダーク20%。ダークを一度0（素のガラス）にしていたが、
-/// 素通しが強すぎてシステムのコントロールセンター系パネルより明るく見えるため戻した
-/// （`.tint(Color.clear)` は「ティント無し」と完全に同一であることも実測済み）
+/// 旧OSには Liquid Glass が無いので、メニューと同じ `.menu` を使う
 struct AdaptivePanelGlass: ViewModifier {
-    @Environment(\.colorScheme) private var scheme
-
     func body(content: Content) -> some View {
-        // ダークのティント量（検証用: CLAUDEBAR_PANEL_TINT=0-100・既定20）。
-        // 0だと素通しが強すぎて、システムのコントロールセンター系パネルより明るく見える
-        // （2026-08-29に縞背景で0/20/35を撮り比べて20を採用。背景の模様は残しつつ落ち着く）
-        let darkTint = envPercent("CLAUDEBAR_PANEL_TINT", default: 20)
-        let tint = Color(nsColor: .windowBackgroundColor).opacity(scheme == .dark ? darkTint : 0.45)
-        if !PanelMaterialChoice.usesGlass {
-            // 本線: 標準マテリアル（HIG準拠）。旧OSでも同じ経路なので分岐が要らない
-            content.background(PanelBackdrop(material: PanelMaterialChoice.material))
-        } else if #available(macOS 26.0, *), !forceLegacyUI {
-            content.glassEffect(.regular.tint(tint), in: RoundedRectangle(cornerRadius: 18))
+        if #available(macOS 26.0, *), !forceLegacyUI {
+            content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
         } else {
-            content.background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
-                    RoundedRectangle(cornerRadius: 18).fill(tint)
-                }
-            )
+            content
+                .background(PanelBackdrop(material: .menu))
+                .overlay(PanelSheen())
         }
     }
 }
@@ -379,7 +347,6 @@ struct UsagePanelView: View {
         .padding(.bottom, 10)
         .frame(width: 300)
         .modifier(AdaptivePanelGlass())
-        .overlay(PanelSheen())
     }
 
     private var updatedText: String {

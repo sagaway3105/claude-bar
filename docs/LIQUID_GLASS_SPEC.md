@@ -296,6 +296,11 @@ macOS 26.0〜26.6 / Xcode 26 / iOS 26 のリリースノートを走査した結
 
 ## 11. パネルの背景は Liquid Glass ではなく**標準マテリアル**（2026-08-29 調査＋実測）
 
+> **2026-11-02 に変更: macOS 26 以降のパネルは素の `.glassEffect(.regular)`、旧OSは `.menu`。**
+> macOS 27.2 で背景の通し量を測ると、本物の NSMenu が 40%（ダーク 41%）、`.menu` は 19%（同 30%）、
+> `.glassEffect(.regular)` は 36%（同 42%）だった。システムのメニューと揃えることを優先し（ユーザー判断）、
+> ティントや縁取りの調整も外した。以下は当時の記録で、下の `CLAUDEBAR_PANEL_MATERIAL` は削除済み。
+
 ### 公式に書かれていること
 
 HIG「Materials」（Change log: 2025-09-09＝Liquid Glass 対応後の改訂）は素材を2種類に分けている。
