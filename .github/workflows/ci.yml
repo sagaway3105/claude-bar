@@ -65,3 +65,44 @@ jobs:
             rm -rf "$WORK"
             echo "✅ ${TOOL} 展開後の署名OK"
           done
+
+      - name: 古いOSでの確認用に zip を渡す
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeBar-ci
+          path: build/ClaudeBar-ci.zip
+          retention-days: 1
+
+  # 古いOSのランナーでは SDK が古くてビルドできないので、macOS 26 で作った .app を渡して動かす。
+  # 確認できるのは起動とクラッシュまで（v1.6.0 の起動時クラッシュの種類）。見た目と操作は
+  # docs/RELEASE_CHECKLIST.md の手動項目で確認する。
+  # macOS 14 のランナーは 2026-11-02 に廃止されたため、CI では確認できない
+  old-os-smoke:
+    needs: build-test
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ClaudeBar-ci
+
+      - name: 環境を記録して展開
+        run: |
+          sw_vers
+          ditto -x -k ClaudeBar-ci.zip .
+
+      - name: 古いOSで文字と音のリソースを読めるか
+        run: CLAUDEBAR_SELFTEST=resources ClaudeBar.app/Contents/MacOS/ClaudeBar
+
+      - name: 古いOSで起動して落ちないか
+        run: |
+          ClaudeBar.app/Contents/MacOS/ClaudeBar &
+          PID=$!
+          sleep 20
+          if ! kill -0 "$PID" 2>/dev/null; then
+            echo "❌ 起動から20秒以内に終了しました"
+            ls -t ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i claudebar | head -3 || true
+            exit 1
+          fi
+          kill "$PID"
+          echo "✅ 20秒間動作"
