@@ -26,7 +26,7 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
     }
 
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
-        // 更新が見つかった時に「インストールして再起動」を選んだ手動の経路。ダウンロードが終わっただけなので聞き直さない
+        // 更新が見つかった時に「インストールして再起動」を選んだ後は、ダウンロードが終わっただけなので聞き直さない
         if userAcceptedUpdate {
             reply(.install)
             return
@@ -129,6 +129,7 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
 
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {
         userInitiated = true
+        userAcceptedUpdate = false // 前の更新の承諾を引き継がない（即時インストールの経路は完了通知が来ない）
     }
 
     func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {}
@@ -144,7 +145,8 @@ final class SimpleUpdateDriver: NSObject, SPUUserDriver {
     /// 未終了なら数回リトライして確実に終了へ導く（Sparkle 2.3+ は複数回呼び出し可）。
     func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {
         guard !applicationTerminated else { return }
-        for delay: TimeInterval in [2, 6, 15] {
+        // ダウンロード完了はいつ来るか分からず、他のモーダルと重なり得るので長めに続ける
+        for delay: TimeInterval in [2, 6, 15, 30, 60, 120] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: retryTerminatingApplication)
         }
     }

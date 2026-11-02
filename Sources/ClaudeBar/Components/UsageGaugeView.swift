@@ -21,7 +21,7 @@ struct UsageGaugeView: View {
                 Text(title)
                     .font(.system(size: 13))
                 Spacer()
-                Text(window == nil ? "–" : "\(Int(value.rounded()))%")
+                Text(verbatim: window == nil ? "–" : "\(Int(value.rounded()))%")
                     .font(.system(size: 13))
                     .monospacedDigit()
                     .contentTransition(.numericText())
