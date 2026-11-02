@@ -349,7 +349,7 @@ struct UsagePanelView: View {
         guard let date = state.lastUpdated else { return L("panel.notFetched") }
         // 時刻はロケール準拠（日本語 "15:45"／英語(US) "3:45 PM"）にし、
         // 「更新」の語順は .strings 側で決める（英語は "Updated 3:45 PM"）
-        return L("panel.updatedAt", UsageGaugeView.clockText(date))
+        return L("panel.updatedAt", UsageGaugeView.updatedClockText(date))
     }
 }
 

@@ -273,6 +273,16 @@ final class ReviewRegressionTests: XCTestCase {
         XCTAssertEqual(try UsageParser.parse(Data(json.utf8)).snapshot.weeklyFableAllowancePercent, 1000)
     }
 
+    // 今日の更新は時刻だけ、今日以外は日付も出す
+    func testUpdatedTextShowsDateWhenNotToday() {
+        let now = Date()
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now)!
+        XCTAssertEqual(UsageGaugeView.updatedClockText(now, now: now), UsageGaugeView.clockText(now))
+        let old = UsageGaugeView.updatedClockText(yesterday, now: now)
+        XCTAssertNotEqual(old, UsageGaugeView.clockText(yesterday))
+        XCTAssertTrue(old.contains(String(Calendar.current.component(.day, from: yesterday))))
+    }
+
     // トークンを送るセッションはディスクへ何も残さない
     func testTokenSessionHasNoDiskCache() {
         let config = UsageService.makeTokenSession().configuration

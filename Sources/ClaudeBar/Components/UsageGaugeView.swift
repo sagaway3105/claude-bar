@@ -98,6 +98,12 @@ struct UsageGaugeView: View {
         timeFormatter.string(from: date)
     }
 
+    /// 最終更新の表示。オフライン中の古いキャッシュが今日のものに見えないよう、今日以外は日付も出す
+    static func updatedClockText(_ date: Date, now: Date = Date()) -> String {
+        let formatter = Calendar.current.isDate(date, inSameDayAs: now) ? timeFormatter : dayTimeFormatter
+        return formatter.string(from: date)
+    }
+
     /// 公式画面と同じ言い回し（「20:10にリセットされます」「10:00 (木曜日)にリセット」）
     static func resetSentence(_ date: Date) -> String {
         let rounded = roundedToMinute(date)
