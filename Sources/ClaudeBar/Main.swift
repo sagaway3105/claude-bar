@@ -46,6 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        // v1.6 以前がディスクに残した、トークン付きリクエストのキャッシュを消す
+        URLCache.shared.removeAllCachedResponses()
         #if DEBUG
         // 検証用: CLAUDEBAR_APPEARANCE=dark|light でアプリ外観を固定する
         // （システム設定を切り替えずにライト/ダーク両方のスタイルを確認するため）

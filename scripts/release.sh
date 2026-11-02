@@ -37,6 +37,13 @@ if [[ ! -f "build/preflight/v${VERSION}-$(git rev-parse HEAD)" ]]; then
   exit 1
 fi
 
+# このフォルダは Dropbox の同期下にあり、同期された .build の中身が差し替えられていても
+# 署名して全利用者へ配信してしまう。公開するビルドは毎回作り直し、同期からも外す
+rm -rf .build
+mkdir -p .build build
+xattr -w com.dropbox.ignored 1 .build
+xattr -w com.dropbox.ignored 1 build
+
 VERSION="$VERSION" ./scripts/make-app.sh
 
 # 署名の完全性チェック（壊れた署名のまま配布しない）
@@ -133,9 +140,7 @@ SPARKLE_TOOLS=".build/artifacts/sparkle/Sparkle/bin"
 if [[ -x "$SPARKLE_TOOLS/sign_update" ]]; then
   python3 scripts/appcast_add.py "$VERSION" "$ZIP" "$SPARKLE_TOOLS"
   git add docs/appcast.xml
-  git commit -q -m "appcast: v${VERSION} を配信
-
-Claude-Session: https://claude.ai/code/session_01S4fGVycDVJZaRMgQrh1EEp"
+  git commit -q -m "appcast: v${VERSION} を配信"
   git push -q
   echo "📡 appcast.xml を更新・push（既存ユーザーへ自動アップデート配信）"
 else

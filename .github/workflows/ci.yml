@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     # glassEffect などを `if #available(macOS 26.0, *)` で参照している（コンパイル時ガードは無い）ため、
@@ -16,6 +19,9 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+
+      - name: 秘密情報が入っていないか
+        run: zsh scripts/check-secrets.sh
 
       - name: 環境を記録
         run: |

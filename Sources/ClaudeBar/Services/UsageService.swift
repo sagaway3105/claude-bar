@@ -45,6 +45,28 @@ final class UsageService {
     private let cliRefreshMinInterval: TimeInterval = 300
 
     private let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    private let session = UsageService.makeTokenSession()
+
+    /// トークンを送るリクエスト専用のセッション。URLSession.shared はリクエストごと
+    /// Authorization ヘッダをディスクのキャッシュへ残す（v1.6.1 の Cache.db で確認）。
+    /// リダイレクトにも従わず、トークンを固定のエンドポイント以外へ送らない
+    nonisolated static func makeTokenSession() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.httpCookieStorage = nil
+        return URLSession(configuration: config, delegate: RefuseRedirects(), delegateQueue: nil)
+    }
+
+    private final class RefuseRedirects: NSObject, URLSessionTaskDelegate {
+        func urlSession(
+            _ session: URLSession, task: URLSessionTask,
+            willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+            completionHandler: @escaping (URLRequest?) -> Void
+        ) {
+            completionHandler(nil)
+        }
+    }
     private let rateLimitCooldown: TimeInterval = 300
 
     #if DEBUG
@@ -158,7 +180,7 @@ final class UsageService {
             request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
             request.setValue("claude-code/\(cliVersion)", forHTTPHeaderField: "User-Agent")
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw UsageError.badResponse }
             switch http.statusCode {
             case 200:
@@ -254,7 +276,7 @@ final class UsageService {
 
     private var didDetectCLIVersion = false
 
-    /// フォールバック経路を初めて使う時だけ検出する。バイナリ直接起動
+    /// User-Agent 用に、起動後の最初の更新で一度だけ検出する。バイナリ直接起動
     /// （ログインシェル経由は.zshrc走査がTCC確認を誘発するため使わない）
     private func detectCLIVersionIfNeeded() async {
         guard !didDetectCLIVersion, !isFake,

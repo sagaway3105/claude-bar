@@ -147,10 +147,6 @@ struct AdaptivePanelGlass: ViewModifier {
 struct SingleBubbleGlass: ViewModifier {
     /// 検証用: CLAUDEBAR_GLASS=clear で旧構成（.clear+縮小レンズ）に戻す
     static let useClear = ProcessInfo.processInfo.environment["CLAUDEBAR_GLASS"] == "clear"
-    /// ガラスの背後に敷く下地の濃さ（検証用: CLAUDEBAR_BACKDROP 0-100）
-    static let backdropOpacity = Double(ProcessInfo.processInfo.environment["CLAUDEBAR_BACKDROP"] ?? "0")! / 100
-    /// 下地の入れ方（検証用: back / front / tint）
-    static let mode = ProcessInfo.processInfo.environment["CLAUDEBAR_MODE"] ?? "back"
 
     @ViewBuilder
     func body(content: Content) -> some View {

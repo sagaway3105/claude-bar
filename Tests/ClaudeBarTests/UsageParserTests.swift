@@ -255,6 +255,29 @@ final class ReviewRegressionTests: XCTestCase {
         XCTAssertEqual(snapshot.extra?.isEnabled, true)
     }
 
+    // トークンを送るセッションはディスクへ何も残さない
+    func testTokenSessionHasNoDiskCache() {
+        let config = UsageService.makeTokenSession().configuration
+        XCTAssertNil(config.urlCache)
+        XCTAssertNil(config.httpCookieStorage)
+        XCTAssertEqual(config.requestCachePolicy, .reloadIgnoringLocalCacheData)
+    }
+
+    // 異常に大きい値でも、表示の Int 変換でクラッシュしない範囲に収める
+    func testHugePercentIsClamped() throws {
+        let json = #"{"five_hour":{"utilization":1e300},"seven_day":{"utilization":-5}}"#
+        let snapshot = try UsageParser.parse(Data(json.utf8)).snapshot
+        XCTAssertEqual(snapshot.session?.utilization, 1000)
+        XCTAssertEqual(snapshot.weeklyAll?.utilization, 0)
+        XCTAssertEqual(UsageParser.sanePercent(.infinity), 0)
+    }
+
+    // ログインコマンドの引用: 引用符を含むパスでスクリプトが壊れない
+    func testLoginCommandQuoting() {
+        XCTAssertEqual(LoginHelper.shellQuoted("/a/b's/claude"), #"'/a/b'\''s/claude'"#)
+        XCTAssertEqual(LoginHelper.appleScriptEscaped(#"say "hi" \o"#), #"say \"hi\" \\o"#)
+    }
+
     // 期間枠の無いプランの応答（追加利用は無効）もエラーにしない
     func testAccountWithoutWindowsIsValid() throws {
         let json = #"{"five_hour":null,"seven_day":null,"extra_usage":{"is_enabled":false}}"#

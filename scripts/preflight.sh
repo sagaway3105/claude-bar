@@ -41,6 +41,9 @@ fi
 is-at-least "${LATEST_TAG#v}" "$VERSION" || fail "v${VERSION} は最新のタグ ${LATEST_TAG} より古いです"
 echo "✅ コミット済み、${LATEST_TAG} → v${VERSION}"
 
+echo "== 秘密情報"
+./scripts/check-secrets.sh
+
 echo "== リリースノート"
 [[ -s "$NOTES_FILE" ]] || fail "$NOTES_FILE がありません"
 if grep -nE 'TODO|TBD|下書き' "$NOTES_FILE"; then

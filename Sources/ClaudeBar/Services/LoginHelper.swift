@@ -20,20 +20,31 @@ enum LoginHelper {
         NSPasteboard.general.setString(installCommand, forType: .string)
     }
 
+    /// シェルの単一引用符で囲む
+    nonisolated static func shellQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
+    }
+
+    /// AppleScript の文字列リテラルの中に入れられる形にする
+    nonisolated static func appleScriptEscaped(_ value: String) -> String {
+        value.replacingOccurrences(of: #"\"#, with: #"\\"#)
+            .replacingOccurrences(of: #"""#, with: #"\""#)
+    }
+
     /// ターミナルで claude /login を起動する（失敗時はコマンドをコピーしてターミナルを開く）
     static func openLoginTerminal() {
         // 検出済みの実体の絶対パスで起動する。インストール判定は固定パス走査なので、
         // 裸の `claude` だとシェルのPATH/エイリアス次第で command not found になる環境がある
         let command: String
         if let path = ClaudeUsageBridge.claudeBinaryPath() {
-            command = "'\(path)' /login"
+            command = "\(shellQuoted(path)) /login"
         } else {
             command = "claude /login"
         }
         let source = """
         tell application "Terminal"
             activate
-            do script "\(command)"
+            do script "\(appleScriptEscaped(command))"
         end tell
         """
         if let script = NSAppleScript(source: source) {

@@ -92,7 +92,7 @@
 | 材質 | `PanelViews.swift:183` / `TripleBubbleView.swift:108` | `.regular` | `.regular` 固定 | `.clear` にすると明るい背景で完全に消える（実測コントラスト 1.48:1） |
 | 形状 | 同上 | `Circle()` | 変えない | 標準プリミティブ以外だとシステムが解決に失敗する |
 | 旧OSの代替 | `PanelViews.swift:188` / `TripleBubbleView.swift:110` | `.ultraThinMaterial` 0.72 | 0.6–0.85 | 上げると曇る、下げると消える |
-| 検証用の逃げ道 | `PanelViews.swift:154-158` | env `CLAUDEBAR_GLASS` / `CLAUDEBAR_BACKDROP` / `CLAUDEBAR_MODE` | — | 本番挙動は既定値のみ |
+| 検証用の逃げ道 | `PanelViews.swift` | env `CLAUDEBAR_GLASS` | — | 本番挙動は既定値のみ |
 
 **3つ表示は `GlassEffectContainer(spacing: 0)` で括るのが必須**（`TripleBubbleView.swift:50`）。
 括らないと、透明ウィンドウ内で背後を採取できるのは**最前面の1つだけ**になり、

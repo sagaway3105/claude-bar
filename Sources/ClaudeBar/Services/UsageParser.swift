@@ -63,7 +63,7 @@ enum UsageParser {
             $0.kind == "weekly_scoped" && $0.percent != nil && $0.scope?.model?.displayName != nil
         } ?? []
         if let scoped = modelLimits.first(where: { $0.scope?.model?.displayName == "Fable" }) ?? modelLimits.first {
-            snapshot.weeklyFable = UsageWindow(utilization: scoped.percent ?? 0, resetsAt: date(scoped.resetsAt))
+            snapshot.weeklyFable = UsageWindow(utilization: sanePercent(scoped.percent ?? 0), resetsAt: date(scoped.resetsAt))
             fableLabel = scoped.scope?.model?.displayName
             // 「週間の利用上限の最大 50%」。limit_index は limits[] 内の位置を指す
             if let index = response.limits?.firstIndex(where: {
@@ -87,7 +87,7 @@ enum UsageParser {
         if let extra = response.extraUsage {
             snapshot.extra = ExtraUsage(
                 isEnabled: extra.isEnabled ?? false,
-                utilization: extra.utilization,
+                utilization: extra.utilization.map(sanePercent),
                 usedCredits: extra.usedCredits,
                 monthlyLimit: extra.monthlyLimit,
                 currency: extra.currency
@@ -114,12 +114,19 @@ enum UsageParser {
         guard let limit = response.limits?.first(where: { $0.kind == kind }), let percent = limit.percent else {
             return nil
         }
-        return UsageWindow(utilization: percent, resetsAt: date(limit.resetsAt))
+        return UsageWindow(utilization: sanePercent(percent), resetsAt: date(limit.resetsAt))
     }
 
     private static func window(_ w: OAuthUsageResponse.Window?) -> UsageWindow? {
         guard let w, let u = w.utilization else { return nil }
-        return UsageWindow(utilization: u, resetsAt: date(w.resetsAt))
+        return UsageWindow(utilization: sanePercent(u), resetsAt: date(w.resetsAt))
+    }
+
+    /// 表示で Int へ変換するので、異常に大きい値でクラッシュしないよう範囲に収める
+    /// （100% 超は実際にあり得るので、上限は余裕を持たせる）
+    static func sanePercent(_ value: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return min(max(value, 0), 1000)
     }
 
     static func date(_ iso: String?) -> Date? {
