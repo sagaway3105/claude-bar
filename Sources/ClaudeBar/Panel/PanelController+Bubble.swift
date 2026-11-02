@@ -305,12 +305,8 @@ extension PanelController {
     func relayoutBubbleForCountChange() {
         // 割れて復活待ちなら、新しいモードの基準で予約を取り直す
         if !state.bubbleActive, pendingRevival {
-            // 1つ表示で割ったまま3つ表示へ: 今の期間を各枠の基準にして、次のリセットまで戻さない
-            if settings.isTripleBubble {
-                for slot in TripleBubbleCluster.Slot.allCases {
-                    tripleCluster.poppedResetsAt[slot.index] = state.usage?.window(for: slot.metric)?.resetsAt
-                }
-            }
+            // 1つ表示で割ったまま3つ表示へ
+            if settings.isTripleBubble { recordTriplePopBaselines() }
             scheduleRevivalIfNeeded()
         }
         guard state.bubbleActive, let p = bubblePanel else { return }
@@ -719,6 +715,7 @@ extension PanelController {
             self.bubblePanel?.orderOut(nil)
             self.bubbleAssembly?.alphaValue = 1
             self.tripleCluster.contentParked = true
+            if self.settings.isTripleBubble { self.recordTriplePopBaselines() }
             self.scheduleRevivalIfNeeded()
         }
     }

@@ -204,6 +204,14 @@ extension PanelController {
             .min()
     }
 
+    /// 塊ごと割れた時に、今の期間を全部の枠の基準にする。次のリセットまで戻さないため
+    /// （控えの無い枠は `hasResetSincePop` が新しい期間とみなすので、記録しないと次の更新で復活する）
+    func recordTriplePopBaselines() {
+        for slot in TripleBubbleCluster.Slot.allCases {
+            tripleCluster.poppedResetsAt[slot.index] = state.usage?.window(for: slot.metric)?.resetsAt
+        }
+    }
+
     /// 割れてからどれかの枠が新しい期間に入ったか
     var tripleHasNewPeriod: Bool {
         TripleBubbleCluster.Slot.allCases.contains { slot in
