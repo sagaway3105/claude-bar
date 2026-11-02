@@ -38,7 +38,7 @@ final class UpdaterService: NSObject {
             self.driver = driver
             self.updater = updater
         } catch {
-            NSLog(L("update.sparkleFailed", error.localizedDescription))
+            NSLog("%@", L("update.sparkleFailed", error.localizedDescription))
         }
     }
 

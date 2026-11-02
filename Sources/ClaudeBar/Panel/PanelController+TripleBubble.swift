@@ -53,7 +53,7 @@ extension PanelController {
     }
 
     /// 球のスクリーン座標中心（破裂演出の位置決め用）。塊と球それぞれの漂いを補正して見た目に合わせる
-    private func tripleBallScreenCenter(_ slot: TripleBubbleCluster.Slot) -> NSPoint? {
+    func tripleBallScreenCenter(_ slot: TripleBubbleCluster.Slot) -> NSPoint? {
         guard let p = bubblePanel else { return nil }
         let home = tripleCluster.home(for: slot)
         let drag = tripleCluster.dragOffsets[slot.index]
@@ -144,7 +144,8 @@ extension PanelController {
             try? await Task.sleep(for: .seconds(PanelController.popStrainDuration))
             guard let self else { return }
             self.strainingSlots.remove(slot.index)
-            guard self.state.bubbleActive,
+            // 膨張中に1つ表示へ切り替わっていたら、見えない球を割らない
+            guard self.settings.isTripleBubble, self.state.bubbleActive,
                   !self.tripleCluster.poppedSlots.contains(slot.index) else {
                 self.tripleCluster.relaxStrain(slot)
                 return
@@ -175,18 +176,23 @@ extension PanelController {
                 try? await Task.sleep(for: .seconds(0.6))
                 guard let self, self.tripleCluster.allPopped,
                       self.bubbleHideGeneration == generation else { return }
-                if let frame = self.bubblePanel?.frame {
-                    // 復活時に同じ場所へ生まれ直すための位置
-                    self.lastBubbleCenter = NSPoint(x: frame.midX, y: frame.midY)
-                }
-                self.state.bubbleActive = false
-                self.stopMouseTracking()
-                self.removeBubbleMouseMonitor()
-                self.bubblePanel?.orderOut(nil)
-                self.tripleCluster.contentParked = true
-                self.scheduleRevivalIfNeeded()
+                self.collapseTripleBubble()
             }
         }
+    }
+
+    /// 見える球が無くなった塊を畳み、復活を予約する
+    func collapseTripleBubble() {
+        if let frame = bubblePanel?.frame, bubblePanel?.isVisible == true {
+            // 復活時に同じ場所へ生まれ直すための位置
+            lastBubbleCenter = NSPoint(x: frame.midX, y: frame.midY)
+        }
+        state.bubbleActive = false
+        stopMouseTracking()
+        removeBubbleMouseMonitor()
+        bubblePanel?.orderOut(nil)
+        tripleCluster.contentParked = true
+        scheduleRevivalIfNeeded()
     }
 
     // MARK: - 全滅からの復活（scheduleRevivalIfNeeded の3つ表示ぶんの判定）
@@ -202,15 +208,41 @@ extension PanelController {
     /// 1球でも100%未満に戻っていれば復活できる（100%のままの球は割れたままでよい）
     var tripleCanRevive: Bool {
         TripleBubbleCluster.Slot.allCases.contains {
-            (state.usage?.window(for: $0.metric)?.utilization ?? 0) < 100
+            !state.isMetricAbsent($0.metric) && (state.usage?.window(for: $0.metric)?.utilization ?? 0) < 100
+        }
+    }
+
+    /// プランに無い枠の球を隠し、枠が現れたら戻す（5時間制限の無いプランなど）。
+    /// 割れた球と同じく表示・当たり判定・可動域から外すが、破裂の演出はしない
+    func syncTripleAbsentSlots() {
+        var changed = false
+        for slot in TripleBubbleCluster.Slot.allCases {
+            let absent = state.isMetricAbsent(slot.metric)
+            if absent, !tripleCluster.absentSlots.contains(slot.index) {
+                tripleCluster.absentSlots.insert(slot.index)
+                tripleCluster.poppedSlots.insert(slot.index)
+                tripleCluster.poppedResetsAt.removeValue(forKey: slot.index)
+                changed = true
+            } else if !absent, tripleCluster.absentSlots.contains(slot.index) {
+                tripleCluster.absentSlots.remove(slot.index)
+                tripleCluster.revive(slot)
+                changed = true
+            }
+        }
+        if changed { refreshTripleFloatBounds() }
+        // 最後の球が枠なしになったら、見えない窓を残さない
+        if changed, state.bubbleActive, bubblePanel?.isVisible == true, tripleCluster.allPopped {
+            collapseTripleBubble()
         }
     }
 
     /// 割れたままの球のうち100%未満に戻っているものを生まれ直させる。
     /// バブル再表示（🫧・復活予約）の入口で呼び、全球割れたままの「見えない空ウィンドウ」を出さない
     func reviveTripleBallsBelowLimit() {
+        syncTripleAbsentSlots()
         for slot in TripleBubbleCluster.Slot.allCases
-        where (state.usage?.window(for: slot.metric)?.utilization ?? 0) < 100 {
+        where !state.isMetricAbsent(slot.metric)
+            && (state.usage?.window(for: slot.metric)?.utilization ?? 0) < 100 {
             tripleCluster.revive(slot)
         }
         refreshTripleFloatBounds()
@@ -221,7 +253,8 @@ extension PanelController {
     /// 使用量更新時、3つ表示の各球について100%破裂とリセット復活を判定する
     func updateTripleBallsOnUsage() {
         guard settings.isTripleBubble, state.bubbleActive else { return }
-        for slot in TripleBubbleCluster.Slot.allCases {
+        syncTripleAbsentSlots()
+        for slot in TripleBubbleCluster.Slot.allCases where !tripleCluster.absentSlots.contains(slot.index) {
             let window = state.usage?.window(for: slot.metric)
             let utilization = window?.utilization ?? 0
             if utilization >= 100, !tripleCluster.poppedSlots.contains(slot.index) {
@@ -239,9 +272,9 @@ extension PanelController {
     /// 手動で割った球（100%未満）が次のポーリングで即復活しないよう、期間の進みで判定する。
     /// 割れた時点のリセット時刻が控えられていない（使用量未取得で割れた）場合は復活を許す
     private func hasResetSincePop(_ slot: TripleBubbleCluster.Slot, window: UsageWindow?) -> Bool {
-        guard let poppedResets = tripleCluster.poppedResetsAt[slot.index] else { return true }
-        guard let current = window?.resetsAt else { return false }
-        // 60秒の遊び: リセット時刻の秒単位の揺れを新しい期間と誤認しない（単発モードの検知と同じ）
-        return current > poppedResets.addingTimeInterval(60)
+        // 控えが無い（未使用のセッションを手動で割った等）なら、使い始めて時刻が付いたら新しい期間
+        guard let poppedResets = tripleCluster.poppedResetsAt[slot.index] else { return window?.resetsAt != nil }
+        // 未使用のセッションでは現在値が null になる。判定は単発モードと同じ UsageResetDetector に集約
+        return UsageResetDetector.hasReset(previous: poppedResets, current: window?.resetsAt)
     }
 }

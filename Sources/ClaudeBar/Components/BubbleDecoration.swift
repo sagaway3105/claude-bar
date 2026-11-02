@@ -56,6 +56,67 @@ enum BubbleShadingStrength {
     }
 }
 
+/// **macOS 27 以降専用**: ガラスの上（content 側）に、外観と同じ側の色を薄く乗せる膜。
+/// システム設定の Liquid Glass「Tinted」相当の見た目を自前で作る。
+///
+/// 27 で `.regular` の「小さい要素は背景に応じて light/dark を反転し、文字も一緒に反転する」
+/// 挙動が無くなり（docs/MACOS27_LIQUID_GLASS.md）、ガラスは背景の明暗に関係なく薄灰、
+/// `.primary` の文字だけが外観に追従するようになった。結果「ダーク外観 × 白背景」で
+/// 白文字が薄灰の球に沈む。`.glassEffect(.regular.tint(...))` は 27 で効かない
+/// （赤・黒60%・windowBackgroundColor のいずれも明度不変を 60〜140pt で実測）ので、
+/// content 側に膜を置く。
+///
+/// 膜は光の流儀に合わせる: ダークは乗算（multiply）で暗く、ライトはスクリーン（screen）で
+/// 明るくする。背景の模様はそのまま透け、同じ側の背景（ダーク×黒 / ライト×白）では
+/// ほぼ無変化。ガラス自体は 27 の Liquid Glass スライダーに追従するので、この膜は
+/// その上に一定量だけ足される（右＝Tinted に寄せるほど不透明に、左＝Clear に寄せるほど透ける）。
+/// 26 と旧 OS では描かない（26 は自動反転、旧 OS は BubbleTextPlate が担う）。
+/// 実測（60pt・膜60%）: ダーク×白背景の球内輝度 181→91、ライト×黒背景 107→201。
+/// 検証用: CLAUDEBAR_FILM_D / CLAUDEBAR_FILM_L（0-100 %・既定 60/60）
+struct BubbleAppearanceFilm: View {
+    /// 基準72ptに対するスケール
+    var s: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// 背景追従が動いている間は描かない。外観が背景側へ切り替わるので膜なしでも読め、
+    /// 透け感を優先できる（2026-11-01 ユーザー判断）。許可が無く測定できない間は膜を残す
+    var followsBackground: Bool
+
+    static let dark: Double = envPercent("CLAUDEBAR_FILM_D", default: 60, range: 0...100)
+    static let light: Double = envPercent("CLAUDEBAR_FILM_L", default: 60, range: 0...100)
+    /// 膜を消し始める半径（0-100%）。27 のガラスは縁が暗く・ハイライトが明るい仕様なので、
+    /// 膜を外周まで一様に掛けると縁の暗化が二重になり「輪郭線」に見える。
+    /// 外周だけガラス本来の縁に任せる。検証用: CLAUDEBAR_FILM_EDGE（既定 86）
+    static let edge: Double = envPercent("CLAUDEBAR_FILM_EDGE", default: 86, range: 0...100)
+
+    /// 27 以降の Liquid Glass 経路だけで描く（旧OS強制・旧OS実機では出さない）
+    @MainActor static var isActive: Bool {
+        if #available(macOS 27.0, *) { return usesLiquidGlass }
+        return false
+    }
+
+    var body: some View {
+        if Self.isActive, !(followsBackground && BubbleBackdropSampler.hasPermission) {
+            let dark = colorScheme == .dark
+            let color = Color(white: dark ? 0.18 : 0.93)
+            // 球の ZStack は 3pt の余白の内側にあるので、負のパディングでガラスの円（外周）まで広げる。
+            // 中心は一様、外周 (1-edge) だけで 0 へ落とす
+            Circle()
+                .fill(RadialGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: color, location: 0),
+                        .init(color: color, location: Self.edge),
+                        .init(color: color.opacity(0), location: 1),
+                    ]),
+                    center: .center, startRadius: 0, endRadius: 36 * s
+                ))
+                .padding(-3 * s)
+                .opacity(dark ? Self.dark : Self.light)
+                .blendMode(dark ? .multiply : .screen)
+        }
+    }
+}
+
 /// ガラスの局所クリア化の強さ（0=クリア化しない＝Liquid Glassを全面にそのまま残す、
 /// 1.0=2026-08-27の「有機的な局所透明化」）。検証用: CLAUDEBAR_CLARITY=0-100
 ///

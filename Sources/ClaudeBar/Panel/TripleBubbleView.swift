@@ -110,7 +110,9 @@ struct BubbleFace: View {
             ZStack {
                 BubbleDepthUnderlay(s: s)
                     .bubbleClarity()
-                // 旧OSだけ、文字の裏にぼかしグレーを敷く（26は自動反転で足りる）
+                // 27だけ、球全体を外観側の色へ寄せる膜（システムの Tinted 相当）
+                BubbleAppearanceFilm(s: s, followsBackground: settings.followBackground)
+                // 旧OSだけ、文字の裏にぼかしグレーを敷く（26は自動反転で足りる・27は上の膜）
                 BubbleTextPlate(s: s)
                 // 中身のゆらぎ（WobbleHost）は廃止（2026-08-28ユーザー判断）。
                 // ガラスを content 側へ掛ける構成では描画に出ないため
@@ -162,7 +164,8 @@ struct BubbleFace: View {
             .frame(width: diameter, height: diameter)
             // ガラスは1つ表示と同じ SingleBubbleGlass（content へ掛ける）。
             // これでシステムの「小さい要素は背景に応じて light/dark を反転し、
-            // 上に載る文字も一緒に反転する」挙動に乗る
+            // 上に載る文字も一緒に反転する」挙動に乗る（26）。27 はこの反転が無いので
+            // BubbleAppearanceFilm で外観側へ寄せる
             .modifier(SingleBubbleGlass())
         }
     }

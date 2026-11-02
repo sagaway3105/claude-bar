@@ -28,7 +28,7 @@ private let localizedBundle: Bundle = {
             return bundle
         }
     }
-    return .module
+    return AppResources.bundle
 }()
 
 /// 選んだ `.lproj` を先に引き、**キーが無ければ `AppResources.bundle` に落とす**。

@@ -4,6 +4,8 @@ struct UsageGaugeView: View {
     let title: String
     let window: UsageWindow?
     var baseTint: Color = .claudeOrange
+    /// タイトル直下の補足（公式の「週間の利用上限の最大 50%」）
+    var subtitle: String?
 
     private var value: Double { window?.utilization ?? 0 }
 
@@ -19,7 +21,7 @@ struct UsageGaugeView: View {
                 Text(title)
                     .font(.system(size: 13))
                 Spacer()
-                Text(window == nil ? "–" : "\(Int(value.rounded()))%")
+                Text(window == nil ? "–" : L("panel.percentUsed", Int(value.rounded())))
                     .font(.system(size: 13))
                     .monospacedDigit()
                     .contentTransition(.numericText())
@@ -41,10 +43,16 @@ struct UsageGaugeView: View {
             .frame(height: 6)
             .animation(.easeOut(duration: 0.4), value: value)
 
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
             if let resets = window?.resetsAt {
                 // 残り時間は1分ごとに更新
                 TimelineView(.periodic(from: .now, by: 60)) { _ in
-                    Text(L("time.resetsIn", Self.resetText(resets), Self.remainText(resets)))
+                    Text(L("time.withRemaining", Self.resetSentence(resets), Self.remainText(resets)))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
@@ -56,11 +64,12 @@ struct UsageGaugeView: View {
     /// バブルのフレームコストの約半分を占めた実測あり）なので、2書式とも使い回す。
     /// dateFormatの切替も内部再構築を誘発するため、書式ごとに別インスタンスを持つ。
     ///
-    /// 書式はテンプレートから現在のロケール向けに組み立てる（`Hm` は
-    /// 日本語なら "15:45"、英語(US)なら "3:45 PM" になる）。固定の "H:mm" を
-    /// 使うと英語圏で24時間表記が出てしまう
-    private static let timeFormatter: DateFormatter = makeFormatter("Hm")
-    private static let dayTimeFormatter: DateFormatter = makeFormatter("MdHm")
+    /// 書式はテンプレートから現在のロケール向けに組み立てる。`j` はロケールの優先する
+    /// 時刻表記で、日本語なら "15:45"、英語(US)なら "3:45 PM" になる
+    /// （`H` は 24 時間表記に固定されるので使わない）
+    private static let timeFormatter: DateFormatter = makeFormatter("jm")
+    private static let dayTimeFormatter: DateFormatter = makeFormatter("Mdjm")
+    private static let weekdayFormatter: DateFormatter = makeFormatter("EEEE")
 
     private static func makeFormatter(_ template: String) -> DateFormatter {
         let formatter = DateFormatter()
@@ -73,9 +82,30 @@ struct UsageGaugeView: View {
         return formatter
     }
 
+    /// リセット時刻は最も近い分へ丸める。API は 00:59:59.9 のように返すので、
+    /// 切り捨てると公式画面の 10:00 に対して 9:59 と出てしまう
+    static func roundedToMinute(_ date: Date) -> Date {
+        Date(timeIntervalSince1970: (date.timeIntervalSince1970 / 60).rounded() * 60)
+    }
+
     static func resetText(_ date: Date) -> String {
         let formatter = date.timeIntervalSinceNow < 24 * 3600 ? timeFormatter : dayTimeFormatter
-        return formatter.string(from: date)
+        return formatter.string(from: roundedToMinute(date))
+    }
+
+    /// 現在時刻などの丸めない時刻表示
+    static func clockText(_ date: Date) -> String {
+        timeFormatter.string(from: date)
+    }
+
+    /// 公式画面と同じ言い回し（「20:10にリセットされます」「10:00 (木曜日)にリセット」）
+    static func resetSentence(_ date: Date) -> String {
+        let rounded = roundedToMinute(date)
+        let time = timeFormatter.string(from: rounded)
+        if date.timeIntervalSinceNow < 24 * 3600 {
+            return L("time.resetsToday", time)
+        }
+        return L("time.resetsOnDay", time, weekdayFormatter.string(from: rounded))
     }
 
     static func remainText(_ date: Date) -> String {

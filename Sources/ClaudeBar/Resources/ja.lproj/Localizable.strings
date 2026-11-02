@@ -1,12 +1,13 @@
 /* ClaudeBar — 日本語 */
 
 /* ===== パネル ===== */
-"panel.title" = "Claude 使用量";
+"panel.title" = "ご利用状況";
 "panel.backToMenuBar" = "メニューバーへ戻す";
 "panel.currentSession" = "現在のセッション";
-"panel.weeklyLimit" = "週間制限";
-"panel.allModels" = "すべてのモデル";
-"panel.weekly" = "週間";
+"panel.thisWeek" = "今週";
+"panel.percentUsed" = "%d%% 使用済み";
+"panel.modelAllowance" = "週間の利用上限の最大 %d%%";
+"panel.weekly" = "今週";
 "panel.extraUsage" = "追加利用";
 "panel.refreshNow" = "今すぐ更新";
 "panel.settings" = "設定";
@@ -26,6 +27,7 @@
 "login.signIn" = "Claude Codeにログイン";
 "login.signInStep" = "② Claude Codeにログイン";
 "onboarding.welcome" = "ClaudeBarへようこそ";
+"onboarding.body" = "メニューバーにClaudeプランの使用量を常時表示します。\n\n・アイコンをクリックすると詳細パネルが開きます\n・バブルを浮かせるモードがあります\n・バブルは3回クリックすると弾けます\n・設定画面で通知などを設定できます\n\n使用量はClaude Codeから取得します。そのため初回に、macOSからフォルダなどへのアクセス許可を求める確認が一度だけ表示されることがあります。いずれも正常な動作なので「許可」を押してください（一度許可すれば以降は表示されません）。";
 "onboarding.openPanel" = "パネルを開いてみる";
 "onboarding.close" = "閉じる";
 
@@ -39,18 +41,17 @@
 
 /* ===== ホバーHUD ===== */
 "hud.currentSession" = "現在のセッション";
-"hud.weeklyAllModels" = "週間 すべてのモデル";
-"hud.weeklyModel" = "週間 %@";
+"hud.weeklyAllModels" = "今週";
+"hud.weeklyModel" = "%@";
 
 /* ===== 時刻・リセット ===== */
-"time.resetsIn" = "%1$@（%2$@後にリセット）";
+"time.resetsToday" = "%@にリセットされます";
+"time.resetsOnDay" = "%1$@ (%2$@)にリセット";
+"time.withRemaining" = "%1$@（あと%2$@）";
 "time.days" = "%d日";
 "time.daysHours" = "%1$d日%2$d時間";
 "time.hoursMinutes" = "%1$d時間%2$d分";
 "time.minutes" = "%d分";
-"time.formatShort" = "H:mm";
-"time.formatLong" = "M/d H:mm";
-"time.updatedFormat" = "H:mm";
 
 /* ===== メニューバーのメニュー ===== */
 "status.refreshNow" = "今すぐ更新";
@@ -59,7 +60,6 @@
 "status.checkForUpdates" = "アップデートを確認…";
 
 /* ===== 設定 ===== */
-"settings.windowTitle" = "ClaudeBar 設定";
 "settings.general" = "一般";
 "settings.launchAtLogin" = "ログイン時に起動";
 "settings.appOnlyNote" = ".appとして起動した場合のみ変更できます";
@@ -79,6 +79,10 @@
 "settings.tripleNote" = "3つ表示中は3種類すべてが並ぶため、選択は使いません";
 "settings.reviveBubble" = "割れた後、リセット時に復活";
 "settings.popSound" = "バブルが割れる音をならす";
+"settings.followBackground" = "背景の明暗に合わせて見た目を変える";
+"settings.followBackgroundNote" = "バブルの裏の明るさを測るために画面収録の許可を使います。画像は保存も送信もしません。";
+"settings.followBackgroundNeedsPermission" = "システム設定で画面収録を許可してください。許可後、ClaudeBar の再起動が必要な場合があります。";
+"settings.openScreenRecordingSettings" = "画面収録の設定を開く";
 "settings.notifications" = "通知";
 "settings.notifyThresholds" = "80% / 95% 到達時に通知";
 "settings.system" = "システム";

@@ -85,6 +85,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.onBubbleCountChanged = { [weak self] in
             self?.panelController.relayoutBubbleForCountChange()
         }
+        settings.onFollowBackgroundChanged = { [weak self] in
+            self?.panelController.updateBackdropSampling()
+        }
+        panelController.prepareBubbleReshowAfterPermission()
 
         activityMonitor = ActivityMonitor { [weak self] in
             DispatchQueue.main.async {

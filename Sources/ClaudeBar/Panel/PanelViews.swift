@@ -167,6 +167,11 @@ struct AdaptivePanelGlass: ViewModifier {
 /// 白い背景では自動で黒く、暗い背景では白くなる（2026-08-28実測）。
 /// 背景に敷く方式ではこの自動反転が効かない。
 ///
+/// **macOS 27 ではこの自動反転が無くなった**（2026-09-15実測・docs/MACOS27_LIQUID_GLASS.md）。
+/// ガラスは背景の明暗に関係なく薄灰で、`.primary` の文字だけが外観に追従する。
+/// `.tint` も効かないため、27 では content 側に外観色の膜（`BubbleAppearanceFilm`）を
+/// 重ねてシステムの「Tinted」相当の見た目にする。ガラスの掛け方（content 側）は 26 と共通。
+///
 /// 旧コメント（背景に敷いていた頃）: 単体バブル専用のガラス玉。ガラスを content ではなく背景の円に敷き、
 /// 2倍で描いて0.5倍に縮める縮小レンズ合成を行う（%やリセット時刻は不透明のまま前面）。
 /// 3つ表示も同じこのモディファイアを使う（球ごとにホスティングビューが分かれた
@@ -182,7 +187,9 @@ struct SingleBubbleGlass: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *), !forceLegacyUI, !Self.useClear {
-            // 本線: content へ掛ける（システムの自動反転に乗せるため）
+            // 本線: content へ掛ける（26 ではシステムの自動反転に乗せるため）。
+            // 27 は自動反転が無く `.regular.tint(...)` も効かない（実測）ので、
+            // 外観側へ寄せる膜は content 側の BubbleAppearanceFilm が担う
             content
                 .glassEffect(.regular, in: Circle())
                 .bubbleClarity()
@@ -288,6 +295,13 @@ struct UsagePanelView: View {
                     .frame(width: 16, height: 16)
                 Text(L("panel.title"))
                     .font(.system(size: 15, weight: .semibold))
+                // 公式の「ご利用状況 Max」と同じ並び
+                if let plan = state.planName {
+                    Text(plan)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 3)
+                }
                 Spacer()
                 if state.mode == .floating {
                     IconButton(systemName: "xmark.circle.fill", help: L("panel.backToMenuBar")) {
@@ -314,18 +328,24 @@ struct UsagePanelView: View {
                 .padding(.bottom, 12)
             }
 
-            UsageGaugeView(title: L("panel.currentSession"), window: state.usage?.session, baseTint: baseTint)
-
-            Hairline().padding(.vertical, 12)
-
-            Text(L("panel.weeklyLimit"))
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 8)
-
-            VStack(alignment: .leading, spacing: 12) {
-                UsageGaugeView(title: L("panel.allModels"), window: state.usage?.weeklyAll, baseTint: baseTint)
-                UsageGaugeView(title: state.fableLabel, window: state.usage?.weeklyFable, baseTint: baseTint)
+            // 公式の使用量画面と同じ順と見出し。プランに無い枠の行は出さない
+            VStack(alignment: .leading, spacing: 14) {
+                if !state.isMetricAbsent(.session) {
+                    UsageGaugeView(title: L("panel.currentSession"), window: state.usage?.session, baseTint: baseTint)
+                }
+                if !state.isMetricAbsent(.weekly) {
+                    UsageGaugeView(title: L("panel.thisWeek"), window: state.usage?.weeklyAll, baseTint: baseTint)
+                }
+                if !state.isMetricAbsent(.fable) {
+                    UsageGaugeView(
+                        title: state.fableLabel,
+                        window: state.usage?.weeklyFable,
+                        baseTint: baseTint,
+                        subtitle: state.usage?.weeklyFableAllowancePercent.map {
+                            L("panel.modelAllowance", Int($0.rounded()))
+                        }
+                    )
+                }
 
                 if let extra = state.usage?.extra, extra.isEnabled {
                     ExtraUsageRow(extra: extra)
@@ -366,7 +386,7 @@ struct UsagePanelView: View {
         guard let date = state.lastUpdated else { return L("panel.notFetched") }
         // 時刻はロケール準拠（日本語 "15:45"／英語(US) "3:45 PM"）にし、
         // 「更新」の語順は .strings 側で決める（英語は "Updated 3:45 PM"）
-        return L("panel.updatedAt", UsageGaugeView.resetText(date))
+        return L("panel.updatedAt", UsageGaugeView.clockText(date))
     }
 }
 
@@ -567,7 +587,9 @@ struct HoverPressIconStyle: ButtonStyle {
 /// バブルの文字まわりの外観。**文字色そのものはここでは決めない** —
 /// 2026-08-28以降、文字は `.primary` で描き、Liquid Glass の
 /// 「小さい要素は背景に応じて light/dark を反転し、上に載る文字も一緒に反転する」
-/// 仕様に乗せている。ここに残るのはハローと下地（どちらも既定オフ）
+/// 仕様に乗せている。ここに残るのはハローと下地（どちらも既定オフ）。
+/// macOS 27 では自動反転が無いが、文字色は同じく `.primary`（外観追従）のまま、
+/// 球の明度を `BubbleAppearanceFilm` で外観側へ寄せて可読性を保つ
 struct BubbleStyle {
     /// 文字の縁取り色（常に暗色。白文字を明るい背景でも成立させる）
     var haloColor: Color
@@ -620,7 +642,8 @@ struct BubbleStyle {
 /// **旧OS専用**: 文字の裏に敷くぼかしたグレーの下地。
 ///
 /// macOS 26 では、ガラスが背景に応じて light/dark を反転し、その上に載る文字も
-/// 一緒に反転するので何も要らない。旧OS（14/15）はその仕組みが無く、
+/// 一緒に反転するので何も要らない（27 は反転しないが、球全体を外観側へ寄せる
+/// `BubbleAppearanceFilm` で担保するので、この下地も使わない）。旧OS（14/15）はその仕組みが無く、
 /// 「ダーク外観 × 明るい背景」「ライト外観 × 暗い背景」で文字が沈むため、
 /// 文字コラムの裏だけを外観と同じ側の色でぼかして持ち上げる。
 /// 縁取り（ハロー）ではなく面で支えるので、細い字が汚れて見えない
@@ -674,7 +697,8 @@ struct BubbleView: View {
     @Environment(\.colorScheme) private var colorScheme
 
 
-    private var usageWindow: UsageWindow? { state.usage?.window(for: settings.bubbleMetric) }
+    private var metric: BubbleMetric { state.effectiveMetric(settings.bubbleMetric) }
+    private var usageWindow: UsageWindow? { state.usage?.window(for: metric) }
     private var value: Double { usageWindow?.utilization ?? 0 }
 
     private var percentText: String {
@@ -682,7 +706,7 @@ struct BubbleView: View {
     }
 
     private var metricCaption: String? {
-        switch settings.bubbleMetric {
+        switch metric {
         case .session: return nil
         case .weekly: return L("panel.weekly")
         case .fable: return state.fableLabel
@@ -712,7 +736,10 @@ struct BubbleView: View {
             // マスクされるので、掛けないと単体だけパッチが白く濁って揃わない）
             BubbleDepthUnderlay(s: sizeFactor)
                 .bubbleClarity()
-            // 旧OSだけ、文字の裏にぼかしグレーを敷く（26は自動反転で足りる）
+            // 27だけ、球全体を外観側の色へ寄せる膜（システムの Tinted 相当）。
+            // 文字より下・照明より上
+            BubbleAppearanceFilm(s: sizeFactor, followsBackground: settings.followBackground)
+            // 旧OSだけ、文字の裏にぼかしグレーを敷く（26は自動反転で足りる・27は上の膜）
             BubbleTextPlate(s: sizeFactor)
             // 中身のゆらぎ（WobbleHost）は廃止した（2026-08-28ユーザー判断）。
             // ガラスを content 側へ掛ける構成では、球まるごとがウィンドウ単位の

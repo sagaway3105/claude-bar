@@ -91,6 +91,9 @@ final class TripleBubbleCluster {
     /// 割れて消えている球
     var poppedSlots: Set<Int> = []
 
+    /// プランに枠が無くて隠している球（poppedSlots にも入る）
+    var absentSlots: Set<Int> = []
+
     /// 割れた時点のリセット時刻（球ごと）。「リセットで新しい期間に入ったら復活」の判定に使う
     var poppedResetsAt: [Int: Date] = [:]
 

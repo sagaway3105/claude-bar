@@ -92,11 +92,210 @@ final class UsageParserTests: XCTestCase {
         XCTAssertNil(snapshot.weeklyAll?.resetsAt)
     }
 
+    // モデル名のない weekly_scoped（surface 枠）を Fable 枠へ入れない
+    func testSurfaceScopedLimitIsNotTreatedAsModel() throws {
+        let json = """
+        {
+            "limits": [
+                { "kind": "weekly_scoped", "percent": 77, "scope": { "model": null, "surface": "design" } },
+                { "kind": "weekly_scoped", "percent": 5, "scope": { "model": { "id": null, "display_name": "Fable" } } }
+            ]
+        }
+        """.data(using: .utf8)!
+
+        let (snapshot, fableLabel) = try UsageParser.parse(json)
+        XCTAssertEqual(snapshot.weeklyFable?.utilization, 5)
+        XCTAssertEqual(fableLabel, "Fable")
+    }
+
+    // モデル別の行が複数あれば、並び順によらず Fable を選ぶ
+    func testFablePreferredAmongModelLimits() throws {
+        let json = """
+        {
+            "limits": [
+                { "kind": "weekly_scoped", "percent": 5, "scope": { "model": { "display_name": "Sonnet" } } },
+                { "kind": "weekly_scoped", "percent": 90, "scope": { "model": { "display_name": "Fable" } } }
+            ]
+        }
+        """.data(using: .utf8)!
+
+        let (snapshot, fableLabel) = try UsageParser.parse(json)
+        XCTAssertEqual(snapshot.weeklyFable?.utilization, 90)
+        XCTAssertEqual(fableLabel, "Fable")
+    }
+
+    // Fable が無ければ先頭のモデルをそのラベルで出す
+    func testOtherModelLimitKeepsItsLabel() throws {
+        let json = """
+        { "limits": [ { "kind": "weekly_scoped", "percent": 8, "scope": { "model": { "display_name": "Opus" } } } ] }
+        """.data(using: .utf8)!
+
+        let (snapshot, fableLabel) = try UsageParser.parse(json)
+        XCTAssertEqual(snapshot.weeklyFable?.utilization, 8)
+        XCTAssertEqual(fableLabel, "Opus")
+    }
+
     func testISO8601FractionalAndPlain() {
         XCTAssertNotNil(UsageParser.date("2026-04-11T07:00:00.528743+00:00"))
         XCTAssertNotNil(UsageParser.date("2026-04-11T07:00:00Z"))
         XCTAssertNil(UsageParser.date(nil))
         XCTAssertNil(UsageParser.date("not-a-date"))
+    }
+}
+
+final class PlanAndSessionTests: XCTestCase {
+    func testPlanNames() {
+        XCTAssertEqual(ClaudePlan.displayName(organizationType: "claude_max", rateLimitTier: "default_claude_max_5x"), "Max")
+        XCTAssertEqual(ClaudePlan.displayName(organizationType: "claude_max", rateLimitTier: "default_claude_max_20x"), "Ultra")
+        XCTAssertEqual(ClaudePlan.displayName(organizationType: "claude_ultra", rateLimitTier: nil), "Ultra")
+        XCTAssertEqual(ClaudePlan.displayName(organizationType: "claude_pro", rateLimitTier: nil), "Pro")
+        XCTAssertEqual(ClaudePlan.displayName(organizationType: "claude_team", rateLimitTier: nil), "Team")
+        XCTAssertEqual(ClaudePlan.displayName(organizationType: "claude_new_plan", rateLimitTier: nil), "New Plan")
+        XCTAssertNil(ClaudePlan.displayName(organizationType: nil, rateLimitTier: nil))
+    }
+
+    // 未使用のセッションは枠あり（0%・リセット時刻なし）
+    func testIdleSessionIsKept() throws {
+        let json = """
+        {
+            "five_hour": { "utilization": 0, "resets_at": null },
+            "limits": [ { "kind": "session", "percent": 0, "resets_at": null, "scope": null } ]
+        }
+        """.data(using: .utf8)!
+        XCTAssertEqual(try UsageParser.parse(json).snapshot.session?.utilization, 0)
+    }
+
+    // 5時間制限の無いプラン: five_hour が null
+    func testNoSessionLimitWithNullFiveHour() throws {
+        let json = """
+        { "five_hour": null, "seven_day": { "utilization": 6, "resets_at": null },
+          "limits": [ { "kind": "weekly_all", "percent": 6 } ] }
+        """.data(using: .utf8)!
+        let snapshot = try UsageParser.parse(json).snapshot
+        XCTAssertNil(snapshot.session)
+        XCTAssertEqual(snapshot.weeklyAll?.utilization, 6)
+    }
+
+    // 5時間制限の無いプラン: five_hour は空で、limits に session 行が無い
+    func testNoSessionLimitWithoutSessionRow() throws {
+        let json = """
+        { "five_hour": { "utilization": 0, "resets_at": null },
+          "limits": [ { "kind": "weekly_all", "percent": 6 } ] }
+        """.data(using: .utf8)!
+        XCTAssertNil(try UsageParser.parse(json).snapshot.session)
+    }
+
+    // limits の session 行だけでも読める
+    func testSessionFromLimitsRow() throws {
+        let json = """
+        { "five_hour": null, "limits": [ { "kind": "session", "percent": 12, "resets_at": "2026-11-01T11:10:00+00:00" } ] }
+        """.data(using: .utf8)!
+        XCTAssertEqual(try UsageParser.parse(json).snapshot.session?.utilization, 12)
+    }
+
+    // 中身のない 200 応答で正常値を上書きしない
+    func testEmptyResponseThrows() {
+        XCTAssertThrowsError(try UsageParser.parse("{}".data(using: .utf8)!))
+    }
+
+    // 古いキャッシュ: リセット時刻を過ぎた枠は 0% に、まだ先の枠はそのまま
+    func testClearingExpiredWindows() {
+        let now = Date(timeIntervalSince1970: 1000)
+        var snapshot = UsageSnapshot()
+        snapshot.session = UsageWindow(utilization: 100, resetsAt: Date(timeIntervalSince1970: 500))
+        snapshot.weeklyAll = UsageWindow(utilization: 40, resetsAt: Date(timeIntervalSince1970: 2000))
+        let cleared = snapshot.clearingExpiredWindows(now: now)
+        XCTAssertEqual(cleared.session?.utilization, 0)
+        XCTAssertNil(cleared.session?.resetsAt)
+        XCTAssertEqual(cleared.weeklyAll?.utilization, 40)
+    }
+
+    // 公式の「週間の利用上限の最大 50%」
+    func testModelAllowanceFromShares() throws {
+        let json = """
+        {
+            "limits": [
+                { "kind": "session", "percent": 1 },
+                { "kind": "weekly_all", "percent": 6 },
+                { "kind": "weekly_scoped", "percent": 5, "scope": { "model": { "display_name": "Fable" } } }
+            ],
+            "weekly_scoped_shares": [ { "limit_index": 2, "used_percent_of_weekly": 3, "allowance_percent_of_weekly": 50 } ]
+        }
+        """.data(using: .utf8)!
+        XCTAssertEqual(try UsageParser.parse(json).snapshot.weeklyFableAllowancePercent, 50)
+    }
+
+    // API の 00:59:59.9 を公式画面と同じ 01:00 に揃える
+    func testResetTimeRoundsToNearestMinute() {
+        let date = Date(timeIntervalSince1970: 3599.9)
+        XCTAssertEqual(UsageGaugeView.roundedToMinute(date).timeIntervalSince1970, 3600)
+    }
+
+    @MainActor
+    func testEffectiveMetricFallsBackToWeekly() {
+        let state = AppState()
+        XCTAssertEqual(state.effectiveMetric(.session), .session) // 未取得の間は切り替えない
+        XCTAssertFalse(state.isMetricAbsent(.session))
+        var snapshot = UsageSnapshot()
+        snapshot.weeklyAll = UsageWindow(utilization: 6, resetsAt: nil)
+        state.usage = snapshot
+        XCTAssertEqual(state.effectiveMetric(.session), .weekly)
+        XCTAssertTrue(state.isMetricAbsent(.session))
+        XCTAssertEqual(state.menuBarPercentText, "6%")
+    }
+}
+
+final class BackdropToneTests: XCTestCase {
+    func testFirstSampleDecidesImmediately() {
+        var tone = BackdropTone()
+        XCTAssertEqual(tone.update(luminance: 0.1), .dark)
+    }
+
+    func testSwitchNeedsTwoSamples() {
+        var tone = BackdropTone()
+        tone.update(luminance: 0.1)
+        XCTAssertEqual(tone.update(luminance: 0.9), .dark)
+        XCTAssertEqual(tone.update(luminance: 0.9), .light)
+    }
+
+    // 中間の明るさでは今の外観を保ち、切り替え待ちも取り消す
+    func testMiddleLuminanceKeepsTone() {
+        var tone = BackdropTone()
+        tone.update(luminance: 0.1)
+        tone.update(luminance: 0.9)
+        XCTAssertEqual(tone.update(luminance: 0.5), .dark)
+        XCTAssertEqual(tone.update(luminance: 0.9), .dark)
+    }
+}
+
+final class UsageResetDetectorTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+
+    // 未使用のセッション: リセット時刻を過ぎて null になったらリセット済み
+    func testPastResetWithNullCurrentIsReset() {
+        XCTAssertTrue(UsageResetDetector.hasReset(previous: now.addingTimeInterval(-120), current: nil, now: now))
+    }
+
+    // まだ先のリセット時刻で null が来ても一時的な欠損とみなす
+    func testFutureResetWithNullCurrentIsNotReset() {
+        XCTAssertFalse(UsageResetDetector.hasReset(previous: now.addingTimeInterval(3600), current: nil, now: now))
+    }
+
+    func testNewPeriodIsReset() {
+        let previous = now.addingTimeInterval(-120)
+        XCTAssertTrue(UsageResetDetector.hasReset(previous: previous, current: now.addingTimeInterval(18000), now: now))
+    }
+
+    // 同じ期間の秒単位の揺れはリセットではない
+    func testSecondsJitterIsNotReset() {
+        let previous = now.addingTimeInterval(-120)
+        XCTAssertFalse(UsageResetDetector.hasReset(previous: previous, current: previous.addingTimeInterval(1), now: now))
+    }
+
+    // 時刻が大きく動いても、控えた時刻がまだ先ならリセットとみなさない
+    func testFutureResetMovedLaterIsNotReset() {
+        let previous = now.addingTimeInterval(3600)
+        XCTAssertFalse(UsageResetDetector.hasReset(previous: previous, current: previous.addingTimeInterval(7200), now: now))
     }
 }
 

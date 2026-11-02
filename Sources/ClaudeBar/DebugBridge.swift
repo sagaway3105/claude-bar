@@ -111,6 +111,11 @@ final class DebugBridge {
                     weekly: parts.count > 1 ? parts[1] : nil,
                     fable: parts.count > 2 ? parts[2] : nil
                 )
+            } else if command.hasPrefix("plan:") {
+                let name = String(command.dropFirst(5))
+                state.planName = name.isEmpty ? nil : name
+            } else if command.hasPrefix("follow:") {
+                panelController.settings.followBackground = command.hasSuffix("1")
             } else if command.hasPrefix("active:") {
                 if command.hasSuffix("1") {
                     state.registerActivity()
@@ -150,6 +155,13 @@ final class DebugBridge {
             info["visible"] = panelController.isPanelVisible
         }
         info["appAppearance"] = NSApp.effectiveAppearance.name.rawValue
+        info["followBackground"] = panelController.settings.followBackground
+        info["backdropStage"] = panelController.backdropSampler.debugStage
+        info["backdropLuminance"] = panelController.backdropSampler.debugLastLuminance
+            .map { "\($0.key):\(String(format: "%.2f", $0.value))" }.joined(separator: ",")
+        info["bubbleHostAppearance"] = panelController.bubbleHosting?.appearance?.name.rawValue ?? "nil"
+        info["bubbleHostEffective"] = panelController.bubbleHosting?.effectiveAppearance.name.rawValue ?? "nil"
+        info["bubbleHostInWindow"] = panelController.bubbleHosting?.window != nil
         if let w = panelController.panel {
             info["panelAppearance"] = w.effectiveAppearance.name.rawValue
             info["window"] = [w.frame.origin.x, w.frame.origin.y, w.frame.width, w.frame.height]

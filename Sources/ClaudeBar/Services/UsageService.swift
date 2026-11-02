@@ -16,7 +16,7 @@ enum UsageError: LocalizedError {
             return L("error.forbidden403")
         case .rateLimited(let until):
             let f = DateFormatter()
-            f.dateFormat = "H:mm"
+            f.setLocalizedDateFormatFromTemplate("jm") // ロケール準拠（英語圏は 3:45 PM）
             return L("error.rateLimited", f.string(from: until))
         case .http(let code):
             return L("error.httpFailed", code)
@@ -38,6 +38,11 @@ final class UsageService {
     private var cooldownUntil: Date?
     private var isRefreshing = false
     private var pendingForce = false // refresh進行中に来た手動更新の保留フラグ
+    /// 最後に取得を試みた時刻。失敗中は lastUpdated が進まないので、抑制はこちらで判定する
+    private var lastAttemptAt: Date = .distantPast
+    /// claude を最後に起動した時刻。失敗が続いても起動し続けないようにする
+    private var lastCLIRefreshAt: Date = .distantPast
+    private let cliRefreshMinInterval: TimeInterval = 300
 
     private let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private let rateLimitCooldown: TimeInterval = 300
@@ -69,7 +74,8 @@ final class UsageService {
                     let target = TimeInterval(max(1, settings.pollIntervalMinutes) * 60)
                     if waited >= target { break }
                     let step = min(10, target - waited)
-                    try? await Task.sleep(for: .seconds(step))
+                    // 許容幅を付けて他の処理と起床をまとめる（精度は要らない）
+                    try? await Task.sleep(for: .seconds(step), tolerance: .seconds(2))
                     waited += step
                 }
             }
@@ -83,6 +89,8 @@ final class UsageService {
 
     func refreshIfStale(olderThan seconds: TimeInterval) {
         if let last = state.lastUpdated, Date().timeIntervalSince(last) < seconds { return }
+        // API 障害中に、JSONL の書き込みのたびに連打しない
+        guard Date().timeIntervalSince(lastAttemptAt) >= seconds else { return }
         Task { await refresh() }
     }
 
@@ -95,6 +103,7 @@ final class UsageService {
             return
         }
         isRefreshing = true
+        lastAttemptAt = Date()
         defer {
             isRefreshing = false
             if pendingForce {
@@ -103,6 +112,9 @@ final class UsageService {
             }
         }
 
+        // プラン変更にも追従する（ファイル読み取りなのでメインスレッドを塞がない）
+        state.planName = await Task.detached { ClaudePlan.current() }.value
+
         // 主経路: API直叩き（トークンはsecurity CLI経由＝ダイアログなし）。
         // サーバーの現在値がそのまま来るので、設定した更新間隔どおりの鮮度になる
         if await refreshViaKeychainAPI() { return }
@@ -110,9 +122,13 @@ final class UsageService {
         // フォールバック: Claude Codeのローカルキャッシュ+claude起動
         // （オフライン・レート制限クールダウン中・トークン不在などのケース）
         let maxAge: TimeInterval = force ? 15 : TimeInterval(max(1, settings.pollIntervalMinutes) * 60)
-        if let fetched = await ClaudeUsageBridge.fetchUtilizationJSON(maxAge: maxAge),
-           let parsed = try? UsageParser.parse(fetched.data) {
-            apply(parsed.snapshot, fableLabel: parsed.fableLabel, asOf: fetched.fetchedAt)
+        let allowCLI = force || Date().timeIntervalSince(lastCLIRefreshAt) >= cliRefreshMinInterval
+        if let fetched = await ClaudeUsageBridge.fetchUtilizationJSON(maxAge: maxAge, allowCLIRefresh: allowCLI) {
+            if fetched.ranCLI { lastCLIRefreshAt = Date() }
+            if let parsed = try? UsageParser.parse(fetched.data) {
+                // キャッシュは古いことがある。リセット時刻を過ぎた枠の値は信用しない
+                apply(parsed.snapshot.clearingExpiredWindows(), fableLabel: parsed.fableLabel, asOf: fetched.fetchedAt)
+            }
         }
     }
 
@@ -175,6 +191,10 @@ final class UsageService {
             default:
                 break
             }
+        } catch is CancellationError {
+            // バブルの操作で呼び出し元のタスクが取り消されただけ。障害として表示しない
+        } catch let error as URLError where error.code == .cancelled {
+            // 同上
         } catch {
             state.errorMessage = error.localizedDescription
         }

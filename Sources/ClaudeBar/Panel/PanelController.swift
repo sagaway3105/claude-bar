@@ -50,6 +50,10 @@ final class PanelController: NSObject, NSWindowDelegate {
     var lastPanelSize = NSSize(width: 240, height: 380)
     var lastBubbleCenter: NSPoint?
     var revivalTask: Task<Void, Never>?
+    var pendingRevival = false
+    var pendingBubbleReshow = false
+    var revivalBaseline: Date?
+    var mouseFarTicks = 0
     var resetPopRetry: Task<Void, Never>?        // ドラッグ中に来たリセット破裂の再試行
     var bubbleTrackedResetsAt: Date?             // リセット境界越え検知用に追跡中のリセット時刻
     var resetRefreshTask: Task<Void, Never>?     // リセット時刻に使用量再取得を予約（破裂の即時発火用）
@@ -85,7 +89,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     let panelWidth: CGFloat = 300
     let panelWindowHeight: CGFloat = 460 // 固定（内容はSwiftUIが上詰めで描き、余りは完全透明）
     /// 1つ表示のバブルの直径。**64pt以下**であること — Liquid Glass は65pt以上だと
-    /// 「大きい要素」扱いになり、背景に応じた light/dark 反転をしなくなる
+    /// 「大きい要素」扱いになり、背景に応じた light/dark 反転をしなくなる（macOS 26）。
+    /// macOS 27 では大きさに関係なく反転しない（BubbleAppearanceFilm で外観側へ寄せる）
     /// 破裂音「ぐぐ...パチン」。膜が張る軋み（0.70秒）→ 破裂の過渡音、という構成で、
     /// **音の前半に合わせて球を膨らませてから割る**（`popStrainDuration`）。
     /// 自前合成の音源を同梱している（システムの "Pop" は溜めが無く、この演出に合わない）
@@ -129,7 +134,49 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     /// バブルが表示している使用量ウィンドウ（設定で選択）
     var bubbleUsageWindow: UsageWindow? {
-        state.usage?.window(for: settings.bubbleMetric)
+        state.usage?.window(for: state.effectiveMetric(settings.bubbleMetric))
+    }
+
+    /// 背景追従の測定器（macOS 27 以降・設定でオンのときだけ動く）
+    lazy var backdropSampler: BubbleBackdropSampler = {
+        let sampler = BubbleBackdropSampler()
+        sampler.shouldRun = { [weak self] in
+            guard let self else { return false }
+            // 窓の可視性では止めない: showBubble の時点ではまだ窓が前面に出ておらず、
+            // ここで止めると以後ずっと測定されない（見えない間は targets が空になる）
+            return self.settings.followBackground && self.state.bubbleActive
+        }
+        sampler.targets = { [weak self] in self?.backdropTargets() ?? [] }
+        return sampler
+    }()
+
+    /// 設定やバブルの表示状態が変わったときに呼ぶ
+    func updateBackdropSampling() {
+        if settings.followBackground, state.bubbleActive {
+            backdropSampler.start()
+        } else if !settings.followBackground {
+            backdropSampler.stop(resetting: tripleHosts + [bubbleHosting].compactMap { $0 })
+        }
+    }
+
+    /// 測定する球の範囲（スクリーン座標）と、外観を切り替えるビュー
+    private func backdropTargets() -> [BubbleBackdropSampler.Target] {
+        guard bubblePanel?.isVisible == true else { return [] }
+        if settings.isTripleBubble {
+            return TripleBubbleCluster.Slot.allCases.compactMap { slot in
+                guard !tripleCluster.poppedSlots.contains(slot.index),
+                      tripleHosts.indices.contains(slot.index),
+                      let center = tripleBallScreenCenter(slot) else { return nil }
+                let d = tripleCluster.diameter(for: slot, state: state)
+                return .init(
+                    id: slot.index,
+                    screenRect: NSRect(x: center.x - d / 2, y: center.y - d / 2, width: d, height: d),
+                    view: tripleHosts[slot.index]
+                )
+            }
+        }
+        guard let frame = bubbleScreenFrame, let hosting = bubbleHosting else { return [] }
+        return [.init(id: 0, screenRect: frame, view: hosting)]
     }
 
     /// 使用量に応じたバブルの拡大率: 10%ごとに+1%、100%で1.1倍（風船のように膨らむ）

@@ -1,11 +1,12 @@
 /* ClaudeBar — English (base localization) */
 
 /* ===== Panel ===== */
-"panel.title" = "Claude Usage";
+"panel.title" = "Usage";
 "panel.backToMenuBar" = "Back to Menu Bar";
 "panel.currentSession" = "Current Session";
-"panel.weeklyLimit" = "Weekly Limit";
-"panel.allModels" = "All Models";
+"panel.thisWeek" = "This Week";
+"panel.percentUsed" = "%d%% used";
+"panel.modelAllowance" = "Up to %d%% of weekly limit";
 "panel.weekly" = "Weekly";
 "panel.extraUsage" = "Extra Usage";
 "panel.refreshNow" = "Refresh Now";
@@ -26,6 +27,7 @@
 "login.signIn" = "Sign in to Claude Code";
 "login.signInStep" = "② Sign in to Claude Code";
 "onboarding.welcome" = "Welcome to ClaudeBar";
+"onboarding.body" = "Shows your Claude plan usage in the menu bar at all times.\n\n- Click the icon to open the details panel\n- You can float usage as a bubble\n- Click a bubble three times to pop it\n- Notifications and more are in Settings\n\nUsage comes from Claude Code, so macOS may ask once for access to folders or similar on first launch. This is expected; choose Allow (you will not be asked again).";
 "onboarding.openPanel" = "Open the Panel";
 "onboarding.close" = "Close";
 
@@ -43,14 +45,13 @@
 "hud.weeklyModel" = "Weekly · %@";
 
 /* ===== Time / reset ===== */
-"time.resetsIn" = "%1$@ (resets in %2$@)";
+"time.resetsToday" = "Resets at %@";
+"time.resetsOnDay" = "Resets %2$@ at %1$@";
+"time.withRemaining" = "%1$@ (in %2$@)";
 "time.days" = "%dd";
 "time.daysHours" = "%1$dd %2$dh";
 "time.hoursMinutes" = "%1$dh %2$dm";
 "time.minutes" = "%dm";
-"time.formatShort" = "H:mm";
-"time.formatLong" = "M/d H:mm";
-"time.updatedFormat" = "H:mm";
 
 /* ===== Status bar menu ===== */
 "status.refreshNow" = "Refresh Now";
@@ -59,7 +60,6 @@
 "status.checkForUpdates" = "Check for Updates…";
 
 /* ===== Settings ===== */
-"settings.windowTitle" = "ClaudeBar Settings";
 "settings.general" = "General";
 "settings.launchAtLogin" = "Launch at Login";
 "settings.appOnlyNote" = "Only available when launched as an .app";
@@ -79,6 +79,10 @@
 "settings.tripleNote" = "Not used while three bubbles are shown — all three appear together";
 "settings.reviveBubble" = "Revive after popping, on reset";
 "settings.popSound" = "Play a sound when a bubble pops";
+"settings.followBackground" = "Adapt to the background brightness";
+"settings.followBackgroundNote" = "Uses Screen Recording permission to measure the brightness behind the bubble. Images are never saved or sent.";
+"settings.followBackgroundNeedsPermission" = "Allow Screen Recording in System Settings. You may need to restart ClaudeBar afterwards.";
+"settings.openScreenRecordingSettings" = "Open Screen Recording Settings";
 "settings.notifications" = "Notifications";
 "settings.notifyThresholds" = "Notify at 80% / 95%";
 "settings.system" = "System";

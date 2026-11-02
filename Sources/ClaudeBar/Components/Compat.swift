@@ -27,7 +27,9 @@ func envPercent(_ key: String, default fallback: Double, range: ClosedRange<Doub
 /// Liquid Glass（macOS 26）の経路を使っているか。
 /// 旧OS（14/15）と `forceLegacyUI` のときは false。
 /// **旧OSでは背景に応じた light/dark の自動反転が無い**ので、文字の可読性は
-/// 自前で担保する必要がある（`BubbleStyle.haloGain` 参照）
+/// 自前で担保する必要がある（`BubbleStyle.haloGain` 参照）。
+/// macOS 27 も自動反転が無いが、こちらは Liquid Glass 経路のまま
+/// `BubbleAppearanceFilm` で外観側へ寄せる（true のまま）
 @MainActor
 var usesLiquidGlass: Bool {
     if #available(macOS 26.0, *), !forceLegacyUI { return true }

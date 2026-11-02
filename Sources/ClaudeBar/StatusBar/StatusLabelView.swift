@@ -15,10 +15,10 @@ struct StatusLabelView: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            Text(state.sessionPercentText)
+            Text(state.menuBarPercentText)
                 .font(Self.menuBarFont)
                 .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.4), value: state.sessionPercentText)
+                .animation(.snappy(duration: 0.4), value: state.menuBarPercentText)
             // 消費中（回転中）はClaudeオレンジ
             ClaudeLogoView(
                 animating: state.isActive,

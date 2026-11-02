@@ -14,14 +14,17 @@ enum ClaudeUsageBridge {
 
     /// 取得できたら utilization JSON（UsageParserが読める形）と実際の取得時刻を返す。取得不能なら nil。
     /// キャッシュが maxAge より古ければ claude を起動して更新を試みてから読み直す。
-    static func fetchUtilizationJSON(maxAge: TimeInterval) async -> (data: Data, fetchedAt: Date)? {
+    /// allowCLIRefresh が false なら claude を起動せず、手元のキャッシュだけを返す。
+    static func fetchUtilizationJSON(
+        maxAge: TimeInterval, allowCLIRefresh: Bool = true
+    ) async -> (data: Data, fetchedAt: Date, ranCLI: Bool)? {
         if let cached = readCache(), cached.age <= maxAge {
-            return (cached.data, Date().addingTimeInterval(-cached.age)) // 十分新しい → 起動不要
+            return (cached.data, Date().addingTimeInterval(-cached.age), false) // 十分新しい → 起動不要
         }
-        await refreshViaClaude()
+        if allowCLIRefresh { await refreshViaClaude() }
         // 更新に失敗しても古いキャッシュがあれば使う（取得時刻は正直に返し、UIの「更新」表示に反映させる）
         guard let cached = readCache() else { return nil }
-        return (cached.data, Date().addingTimeInterval(-cached.age))
+        return (cached.data, Date().addingTimeInterval(-cached.age), allowCLIRefresh)
     }
 
     /// claude バイナリの実体パス（既知の配置場所を直接探す。ログインシェルは使わない）。

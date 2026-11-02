@@ -18,10 +18,24 @@ struct UsageSnapshot {
     var session: UsageWindow?     // five_hour
     var weeklyAll: UsageWindow?   // seven_day
     var weeklyFable: UsageWindow? // limits[] weekly_scoped または seven_day_opus
+    var weeklyFableAllowancePercent: Double? // 週間上限に対するモデル枠の割合（公式の「最大 50%」）
     var extra: ExtraUsage?
 }
 
 extension UsageSnapshot {
+    /// リセット時刻を過ぎた枠を「新しい期間の 0%」として扱う（古いキャッシュ向け）
+    func clearingExpiredWindows(now: Date = Date()) -> UsageSnapshot {
+        func clear(_ window: UsageWindow?) -> UsageWindow? {
+            guard let window, let resets = window.resetsAt, resets <= now else { return window }
+            return UsageWindow(utilization: 0, resetsAt: nil)
+        }
+        var copy = self
+        copy.session = clear(session)
+        copy.weeklyAll = clear(weeklyAll)
+        copy.weeklyFable = clear(weeklyFable)
+        return copy
+    }
+
     func window(for metric: BubbleMetric) -> UsageWindow? {
         switch metric {
         case .session: return session
@@ -60,17 +74,33 @@ final class AppState {
     /// limits[] の scope.model.display_name から動的に決まる（"Fable" / "Opus"）
     var fableLabel = "Fable"
 
+    /// 契約プラン名（Max / Ultra など）。取得できなければ nil で表示しない
+    var planName: String?
+
+    /// プランに無い枠が選ばれていたら週間へ切り替える（例: 5時間制限の無いプランのセッション）
+    func effectiveMetric(_ metric: BubbleMetric) -> BubbleMetric {
+        guard let usage, usage.window(for: metric) == nil, usage.weeklyAll != nil else { return metric }
+        return .weekly
+    }
+
+    /// 使用量を取得済みで、その枠がプランに無い
+    func isMetricAbsent(_ metric: BubbleMetric) -> Bool {
+        guard let usage else { return false }
+        return usage.window(for: metric) == nil
+    }
+
     private var lastActivityAt: Date = .distantPast
     private var idleTask: Task<Void, Never>?
     private let idleThreshold: TimeInterval = 6
 
-    var sessionUtilization: Double? {
-        guard usage != nil else { return nil }
-        return usage?.session?.utilization ?? 0
+    /// メニューバーに出す使用率。セッション枠の無いプランでは週間を出す
+    var menuBarUtilization: Double? {
+        guard let usage else { return nil }
+        return usage.session?.utilization ?? usage.weeklyAll?.utilization ?? 0
     }
 
-    var sessionPercentText: String {
-        guard let u = sessionUtilization else { return "–%" }
+    var menuBarPercentText: String {
+        guard let u = menuBarUtilization else { return "–%" }
         return "\(Int(u.rounded()))%"
     }
 

@@ -161,9 +161,17 @@ struct BubbleHoverHUDView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            row(L("hud.currentSession"), state.usage?.session, current: settings.bubbleMetric == .session)
-            row(L("hud.weeklyAllModels"), state.usage?.weeklyAll, current: settings.bubbleMetric == .weekly)
-            row(L("hud.weeklyModel", state.fableLabel), state.usage?.weeklyFable, current: settings.bubbleMetric == .fable)
+            // プランに無い枠の行は出さない
+            let metric = state.effectiveMetric(settings.bubbleMetric)
+            if !state.isMetricAbsent(.session) {
+                row(L("hud.currentSession"), state.usage?.session, current: metric == .session)
+            }
+            if !state.isMetricAbsent(.weekly) {
+                row(L("hud.weeklyAllModels"), state.usage?.weeklyAll, current: metric == .weekly)
+            }
+            if !state.isMetricAbsent(.fable) {
+                row(L("hud.weeklyModel", state.fableLabel), state.usage?.weeklyFable, current: metric == .fable)
+            }
             if let extra = state.usage?.extra, extra.isEnabled {
                 HStack(spacing: 6) {
                     Circle().fill(Color.clear).frame(width: 4, height: 4)

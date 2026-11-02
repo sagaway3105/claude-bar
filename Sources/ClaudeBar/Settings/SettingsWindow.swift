@@ -75,6 +75,7 @@ struct SettingsView: View {
     var fableLabel: String = "Fable"
     /// 旧OS表示（Liquid Glass 無し）の切替。デバッグビルドのみ使う
     var onToggleLegacy: () -> Void = {}
+    @State private var screenCapturePermitted = false
     #if DEBUG
     @State private var legacyOn = forceLegacyUI
     #endif
@@ -135,7 +136,33 @@ struct SettingsView: View {
             }
             Toggle(L("settings.reviveBubble"), isOn: $settings.reviveBubble)
             Toggle(L("settings.popSound"), isOn: $settings.popSound)
+            if BubbleBackdropSampler.isSupported {
+                Toggle(L("settings.followBackground"), isOn: $settings.followBackground)
+                    .onChange(of: settings.followBackground) { _, on in
+                        // 設定画面からの確認は、本人がオンにした時だけ出す
+                        if on, !BubbleBackdropSampler.hasPermission {
+                            _ = CGRequestScreenCaptureAccess()
+                        }
+                        screenCapturePermitted = BubbleBackdropSampler.hasPermission
+                    }
+                Text(L("settings.followBackgroundNote"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if settings.followBackground, !screenCapturePermitted {
+                    Text(L("settings.followBackgroundNeedsPermission"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button(L("settings.openScreenRecordingSettings")) {
+                        // 一度も要求していないとシステム設定の一覧に載らないので、開く前に要求する
+                        _ = CGRequestScreenCaptureAccess()
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
+            }
         }
+        .onAppear { screenCapturePermitted = BubbleBackdropSampler.hasPermission }
     }
 
     private var notificationsSection: some View {

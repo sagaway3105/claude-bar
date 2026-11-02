@@ -47,7 +47,7 @@ final class ActivityMonitor {
             &context,
             [watchedPath] as CFArray,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            0.3,
+            1.0, // 先頭のイベントは NoDefer で即時に届く。以降の連続書き込みは1秒にまとめる
             FSEventStreamCreateFlags(
                 kFSEventStreamCreateFlagUseCFTypes
                     | kFSEventStreamCreateFlagFileEvents

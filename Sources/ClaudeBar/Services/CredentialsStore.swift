@@ -69,8 +69,9 @@ enum CredentialsStore {
         if let cached = cachedCreds(sourceMdat: mdat.timeIntervalSince1970) {
             return try fresh(cached)
         }
+        // 項目は存在する（更新日時は取れた）ので、読めないのは一時的な失敗。ログイン導線は出さない
         guard let data = securityCLIData() ?? fileData() else {
-            throw CredentialsError.notFound
+            throw CredentialsError.unreadable
         }
         let creds = try parse(data)
         storeCache(creds, sourceMdat: mdat.timeIntervalSince1970)

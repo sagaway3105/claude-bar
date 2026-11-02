@@ -143,6 +143,26 @@ extension PanelController {
         showBubble(at: point, poppingIn: true, launchFrom: launchFrom)
     }
 
+    /// バブルを初めて出す時に一度だけ、背景追従をオンにして画面収録の許可を求める。
+    /// バブルを使わない人にはダイアログを出さず、断られた後も繰り返さない
+    private func offerBackgroundFollowingOnce() {
+        guard BubbleBackdropSampler.isSupported, !settings.followBackgroundOffered else { return }
+        settings.followBackgroundOffered = true
+        settings.followBackground = true
+        if !BubbleBackdropSampler.hasPermission {
+            settings.reshowBubbleOnNextLaunch = true
+            _ = CGRequestScreenCaptureAccess()
+        }
+    }
+
+    /// 起動時に一度呼ぶ。許可して再起動した場合だけ、使用量が届いた時にバブルを出し直す。
+    /// 断った場合やそのまま普通に終了した場合は、印を消すだけで何も出さない
+    func prepareBubbleReshowAfterPermission() {
+        guard settings.reshowBubbleOnNextLaunch else { return }
+        settings.reshowBubbleOnNextLaunch = false
+        pendingBubbleReshow = BubbleBackdropSampler.hasPermission
+    }
+
     /// バブルを表示（ONにする）。復活・右クリックメニュー・デバッグからも使う。
     /// launchFrom: 指定するとその地点（🫧ボタン付近）からウィンドウごと着地点へ飛ぶ「ポーン」
     func showBubble(at point: NSPoint, poppingIn: Bool = false, launchFrom: NSPoint? = nil) {
@@ -151,10 +171,13 @@ extension PanelController {
         revivalTask?.cancel()
         resetPopRetry?.cancel()
         isPopping = false
+        pendingRevival = false
         state.bubbleActive = true
         tripleCluster.contentParked = false // 畳んでいた中身を戻す
         bubbleTrackedResetsAt = bubbleUsageWindow?.resetsAt // リセット境界検知のベースライン
         scheduleResetRefresh()
+        offerBackgroundFollowingOnce()
+        updateBackdropSampling()
 
         let size = bubbleWindowFrameSize
         p.setFrame(
@@ -169,6 +192,11 @@ extension PanelController {
             // 3つ表示: 塊はウィンドウ全体（アセンブリの漂いが塊ごとの揺れ、
             // 球ごとの揺れはSwiftUI側の宣言的アニメーションが担当する）
             reviveTripleBallsBelowLimit()
+            if tripleCluster.allPopped {
+                // 全枠100%や枠なしで見える球が無い: 空の窓を出さず、復活を予約して畳む
+                collapseTripleBubble()
+                return
+            }
             tripleCluster.showGeneration += 1 // 球ごとの漂いを確実に始め直す
             assembly.frame = NSRect(origin: .zero, size: size)
         } else {
@@ -203,7 +231,9 @@ extension PanelController {
         if !settings.isTripleBubble, (bubbleUsageWindow?.utilization ?? 0) >= 100 {
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1.2))
-                guard let self, self.state.bubbleActive, !self.isPopping else { return }
+                // 待っている間に3つ表示へ切り替わったら、塊全体を畳まない
+                guard let self, self.state.bubbleActive, !self.isPopping,
+                      !self.settings.isTripleBubble else { return }
                 guard (self.bubbleUsageWindow?.utilization ?? 0) >= 100 else { return }
                 self.popBubble()
             }
@@ -242,6 +272,7 @@ extension PanelController {
     /// バブルを非表示（OFFにする）。アクティブな🫧ボタン押下時
     func dismissBubble() {
         state.bubbleActive = false
+        pendingRevival = false
         revivalTask?.cancel()
         resetPopRetry?.cancel()
         resetRefreshTask?.cancel()
@@ -273,6 +304,8 @@ extension PanelController {
     /// SwiftUI側は設定を監視して即切り替わるため、放置するとウィンドウサイズ・
     /// アセンブリ・当たり判定だけが旧モードのまま残って表示が壊れる
     func relayoutBubbleForCountChange() {
+        // 割れて復活待ちなら、新しいモードの基準で予約を取り直す
+        if !state.bubbleActive, pendingRevival { scheduleRevivalIfNeeded() }
         guard state.bubbleActive, let p = bubblePanel else { return }
         let center = NSPoint(x: p.frame.midX, y: p.frame.midY)
         tripleCluster.releaseBall()
@@ -294,6 +327,13 @@ extension PanelController {
     func expandFromBubble() {
         let anchorFrame = bubbleScreenFrame ?? bubblePanel?.frame
         let p = ensurePanel()
+        if state.mode == .attached, p.isVisible {
+            // 開いていたメニューバー直下パネルの後始末（引き剥がしと同じ）
+            removeDismissMonitors()
+            DistributedNotificationCenter.default().post(
+                name: .init("com.apple.HIToolbox.endMenuTrackingNotification"), object: nil
+            )
+        }
         cancelPendingHide()
         clearCloseAnimations()
         state.mode = .floating
@@ -359,6 +399,7 @@ extension PanelController {
         let timer = Timer(timeInterval: 0.08, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.trackMouse() }
         }
+        timer.tolerance = 0.02
         RunLoop.main.add(timer, forMode: .common)
         mouseTrackTimer = timer
     }
@@ -375,6 +416,14 @@ extension PanelController {
 
     private func trackMouse() {
         guard state.bubbleActive else { return }
+        // カーソルが窓から遠い間は頻度を 1/3 に落とす（待機中の主な CPU 消費）
+        if !dragActive, !wasHoveringBubble, let p = bubblePanel,
+           !p.frame.insetBy(dx: -60, dy: -60).contains(NSEvent.mouseLocation) {
+            mouseFarTicks += 1
+            if mouseFarTicks % 3 != 0 { return }
+        } else {
+            mouseFarTicks = 0
+        }
         growBubbleIfNeeded()
         updateBubbleClickability()
         guard let bubbleOnScreen = bubbleHoverZone else { return }
@@ -552,6 +601,8 @@ extension PanelController {
                 dy = -overflow.height
                 if abs(dx) < 0.01, abs(dy) < 0.01 { return true }
             }
+            // 可動域はカーソルのある画面で取り直す（別ディスプレイへ運べるように）
+            updateFloatBounds(around: mouse)
             var origin = NSPoint(x: start.x + dx, y: start.y + dy)
             origin.x = min(max(origin.x, floatBounds.minX), floatBounds.maxX)
             origin.y = min(max(origin.y, floatBounds.minY), floatBounds.maxY)
@@ -702,6 +753,11 @@ extension PanelController {
     /// 使用量更新のたびに呼ばれる。表示中メトリクスがリセット境界を越えていたら破裂演出を起こす。
     /// （検知はデータ駆動で確実に、発火の即時性は scheduleResetRefresh のタイマーで担保する）
     func onUsageUpdated() {
+        if pendingBubbleReshow {
+            pendingBubbleReshow = false
+            if !state.bubbleActive { showBubbleNearStatusItem() }
+        }
+        reviveIfDue()
         updateTripleBallsOnUsage()
         refitHoverHUD() // 表示中HUDの幅を新しい内容に合わせる
         guard state.bubbleActive, !isPopping else {
@@ -719,9 +775,10 @@ extension PanelController {
             bubbleTrackedResetsAt = newResets
             scheduleResetRefresh()
         }
-        guard let prev = bubbleTrackedResetsAt, let newResets else { return }
+        guard let prev = bubbleTrackedResetsAt else { return }
         // 追跡中だったリセット時刻を過ぎ、ウィンドウが新しい期間へ進んだ = リセット発生
-        if newResets > prev.addingTimeInterval(60), prev.timeIntervalSinceNow < 60 {
+        // （未使用のセッションでは新しい時刻が null になる。判定は UsageResetDetector に集約）
+        if UsageResetDetector.hasReset(previous: prev, current: newResets) {
             popForReset()
         }
     }
@@ -748,6 +805,10 @@ extension PanelController {
     func scheduleRevivalIfNeeded() {
         revivalTask?.cancel()
         let nextResets = settings.isTripleBubble ? tripleNextResetsAt : bubbleUsageWindow?.resetsAt
+        // 予約が空振りしてもポーリングで拾えるよう、待ち状態と基準時刻を残す
+        // （オフラインで3回失敗した場合や、リセット時刻が null で予約できない場合）
+        pendingRevival = settings.reviveBubble
+        revivalBaseline = nextResets
         guard settings.reviveBubble,
               let resets = nextResets,
               resets.timeIntervalSinceNow > 0 else { return }
@@ -758,8 +819,10 @@ extension PanelController {
             // フォールバックが前期間のキャッシュを返す等）ため、少し置いて数回試す
             for attempt in 0..<3 {
                 guard let self, !Task.isCancelled else { return }
-                guard !self.state.bubbleActive else { return }
+                guard !self.state.bubbleActive, self.settings.reviveBubble else { return }
                 await self.usageService.refresh()
+                // 取得の中で reviveIfDue が復活させていたら、二重に出さない
+                guard !self.state.bubbleActive else { return }
                 let canRevive = self.settings.isTripleBubble
                     ? self.tripleCanRevive
                     : (self.bubbleUsageWindow?.utilization ?? 0) < 100
@@ -772,6 +835,20 @@ extension PanelController {
             // それでも100%のまま → 次のリセット時刻が取れていれば予約し直す
             self?.scheduleRevivalIfNeeded()
         }
+    }
+
+    /// 復活待ちの間、使用量の更新のたびに「新しい期間に入ったか」を確かめて復活させる
+    private func reviveIfDue() {
+        guard pendingRevival, !state.bubbleActive, settings.reviveBubble else { return }
+        let current = settings.isTripleBubble ? tripleNextResetsAt : bubbleUsageWindow?.resetsAt
+        let hasNewPeriod = revivalBaseline.map {
+            UsageResetDetector.hasReset(previous: $0, current: current)
+        } ?? (current != nil) // 基準なし（未使用のまま割った）は、使い始めたら新しい期間
+        let canRevive = settings.isTripleBubble
+            ? tripleCanRevive
+            : (bubbleUsageWindow?.utilization ?? 0) < 100
+        guard hasNewPeriod, canRevive else { return }
+        showBubble(at: lastBubbleCenter ?? defaultBubblePoint(), poppingIn: true)
     }
 
     /// 破裂音を鳴らす（設定でオフにできる）。連続破裂では鳴らし直す

@@ -19,16 +19,7 @@ enum OnboardingDialog {
             NSApp.activate(ignoringOtherApps: true)
             let alert = NSAlert()
             alert.messageText = L("onboarding.welcome")
-            alert.informativeText = """
-            メニューバーにClaudeプランの使用量を常時表示します。
-
-            ・アイコンをクリックすると詳細パネルが開きます
-            ・バブルを浮かせるモードがあります
-            ・バブルは3回クリックすると弾けます
-            ・設定画面で通知などを設定できます
-
-            使用量はClaude Codeから取得します。そのため初回に、macOSからフォルダなどへのアクセス許可を求める確認が一度だけ表示されることがあります。いずれも正常な動作なので「許可」を押してください（一度許可すれば以降は表示されません）。
-            """
+            alert.informativeText = L("onboarding.body")
             // 裸バイナリ起動でもフォルダアイコンにならないよう明示指定
             if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
                let icon = NSImage(contentsOf: iconURL) {

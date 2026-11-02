@@ -39,6 +39,26 @@ final class SettingsStore {
         didSet { persist(bubbleMetric.rawValue, "bubbleMetric") }
     }
 
+    /// バブルを背景の明暗に追従させる（macOS 27 以降・画面収録の許可が必要）
+    var followBackground: Bool {
+        didSet {
+            persist(followBackground, "followBackground")
+            if isLoaded, oldValue != followBackground { onFollowBackgroundChanged?() }
+        }
+    }
+
+    var onFollowBackgroundChanged: (() -> Void)?
+
+    /// バブルの初回表示で背景追従を案内済みか（許可のダイアログを一度きりにするため）
+    var followBackgroundOffered: Bool {
+        didSet { persist(followBackgroundOffered, "followBackgroundOffered") }
+    }
+
+    /// 許可の再起動（macOS が案内する）で消えたバブルを、次の起動で出し直すための印
+    var reshowBubbleOnNextLaunch: Bool {
+        didSet { persist(reshowBubbleOnNextLaunch, "reshowBubbleOnNextLaunch") }
+    }
+
     /// バブル表示個数の変更時に呼ばれる（表示中のバブルを新モードで組み直すため）
     var onBubbleCountChanged: (() -> Void)?
 
@@ -73,6 +93,7 @@ final class SettingsStore {
             "pollIntervalMinutes": 2,
             "reviveBubble": true,
             "popSound": true,
+            "followBackground": false,
             "bubbleMetric": BubbleMetric.session.rawValue,
             "bubbleCount": 1,
             "useSystemAccent": true,
@@ -82,6 +103,9 @@ final class SettingsStore {
         pollIntervalMinutes = Self.defaults.integer(forKey: "pollIntervalMinutes")
         reviveBubble = Self.defaults.bool(forKey: "reviveBubble")
         popSound = Self.defaults.bool(forKey: "popSound")
+        followBackground = Self.defaults.bool(forKey: "followBackground")
+        followBackgroundOffered = Self.defaults.bool(forKey: "followBackgroundOffered")
+        reshowBubbleOnNextLaunch = Self.defaults.bool(forKey: "reshowBubbleOnNextLaunch")
         bubbleMetric = BubbleMetric(rawValue: Self.defaults.string(forKey: "bubbleMetric") ?? "") ?? .session
         bubbleCount = Self.defaults.integer(forKey: "bubbleCount") == 3 ? 3 : 1
         useSystemAccent = Self.defaults.bool(forKey: "useSystemAccent")
