@@ -44,18 +44,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debugBridge: DebugBridge?
     #endif
 
-    /// v1.6 以前がディスクに残した、トークン付きリクエストのキャッシュを一度だけ消す。
-    /// 行の削除では SQLite の空き領域に残り得るので、キャッシュのファイルごと消す
+    /// v1.6 以前がディスクに残した、トークン付きリクエストのキャッシュを消す。
+    /// 行の削除では SQLite の空き領域に残り得るので、ファイルごと消す。今の版はこのキャッシュを
+    /// 必要としないので、消し損ねや旧版へ戻した場合に備えて起動のたびに行う
     private func purgeOldTokenCache() {
-        let key = "tokenCachePurged"
-        guard !UserDefaults.standard.bool(forKey: key), let id = Bundle.main.bundleIdentifier else { return }
         let fm = FileManager.default
-        if let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(id) {
-            for name in ["Cache.db", "Cache.db-wal", "Cache.db-shm", "fsCachedData"] {
-                try? fm.removeItem(at: caches.appendingPathComponent(name))
-            }
+        guard let id = Bundle.main.bundleIdentifier,
+              let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(id)
+        else { return }
+        for name in ["Cache.db", "Cache.db-wal", "Cache.db-shm", "fsCachedData"] {
+            try? fm.removeItem(at: caches.appendingPathComponent(name))
         }
-        UserDefaults.standard.set(true, forKey: key)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

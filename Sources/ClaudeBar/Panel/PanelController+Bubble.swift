@@ -304,7 +304,15 @@ extension PanelController {
     /// アセンブリ・当たり判定だけが旧モードのまま残って表示が壊れる
     func relayoutBubbleForCountChange() {
         // 割れて復活待ちなら、新しいモードの基準で予約を取り直す
-        if !state.bubbleActive, pendingRevival { scheduleRevivalIfNeeded() }
+        if !state.bubbleActive, pendingRevival {
+            // 1つ表示で割ったまま3つ表示へ: 今の期間を各枠の基準にして、次のリセットまで戻さない
+            if settings.isTripleBubble {
+                for slot in TripleBubbleCluster.Slot.allCases where tripleCluster.poppedResetsAt[slot.index] == nil {
+                    tripleCluster.poppedResetsAt[slot.index] = state.usage?.window(for: slot.metric)?.resetsAt
+                }
+            }
+            scheduleRevivalIfNeeded()
+        }
         guard state.bubbleActive, let p = bubblePanel else { return }
         let center = NSPoint(x: p.frame.midX, y: p.frame.midY)
         tripleCluster.releaseBall()
@@ -404,11 +412,20 @@ extension PanelController {
     /// 引き剥がしたパネルが、どの画面にも無くなったら主画面の右上へ戻す
     /// （UnconstrainedPanel は AppKit の押し戻しを無効にしているので、自分で戻す）
     private func keepFloatingPanelOnScreen() {
-        guard state.mode == .floating, let p = panel, p.isVisible,
-              !NSScreen.screens.contains(where: { $0.frame.intersects(p.frame) }),
-              let vf = NSScreen.main?.visibleFrame else { return }
+        guard state.mode == .floating, let p = panel, p.isVisible else { return }
+        // 窓は固定の高さで内容は上詰め。透明な部分が画面にかかっていても、見えていなければ戻す
+        let content = NSRect(
+            x: p.frame.minX, y: p.frame.maxY - lastPanelSize.height,
+            width: p.frame.width, height: lastPanelSize.height
+        )
+        let isReachable = NSScreen.screens.contains { screen in
+            let visible = screen.visibleFrame.intersection(content)
+            return visible.width >= 40 && visible.height >= 40
+        }
+        guard !isReachable, let vf = NSScreen.main?.visibleFrame else { return }
         isProgrammaticMove = true
         p.setFrameOrigin(NSPoint(x: vf.maxX - p.frame.width - 8, y: vf.maxY - p.frame.height - 8))
+        syncPanelChromeFrames()
         isProgrammaticMove = false
     }
 

@@ -86,6 +86,8 @@ final class BubbleBackdropSampler {
     private var suspendedUntil: Date = .distantPast
     private var backoff = BackdropFailureBackoff()
     private var ownWindowWaits = 0
+    private var partialFailures = 0
+    private static let maxPartialFailures = 30
     private static let maxOwnWindowWaits = 15
     private var screenObserver: NSObjectProtocol?
     /// 許可の問い合わせは1回約5ms掛かるので、許可がある間は聞き直さない（撮影の失敗で聞き直す）
@@ -142,6 +144,8 @@ final class BubbleBackdropSampler {
         generation += 1
         suspendedUntil = .distantPast
         backoff = BackdropFailureBackoff()
+        ownWindowWaits = 0
+        partialFailures = 0
         task = nil
         tones = [:]
         content = nil
@@ -198,6 +202,7 @@ final class BubbleBackdropSampler {
                 if ownWindowWaits >= Self.maxOwnWindowWaits {
                     ownWindowWaits = 0
                     suspendedUntil = Date().addingTimeInterval(BackdropFailureBackoff.firstWait)
+                    isLive = false // 測れていないので膜を戻す
                 }
                 return
             }
@@ -262,8 +267,18 @@ final class BubbleBackdropSampler {
             }
         }
         // 失敗は球ごとでなく1回の測定につき1回数える（3つ表示で一瞬の失敗を連続失敗と誤認しない）
-        // 全部失敗した時だけ一覧から取り直す（1球でも撮れていれば一覧は有効。毎秒の取り直しを避ける）
-        if failedAny, !capturedAny { recordFailure() }
+        // 全部失敗したら一覧から取り直す。一部だけの失敗は、毎秒の取り直しを避けつつ、続くなら取り直す
+        if failedAny, !capturedAny {
+            recordFailure()
+        } else if failedAny {
+            partialFailures += 1
+            if partialFailures >= Self.maxPartialFailures {
+                partialFailures = 0
+                self.content = nil
+            }
+        } else {
+            partialFailures = 0
+        }
         if capturedAny {
             backoff.recordSuccess()
             ownWindowWaits = 0

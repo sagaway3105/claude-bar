@@ -23,7 +23,6 @@ struct UsageSnapshot {
 }
 
 extension UsageSnapshot {
-    /// リセット時刻を過ぎた枠を「新しい期間の 0%」として扱う（古いキャッシュ向け）
     var hasNoWindows: Bool { session == nil && weeklyAll == nil && weeklyFable == nil }
 
     /// 枠のある表示を、枠の全く無い応答で置き換えない（一時的に欠けた応答で 0% に見せない）。
@@ -39,6 +38,7 @@ extension UsageSnapshot {
         }
     }
 
+    /// リセット時刻を過ぎた枠を「新しい期間の 0%」として扱う（古いキャッシュ向け）
     func clearingExpiredWindows(now: Date = Date()) -> UsageSnapshot {
         func clear(_ window: UsageWindow?) -> UsageWindow? {
             guard let window, let resets = window.resetsAt, resets <= now else { return window }

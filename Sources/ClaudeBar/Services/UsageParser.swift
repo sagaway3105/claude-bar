@@ -79,8 +79,7 @@ enum UsageParser {
 
         // 全部 nil の 200 応答（{} や未知の形式）で正常値を上書きしない
         // 期間枠が無くても extra_usage があればアカウントの応答なので正常に扱う（期間枠の無いプラン）
-        guard snapshot.session != nil || snapshot.weeklyAll != nil || snapshot.weeklyFable != nil
-                || response.extraUsage != nil else {
+        guard !snapshot.hasNoWindows || response.extraUsage != nil else {
             throw ParseError()
         }
 

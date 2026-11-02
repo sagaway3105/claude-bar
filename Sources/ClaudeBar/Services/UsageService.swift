@@ -46,6 +46,7 @@ final class UsageService {
 
     private let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private let session = UsageService.makeTokenSession()
+    private var windowlessResponses = 0
 
     /// トークンを送るリクエスト専用のセッション。URLSession.shared はリクエストごと
     /// Authorization ヘッダをディスクのキャッシュへ残す（v1.6.1 の Cache.db で確認）。
@@ -240,7 +241,14 @@ final class UsageService {
         // 同一キャッシュの再適用（asOfがほぼ同時刻）は通す — needsLogin/エラー表示のクリアを
         // 担っており、弾くとローカル経路運用でログイン導線が誤表示され続ける
         if let last = state.lastUpdated, asOf.timeIntervalSince(last) < -1.0 { return }
-        guard snapshot.canReplace(state.usage) else { return }
+        // 枠の無い応答は一時的な欠けとして無視する。続くなら本当に枠の無いプランへ変わったので受け入れる
+        if snapshot.canReplace(state.usage) {
+            windowlessResponses = 0
+        } else {
+            windowlessResponses += 1
+            if windowlessResponses < 3 { return }
+            windowlessResponses = 0
+        }
         let old = state.usage
         state.usage = snapshot
         if let fableLabel { state.fableLabel = fableLabel }
