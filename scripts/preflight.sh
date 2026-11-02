@@ -48,6 +48,19 @@ if grep -nE 'TODO|TBD|下書き' "$NOTES_FILE"; then
 fi
 echo "✅ $NOTES_FILE"
 
+echo "== README"
+README_JA_CHANGED=0; README_EN_CHANGED=0
+git diff --quiet "$LATEST_TAG" HEAD -- README.md || README_JA_CHANGED=1
+git diff --quiet "$LATEST_TAG" HEAD -- README.en.md || README_EN_CHANGED=1
+if [[ "$README_JA_CHANGED" != "$README_EN_CHANGED" ]]; then
+  fail "README.md と README.en.md の片方だけが ${LATEST_TAG} から更新されています"
+fi
+if [[ "$README_JA_CHANGED" == 1 ]]; then
+  echo "✅ 日英とも ${LATEST_TAG} から更新あり"
+else
+  echo "⚠️ README は ${LATEST_TAG} から更新なし。更新が不要か手動の確認で判断してください"
+fi
+
 echo "== テスト"
 run_tests "通常" swift test --build-system native
 run_tests "旧OS分岐" env CLAUDEBAR_FORCE_LEGACY=1 swift test --build-system native

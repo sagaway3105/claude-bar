@@ -104,8 +104,23 @@ else
   exit 1
 fi
 
-# docs/release-notes/v<バージョン>.md があればそれをノートに使う（無ければ自動生成）
+# 最終承認: ここから先は公開の操作（Release・appcast・Homebrew）。本人の手入力が無ければ必ず止まる
 NOTES_FILE="docs/release-notes/v${VERSION}.md"
+echo
+echo "== 公開の最終確認"
+echo "バージョン: v${VERSION}"
+echo "コミット:   $(git log -1 --format='%h %s')"
+echo "配布物:     ${ZIP}（公証済み）"
+echo "ノート:     ${NOTES_FILE}"
+echo "公開すると GitHub Release、自動アップデート、Homebrew へ配信されます。"
+print -n "公開するなら「公開 v${VERSION}」と入力してください: " >/dev/tty
+read -r APPROVAL </dev/tty
+if [[ "$APPROVAL" != "公開 v${VERSION}" ]]; then
+  echo "❌ 承認されなかったので公開を中止しました（まだ何も公開していません）" >&2
+  exit 1
+fi
+
+# docs/release-notes/v<バージョン>.md があればそれをノートに使う（無ければ自動生成）
 if [[ -f "$NOTES_FILE" ]]; then
   gh release create "v${VERSION}" "$ZIP" --target "$(git rev-parse HEAD)" --title "v${VERSION}" --notes-file "$NOTES_FILE"
 else
