@@ -393,11 +393,23 @@ extension PanelController {
 
     /// 画面構成が変わった時、可動域を取り直してバブルを画面内へ戻す。
     /// 中心がどの画面にも無ければ、updateFloatBounds が主画面を選ぶのでその端へ寄る
-    func keepBubbleOnScreen() {
+    func keepOverlaysOnScreen() {
+        keepFloatingPanelOnScreen()
         guard state.bubbleActive, let p = bubblePanel, p.isVisible else { return }
         updateFloatBounds(around: NSPoint(x: p.frame.midX, y: p.frame.midY))
         let origin = clampedToFloatBounds(p.frame.origin)
         if origin != p.frame.origin { p.setFrameOrigin(origin) }
+    }
+
+    /// 引き剥がしたパネルが、どの画面にも無くなったら主画面の右上へ戻す
+    /// （UnconstrainedPanel は AppKit の押し戻しを無効にしているので、自分で戻す）
+    private func keepFloatingPanelOnScreen() {
+        guard state.mode == .floating, let p = panel, p.isVisible,
+              !NSScreen.screens.contains(where: { $0.frame.intersects(p.frame) }),
+              let vf = NSScreen.main?.visibleFrame else { return }
+        isProgrammaticMove = true
+        p.setFrameOrigin(NSPoint(x: vf.maxX - p.frame.width - 8, y: vf.maxY - p.frame.height - 8))
+        isProgrammaticMove = false
     }
 
     private func clampedToFloatBounds(_ origin: NSPoint) -> NSPoint {
@@ -850,10 +862,16 @@ extension PanelController {
     /// 復活待ちの間、使用量の更新のたびに「新しい期間に入ったか」を確かめて復活させる
     private func reviveIfDue() {
         guard pendingRevival, !state.bubbleActive, settings.reviveBubble else { return }
-        let current = settings.isTripleBubble ? tripleNextResetsAt : bubbleUsageWindow?.resetsAt
-        let hasNewPeriod = revivalBaseline.map {
-            UsageResetDetector.hasReset(previous: $0, current: current)
-        } ?? (current != nil) // 基準なし（未使用のまま割った）は、使い始めたら新しい期間
+        let hasNewPeriod: Bool
+        if settings.isTripleBubble {
+            // 枠ごとに判定する。まとめた基準だと、未使用のセッションを使い始めても週間のリセットまで戻らない
+            hasNewPeriod = tripleHasNewPeriod
+        } else {
+            let current = bubbleUsageWindow?.resetsAt
+            hasNewPeriod = revivalBaseline.map {
+                UsageResetDetector.hasReset(previous: $0, current: current)
+            } ?? (current != nil) // 基準なし（未使用のまま割った）は、使い始めたら新しい期間
+        }
         guard hasNewPeriod, canReviveBubble else { return }
         showBubble(at: lastBubbleCenter ?? defaultBubblePoint(), poppingIn: true)
     }
@@ -925,6 +943,7 @@ extension PanelController {
     private func snapBackToMenuBar(buttonFrame: NSRect) {
         guard state.bubbleActive, let p = bubblePanel, let assembly = bubbleAssembly else { return }
         state.bubbleActive = false
+        settings.reshowBubbleOnNextLaunch = false // 自分でしまったものを次の起動で勝手に出さない
         revivalTask?.cancel()
         resetPopRetry?.cancel()
         resetRefreshTask?.cancel()

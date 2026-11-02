@@ -38,15 +38,17 @@ enum ClaudePlan {
         cacheLock.unlock()
         if let cached, cached.modified == modified { return cached.name }
 
+        // ファイルが無い: ログアウトやアンインストール。プラン名を消す
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        // 読めない: Claude Code が書き込み中のことがある。見出しのプラン名を消さない
         guard let raw = try? Data(contentsOf: url),
-              let root = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
-              let account = root["oauthAccount"] as? [String: Any] else {
-            // Claude Code が書き込み中だと読めないことがある。見出しのプラン名を消さない
+              let root = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else {
             return cached?.name
         }
+        let account = root["oauthAccount"] as? [String: Any] // 読めて無いならログアウト
         let name = displayName(
-            organizationType: account["organizationType"] as? String,
-            rateLimitTier: account["organizationRateLimitTier"] as? String
+            organizationType: account?["organizationType"] as? String,
+            rateLimitTier: account?["organizationRateLimitTier"] as? String
         )
         if let modified {
             cacheLock.lock()

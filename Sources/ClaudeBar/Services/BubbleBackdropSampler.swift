@@ -190,7 +190,7 @@ final class BubbleBackdropSampler {
                 #if DEBUG
                 debugStage = "waitingForOwnWindow"
                 #endif
-                self.content = nil
+                recordFailure() // 載らないままなら一覧の取り直しを休む
                 return
             }
             // AppKit（左下原点）→ ScreenCaptureKit（左上原点のグローバル座標）
@@ -254,9 +254,8 @@ final class BubbleBackdropSampler {
             }
         }
         // 失敗は球ごとでなく1回の測定につき1回数える（3つ表示で一瞬の失敗を連続失敗と誤認しない）
-        if failedAny {
-            if capturedAny { self.content = nil } else { recordFailure() } // 次回は一覧から取り直す
-        }
+        // 全部失敗した時だけ一覧から取り直す（1球でも撮れていれば一覧は有効。毎秒の取り直しを避ける）
+        if failedAny, !capturedAny { recordFailure() }
         if capturedAny {
             backoff.recordSuccess()
             let current = targets()
@@ -286,12 +285,13 @@ final class BubbleBackdropSampler {
     private static func captureImage(filter: SCContentFilter, config: SCStreamConfiguration) async -> CaptureResult {
         await withCheckedContinuation { (continuation: CheckedContinuation<CaptureResult, Never>) in
             let once = ResumeOnce(continuation)
-            SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) { image, _ in
-                once.resume(image.map(CaptureResult.image) ?? .failed)
-            }
-            Task {
-                try? await Task.sleep(for: .seconds(captureTimeout))
+            let timeout = Task {
+                guard (try? await Task.sleep(for: .seconds(captureTimeout))) != nil else { return }
                 once.resume(.timedOut)
+            }
+            SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) { image, _ in
+                timeout.cancel() // 撮影のたびにタイマーの起床を残さない
+                once.resume(image.map(CaptureResult.image) ?? .failed)
             }
         }
     }

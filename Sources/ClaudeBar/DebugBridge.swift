@@ -102,6 +102,9 @@ final class DebugBridge {
         case "offscreen":
             // ディスプレイを外した時の再現: 画面外へ動かして構成変更の通知を出す
             panelController.bubblePanel?.setFrameOrigin(NSPoint(x: 100_000, y: 100_000))
+            if panelController.state.mode == .floating {
+                panelController.panel?.setFrameOrigin(NSPoint(x: 100_000, y: 100_000))
+            }
             NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
         case "quit":
             NSApp.terminate(nil)

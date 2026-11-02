@@ -70,7 +70,7 @@ enum UsageParser {
                 $0.kind == "weekly_scoped" && $0.scope?.model?.displayName == fableLabel
             }) {
                 snapshot.weeklyFableAllowancePercent = response.weeklyScopedShares?
-                    .first(where: { $0.limitIndex == index })?.allowancePercentOfWeekly
+                    .first(where: { $0.limitIndex == index })?.allowancePercentOfWeekly.map(sanePercent)
             }
         } else if let opus = window(response.sevenDayOpus) {
             snapshot.weeklyFable = opus

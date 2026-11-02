@@ -25,12 +25,14 @@ While Claude Code is burning tokens, the logo spins and pulses in Claude orange.
   - Current session and weekly limits (all models / Fable) as gauges with time-to-reset
   - The Fable label is read dynamically from the API's `limits[]` (it shows "Opus" on an Opus plan)
   - Extra usage spend is shown when your account has it enabled
+  - The heading shows your plan (e.g. Usage Max). Limits your plan doesn't have are hidden (with no 5-hour limit, it switches to weekly usage)
 - **Tear-off**: drag the grip and the panel pops free with a jelly wobble (plus haptics) into a **floating panel** that no longer closes when you click elsewhere
 - **Bubble mode 🫧**: a round glass bubble drifts across the whole screen, always on top, showing a usage ring
   - The trajectory is simulated a few seconds ahead and handed to `CAKeyframeAnimation`, so it stays smooth at the display's refresh rate (120 Hz on ProMotion) even when the app is busy
   - Click for a squish, **triple-click to pop 💥**, drag to move, right-click for the menu
   - Choose which metric it shows (session / weekly / Fable)
   - **Drag it onto the menu bar** and it gets sucked back in
+  - **Adapts to the background** (macOS 27 and later): measures the brightness behind the bubble and fades between looks. It asks for Screen Recording permission once, the first time you show the bubble. It reads only the bubble's area, scaled down to 8×8 pixels, and discards it after calculating the average brightness (nothing is saved or sent). Can be turned off in Settings
 - **It pops 💥**: when usage hits 100% in bubble mode, the bubble bursts like soap film with a pop sound, a shockwave and droplets
   - **It comes back**: once the session reset time passes, it reappears with a soft bounce (can be turned off)
 - **Notifications** at 80% / 95% (can be turned off)

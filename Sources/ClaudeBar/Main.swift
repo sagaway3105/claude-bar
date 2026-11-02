@@ -44,10 +44,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debugBridge: DebugBridge?
     #endif
 
+    /// v1.6 以前がディスクに残した、トークン付きリクエストのキャッシュを一度だけ消す。
+    /// 行の削除では SQLite の空き領域に残り得るので、キャッシュのファイルごと消す
+    private func purgeOldTokenCache() {
+        let key = "tokenCachePurged"
+        guard !UserDefaults.standard.bool(forKey: key), let id = Bundle.main.bundleIdentifier else { return }
+        let fm = FileManager.default
+        if let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(id) {
+            for name in ["Cache.db", "Cache.db-wal", "Cache.db-shm", "fsCachedData"] {
+                try? fm.removeItem(at: caches.appendingPathComponent(name))
+            }
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        // v1.6 以前がディスクに残した、トークン付きリクエストのキャッシュを消す
-        URLCache.shared.removeAllCachedResponses()
+        purgeOldTokenCache()
         #if DEBUG
         // 検証用: CLAUDEBAR_APPEARANCE=dark|light でアプリ外観を固定する
         // （システム設定を切り替えずにライト/ダーク両方のスタイルを確認するため）

@@ -240,6 +240,7 @@ final class UsageService {
         // 同一キャッシュの再適用（asOfがほぼ同時刻）は通す — needsLogin/エラー表示のクリアを
         // 担っており、弾くとローカル経路運用でログイン導線が誤表示され続ける
         if let last = state.lastUpdated, asOf.timeIntervalSince(last) < -1.0 { return }
+        guard snapshot.canReplace(state.usage) else { return }
         let old = state.usage
         state.usage = snapshot
         if let fableLabel { state.fableLabel = fableLabel }

@@ -255,6 +255,24 @@ final class ReviewRegressionTests: XCTestCase {
         XCTAssertEqual(snapshot.extra?.isEnabled, true)
     }
 
+    // 枠のある表示を、枠の全く無い応答で置き換えない。最初から枠が無いプランは表示できる
+    func testWindowlessResponseDoesNotReplaceRealUsage() {
+        var real = UsageSnapshot()
+        real.session = UsageWindow(utilization: 40, resetsAt: nil)
+        let empty = UsageSnapshot()
+        XCTAssertFalse(empty.canReplace(real))
+        XCTAssertTrue(empty.canReplace(nil))
+        XCTAssertTrue(empty.canReplace(UsageSnapshot()))
+        XCTAssertTrue(real.canReplace(empty))
+        XCTAssertTrue(real.canReplace(real))
+    }
+
+    // 枠の割合の異常値も表示でクラッシュしない
+    func testHugeAllowanceIsClamped() throws {
+        let json = #"{"limits":[{"kind":"weekly_scoped","percent":5,"scope":{"model":{"display_name":"Fable"}}}],"weekly_scoped_shares":[{"limit_index":0,"allowance_percent_of_weekly":1e300}]}"#
+        XCTAssertEqual(try UsageParser.parse(Data(json.utf8)).snapshot.weeklyFableAllowancePercent, 1000)
+    }
+
     // トークンを送るセッションはディスクへ何も残さない
     func testTokenSessionHasNoDiskCache() {
         let config = UsageService.makeTokenSession().configuration

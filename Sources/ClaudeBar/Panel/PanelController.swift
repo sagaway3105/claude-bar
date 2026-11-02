@@ -132,7 +132,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.keepBubbleOnScreen() }
+            MainActor.assumeIsolated { self?.keepOverlaysOnScreen() }
         }
     }
 

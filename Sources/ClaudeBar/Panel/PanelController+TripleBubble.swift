@@ -205,6 +205,14 @@ extension PanelController {
             .min()
     }
 
+    /// 割れてからどれかの枠が新しい期間に入ったか
+    var tripleHasNewPeriod: Bool {
+        TripleBubbleCluster.Slot.allCases.contains { slot in
+            !state.isMetricAbsent(slot.metric)
+                && hasResetSincePop(slot, window: state.usage?.window(for: slot.metric))
+        }
+    }
+
     /// 1球でも100%未満に戻っていれば復活できる（100%のままの球は割れたままでよい）
     var tripleCanRevive: Bool {
         TripleBubbleCluster.Slot.allCases.contains {
@@ -274,7 +282,7 @@ extension PanelController {
     /// 割れた時点のリセット時刻が控えられていない場合は、時刻が付いた時点で新しい期間とみなす
     /// （未使用のセッションを手動で割った球が、次のポーリングで即復活しないように）。
     /// 時刻が付くまでの間も、バブルの再表示では `reviveTripleBallsBelowLimit` が生まれ直させる
-    private func hasResetSincePop(_ slot: TripleBubbleCluster.Slot, window: UsageWindow?) -> Bool {
+    func hasResetSincePop(_ slot: TripleBubbleCluster.Slot, window: UsageWindow?) -> Bool {
         // 控えが無い（未使用のセッションを手動で割った等）なら、使い始めて時刻が付いたら新しい期間
         guard let poppedResets = tripleCluster.poppedResetsAt[slot.index] else { return window?.resetsAt != nil }
         // 未使用のセッションでは現在値が null になる。判定は単発モードと同じ UsageResetDetector に集約

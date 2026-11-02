@@ -24,6 +24,14 @@ struct UsageSnapshot {
 
 extension UsageSnapshot {
     /// リセット時刻を過ぎた枠を「新しい期間の 0%」として扱う（古いキャッシュ向け）
+    var hasNoWindows: Bool { session == nil && weeklyAll == nil && weeklyFable == nil }
+
+    /// 枠のある表示を、枠の全く無い応答で置き換えない（一時的に欠けた応答で 0% に見せない）。
+    /// 期間枠の無いプランは最初から枠が無いので、通常どおり表示できる
+    func canReplace(_ current: UsageSnapshot?) -> Bool {
+        !hasNoWindows || current?.hasNoWindows != false
+    }
+
     func hasExpiredWindows(now: Date = Date()) -> Bool {
         [session, weeklyAll, weeklyFable].contains { window in
             guard let resets = window?.resetsAt else { return false }
