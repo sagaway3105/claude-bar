@@ -20,6 +20,17 @@ if ! git diff --cached --quiet; then
   exit 1
 fi
 
+# ビルドは作業ツリーから行うので、未コミットの変更があるとタグと中身が食い違う
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "❌ 未コミットの変更があります。コミットしてから実行してください" >&2
+  exit 1
+fi
+git fetch -q origin main
+if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]]; then
+  echo "❌ HEAD が origin/main と一致しません。push してから実行してください" >&2
+  exit 1
+fi
+
 VERSION="$VERSION" ./scripts/make-app.sh
 
 # 署名の完全性チェック（壊れた署名のまま配布しない）
@@ -90,9 +101,9 @@ fi
 # docs/release-notes/v<バージョン>.md があればそれをノートに使う（無ければ自動生成）
 NOTES_FILE="docs/release-notes/v${VERSION}.md"
 if [[ -f "$NOTES_FILE" ]]; then
-  gh release create "v${VERSION}" "$ZIP" --title "v${VERSION}" --notes-file "$NOTES_FILE"
+  gh release create "v${VERSION}" "$ZIP" --target "$(git rev-parse HEAD)" --title "v${VERSION}" --notes-file "$NOTES_FILE"
 else
-  gh release create "v${VERSION}" "$ZIP" --title "v${VERSION}" --generate-notes
+  gh release create "v${VERSION}" "$ZIP" --target "$(git rev-parse HEAD)" --title "v${VERSION}" --generate-notes
 fi
 echo "✅ GitHub Release作成: https://github.com/sagaway3105/claude-bar/releases/tag/v${VERSION}"
 

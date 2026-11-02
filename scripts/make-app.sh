@@ -6,7 +6,9 @@ cd "$(dirname "$0")/.."
 
 VERSION="${VERSION:-1.0.0}"
 
-swift build -c release
+# --build-system native は必須: Xcode 27 の既定（swiftbuild）だと実行ファイルの SDK が
+# 最低対応OSと同じ 14.0 と記録され、システムの窓やボタンが旧デザインに戻る
+swift build -c release --build-system native
 
 # アプリアイコン（無ければ生成）
 if [[ ! -f assets/AppIcon.icns ]]; then
@@ -19,6 +21,15 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp .build/release/ClaudeBar "$APP/Contents/MacOS/ClaudeBar"
+
+# 記録された SDK が古いとシステムUIが互換モードになる。ビルド方式の変更で黙って退行しないよう検証する
+SDK_VERSION=$(vtool -show-build "$APP/Contents/MacOS/ClaudeBar" | awk '$1 == "sdk" { print $2; exit }')
+if (( ${SDK_VERSION%%.*} < 26 )); then
+  echo "❌ 実行ファイルの SDK が古すぎます: ${SDK_VERSION}（26 以上が必要）" >&2
+  exit 1
+fi
+echo "✅ 実行ファイルの SDK: ${SDK_VERSION}"
+
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # ローカライズ: メインバンドルが「対応している言語」を宣言する必要がある。
@@ -29,6 +40,11 @@ for LANG_DIR in en ja; do
   mkdir -p "$APP/Contents/Resources/$LANG_DIR.lproj"
   : > "$APP/Contents/Resources/$LANG_DIR.lproj/InfoPlist.strings"
 done
+# 権限の説明文の英語版（Info.plist の本文は日本語）
+cat > "$APP/Contents/Resources/en.lproj/InfoPlist.strings" <<'STRINGS_EOF'
+"NSScreenCaptureUsageDescription" = "Measures the brightness behind the bubble so it can adapt to the background. Images are never saved or sent.";
+"NSAppleEventsUsageDescription" = "Used to start the Claude Code login in Terminal.";
+STRINGS_EOF
 
 # `Bundle.module` の直接使用を禁止する（ResourceBundle.swift の AppResources 経由のみ許可）。
 # SwiftPM のアクセサは Contents/Resources を探さないため、配布 .app で必ず落ちる（Issue #2）
@@ -88,6 +104,8 @@ cat > "$APP/Contents/Info.plist" <<EOF
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>バブルの裏の明るさを測り、背景に合わせて見た目を切り替えるために使用します。画像は保存も送信もしません。</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Claude Codeのログインをターミナルで起動するために使用します。</string>
 	<!-- フィードは GitHub Pages 経由（docs/appcast.xml を配信）。
