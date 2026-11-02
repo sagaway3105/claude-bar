@@ -1,13 +1,14 @@
 #!/bin/zsh
 # リリース前チェック。自動の検査のあと、docs/RELEASE_CHECKLIST.md の手動項目の確認を求める。
 # 通過するとコミットごとの記録を残し、release.sh はその記録が無いと配布しない。
-# 使い方: ./scripts/preflight.sh 1.7.0   （本人の確認が要るのでターミナルで実行する）
+# 使い方: ./scripts/preflight.sh 1.7.0   （ターミナルで本人が確認して入力する）
+# --confirmed を付けると手動項目の入力を省く（Claude Code が確認を代行し、結果を報告する時に使う）
 # --auto-only を付けると自動の検査だけ行い、記録は残さない（開発中の確認用）
 set -euo pipefail
 cd "$(dirname "$0")/.."
 autoload -Uz is-at-least
 
-VERSION="${1:?使い方: ./scripts/preflight.sh <バージョン> [--auto-only]}"
+VERSION="${1:?使い方: ./scripts/preflight.sh <バージョン> [--confirmed|--auto-only]}"
 AUTO_ONLY="${2:-}"
 NOTES_FILE="docs/release-notes/v${VERSION}.md"
 CHECKLIST="docs/RELEASE_CHECKLIST.md"
@@ -110,10 +111,14 @@ echo
 echo "== 手動の確認（$CHECKLIST）"
 grep -E '^(### |- \[ \] )' "$CHECKLIST"
 echo
-[[ -r /dev/tty ]] || fail "確認の入力ができません。ターミナルから実行してください"
-print -n "すべて確認しましたか？ v${VERSION} と入力すると記録します: " >/dev/tty
-read -r ANSWER </dev/tty
-[[ "$ANSWER" == "v${VERSION}" ]] || fail "確認が取れなかったので記録しません"
+if [[ "$AUTO_ONLY" == "--confirmed" ]]; then
+  echo "✅ 手動項目は確認済みとして進めます（--confirmed）"
+else
+  [[ -r /dev/tty ]] || fail "確認の入力ができません。ターミナルから実行するか --confirmed を付けてください"
+  print -n "すべて確認しましたか？ v${VERSION} と入力すると記録します: " >/dev/tty
+  read -r ANSWER </dev/tty
+  [[ "$ANSWER" == "v${VERSION}" ]] || fail "確認が取れなかったので記録しません"
+fi
 
 mkdir -p "$RECORD_DIR"
 date '+%Y-%m-%d %H:%M:%S' > "$RECORD_DIR/v${VERSION}-${SHA}"

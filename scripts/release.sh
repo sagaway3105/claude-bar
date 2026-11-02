@@ -1,10 +1,16 @@
 #!/bin/zsh
 # ビルド → zip化 → GitHub Release 作成までを一括で行う
-# 使い方: ./scripts/release.sh 1.0.0
+# 使い方: ./scripts/release.sh 1.0.0   （公開の直前に本人の手入力を待つ）
+# --approved=v1.0.0 は本人の最終承認を受け取った後にだけ付ける（Claude Code がチャットで承認を得た時）
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="${1:?使い方: ./scripts/release.sh <バージョン>  例: ./scripts/release.sh 1.0.0}"
+APPROVAL_ARG="${2:-}"
+if [[ -n "$APPROVAL_ARG" && "$APPROVAL_ARG" != "--approved=v${VERSION}" ]]; then
+  echo "❌ 承認の指定がバージョンと一致しません: ${APPROVAL_ARG}（--approved=v${VERSION}）" >&2
+  exit 1
+fi
 
 # 配布はmainブランチからのみ（SparkleのフィードURLは main/docs/appcast.xml 固定＝
 # GitHub Pages と raw の両方がこれを配信している。別ブランチでappcastをpushしても
@@ -111,7 +117,7 @@ else
   exit 1
 fi
 
-# 最終承認: ここから先は公開の操作（Release・appcast・Homebrew）。本人の手入力が無ければ必ず止まる
+# 最終承認: ここから先は公開の操作（Release・appcast・Homebrew）。承認が無ければ必ず止まる
 NOTES_FILE="docs/release-notes/v${VERSION}.md"
 echo
 echo "== 公開の最終確認"
@@ -120,11 +126,15 @@ echo "コミット:   $(git log -1 --format='%h %s')"
 echo "配布物:     ${ZIP}（公証済み）"
 echo "ノート:     ${NOTES_FILE}"
 echo "公開すると GitHub Release、自動アップデート、Homebrew へ配信されます。"
-print -n "公開するなら「公開 v${VERSION}」と入力してください: " >/dev/tty
-read -r APPROVAL </dev/tty
-if [[ "$APPROVAL" != "公開 v${VERSION}" ]]; then
-  echo "❌ 承認されなかったので公開を中止しました（まだ何も公開していません）" >&2
-  exit 1
+if [[ "$APPROVAL_ARG" == "--approved=v${VERSION}" ]]; then
+  echo "✅ 本人の最終承認を受け取り済み（--approved）"
+else
+  print -n "公開するなら「公開 v${VERSION}」と入力してください: " >/dev/tty
+  read -r APPROVAL </dev/tty
+  if [[ "$APPROVAL" != "公開 v${VERSION}" ]]; then
+    echo "❌ 承認されなかったので公開を中止しました（まだ何も公開していません）" >&2
+    exit 1
+  fi
 fi
 
 # docs/release-notes/v<バージョン>.md があればそれをノートに使う（無ければ自動生成）
