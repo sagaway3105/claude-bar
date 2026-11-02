@@ -214,7 +214,8 @@ extension PanelController {
 
     /// プランに無い枠の球を隠し、枠が現れたら戻す（5時間制限の無いプランなど）。
     /// 割れた球と同じく表示・当たり判定・可動域から外すが、破裂の演出はしない
-    func syncTripleAbsentSlots() {
+    /// collapseIfEmpty: 表示の途中では false にする（畳むかどうかは showBubble が復活の後で判断する）
+    func syncTripleAbsentSlots(collapseIfEmpty: Bool = true) {
         var changed = false
         for slot in TripleBubbleCluster.Slot.allCases {
             let absent = state.isMetricAbsent(slot.metric)
@@ -231,7 +232,7 @@ extension PanelController {
         }
         if changed { refreshTripleFloatBounds() }
         // 最後の球が枠なしになったら、見えない窓を残さない
-        if changed, state.bubbleActive, bubblePanel?.isVisible == true, tripleCluster.allPopped {
+        if collapseIfEmpty, changed, state.bubbleActive, bubblePanel?.isVisible == true, tripleCluster.allPopped {
             collapseTripleBubble()
         }
     }
@@ -239,7 +240,7 @@ extension PanelController {
     /// 割れたままの球のうち100%未満に戻っているものを生まれ直させる。
     /// バブル再表示（🫧・復活予約）の入口で呼び、全球割れたままの「見えない空ウィンドウ」を出さない
     func reviveTripleBallsBelowLimit() {
-        syncTripleAbsentSlots()
+        syncTripleAbsentSlots(collapseIfEmpty: false)
         for slot in TripleBubbleCluster.Slot.allCases
         where !state.isMetricAbsent(slot.metric)
             && (state.usage?.window(for: slot.metric)?.utilization ?? 0) < 100 {

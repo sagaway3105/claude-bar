@@ -24,6 +24,13 @@ struct UsageSnapshot {
 
 extension UsageSnapshot {
     /// リセット時刻を過ぎた枠を「新しい期間の 0%」として扱う（古いキャッシュ向け）
+    func hasExpiredWindows(now: Date = Date()) -> Bool {
+        [session, weeklyAll, weeklyFable].contains { window in
+            guard let resets = window?.resetsAt else { return false }
+            return resets <= now
+        }
+    }
+
     func clearingExpiredWindows(now: Date = Date()) -> UsageSnapshot {
         func clear(_ window: UsageWindow?) -> UsageWindow? {
             guard let window, let resets = window.resetsAt, resets <= now else { return window }

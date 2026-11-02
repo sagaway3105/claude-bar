@@ -40,7 +40,10 @@ enum ClaudePlan {
 
         guard let raw = try? Data(contentsOf: url),
               let root = try? JSONSerialization.jsonObject(with: raw) as? [String: Any],
-              let account = root["oauthAccount"] as? [String: Any] else { return nil }
+              let account = root["oauthAccount"] as? [String: Any] else {
+            // Claude Code が書き込み中だと読めないことがある。見出しのプラン名を消さない
+            return cached?.name
+        }
         let name = displayName(
             organizationType: account["organizationType"] as? String,
             rateLimitTier: account["organizationRateLimitTier"] as? String

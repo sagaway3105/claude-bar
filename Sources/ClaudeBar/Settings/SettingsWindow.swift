@@ -167,6 +167,10 @@ struct SettingsView: View {
             }
         }
         .onAppear { screenCapturePermitted = BubbleBackdropSampler.hasPermission }
+        // システム設定から戻ってきた時に案内を更新する
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            screenCapturePermitted = BubbleBackdropSampler.hasPermission
+        }
     }
 
     private var notificationsSection: some View {

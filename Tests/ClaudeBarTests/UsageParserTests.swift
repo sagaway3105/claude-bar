@@ -255,10 +255,31 @@ final class ReviewRegressionTests: XCTestCase {
         XCTAssertEqual(snapshot.extra?.isEnabled, true)
     }
 
-    // 無効な追加利用だけの応答は、正常値を上書きしないよう従来どおりエラー
-    func testDisabledExtraUsageOnlyThrows() {
+    // 期間枠の無いプランの応答（追加利用は無効）もエラーにしない
+    func testAccountWithoutWindowsIsValid() throws {
         let json = #"{"five_hour":null,"seven_day":null,"extra_usage":{"is_enabled":false}}"#
+        let snapshot = try UsageParser.parse(Data(json.utf8)).snapshot
+        XCTAssertNil(snapshot.session)
+        XCTAssertEqual(snapshot.extra?.isEnabled, false)
+    }
+
+    // 全項目が null で extra_usage も無い応答は、正常値を上書きしないようエラー
+    func testAllNullWithoutExtraUsageThrows() {
+        let json = #"{"five_hour":null,"seven_day":null}"#
         XCTAssertThrowsError(try UsageParser.parse(Data(json.utf8)))
+    }
+
+    func testHasExpiredWindows() {
+        let now = Date()
+        var snapshot = UsageSnapshot()
+        XCTAssertFalse(snapshot.hasExpiredWindows(now: now))
+        snapshot.session = UsageWindow(utilization: 80, resetsAt: nil)
+        XCTAssertFalse(snapshot.hasExpiredWindows(now: now))
+        snapshot.weeklyAll = UsageWindow(utilization: 80, resetsAt: now.addingTimeInterval(60))
+        XCTAssertFalse(snapshot.hasExpiredWindows(now: now))
+        snapshot.weeklyFable = UsageWindow(utilization: 80, resetsAt: now.addingTimeInterval(-60))
+        XCTAssertTrue(snapshot.hasExpiredWindows(now: now))
+        XCTAssertFalse(snapshot.clearingExpiredWindows(now: now).hasExpiredWindows(now: now))
     }
 
     // claude を起動してもキャッシュが無いとき、起動の間隔制限が効くよう ranCLI を返す

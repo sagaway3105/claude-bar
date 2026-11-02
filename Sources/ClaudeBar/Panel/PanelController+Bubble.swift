@@ -210,9 +210,7 @@ extension PanelController {
         updateFloatBounds(around: point)
         // 新しいモードのサイズで画面からはみ出す位置なら押し込む
         // （1⇔3切替・復活の再表示は元の中心を引き継ぐため、端では欠けることがある）
-        var clamped = p.frame.origin
-        clamped.x = min(max(clamped.x, floatBounds.minX), floatBounds.maxX)
-        clamped.y = min(max(clamped.y, floatBounds.minY), floatBounds.maxY)
+        let clamped = clampedToFloatBounds(p.frame.origin)
         if clamped != p.frame.origin { p.setFrameOrigin(clamped) }
         p.ignoresMouseEvents = false // 初期状態は受ける（以後はカーソル位置で自動切替）
         startMouseTracking()
@@ -398,10 +396,15 @@ extension PanelController {
     func keepBubbleOnScreen() {
         guard state.bubbleActive, let p = bubblePanel, p.isVisible else { return }
         updateFloatBounds(around: NSPoint(x: p.frame.midX, y: p.frame.midY))
-        var origin = p.frame.origin
-        origin.x = min(max(origin.x, floatBounds.minX), floatBounds.maxX)
-        origin.y = min(max(origin.y, floatBounds.minY), floatBounds.maxY)
+        let origin = clampedToFloatBounds(p.frame.origin)
         if origin != p.frame.origin { p.setFrameOrigin(origin) }
+    }
+
+    private func clampedToFloatBounds(_ origin: NSPoint) -> NSPoint {
+        NSPoint(
+            x: min(max(origin.x, floatBounds.minX), floatBounds.maxX),
+            y: min(max(origin.y, floatBounds.minY), floatBounds.maxY)
+        )
     }
 
     // MARK: - カーソル追跡（ホバーのポヨン）
@@ -615,9 +618,7 @@ extension PanelController {
             }
             // 可動域はカーソルのある画面で取り直す（別ディスプレイへ運べるように）
             updateFloatBounds(around: mouse)
-            var origin = NSPoint(x: start.x + dx, y: start.y + dy)
-            origin.x = min(max(origin.x, floatBounds.minX), floatBounds.maxX)
-            origin.y = min(max(origin.y, floatBounds.minY), floatBounds.maxY)
+            let origin = clampedToFloatBounds(NSPoint(x: start.x + dx, y: start.y + dy))
             p.setFrameOrigin(origin)
             // 塊が動いた分だけ基準を進め、リーシュの伸びと二重に効かないようにする
             if settings.isTripleBubble, tripleCluster.draggingSlot != nil {
@@ -835,10 +836,7 @@ extension PanelController {
                 await self.usageService.refresh()
                 // 取得の中で reviveIfDue が復活させていたら、二重に出さない
                 guard !self.state.bubbleActive else { return }
-                let canRevive = self.settings.isTripleBubble
-                    ? self.tripleCanRevive
-                    : (self.bubbleUsageWindow?.utilization ?? 0) < 100
-                if canRevive {
+                if self.canReviveBubble {
                     self.showBubble(at: self.lastBubbleCenter ?? self.defaultBubblePoint(), poppingIn: true)
                     return
                 }
@@ -856,11 +854,13 @@ extension PanelController {
         let hasNewPeriod = revivalBaseline.map {
             UsageResetDetector.hasReset(previous: $0, current: current)
         } ?? (current != nil) // 基準なし（未使用のまま割った）は、使い始めたら新しい期間
-        let canRevive = settings.isTripleBubble
-            ? tripleCanRevive
-            : (bubbleUsageWindow?.utilization ?? 0) < 100
-        guard hasNewPeriod, canRevive else { return }
+        guard hasNewPeriod, canReviveBubble else { return }
         showBubble(at: lastBubbleCenter ?? defaultBubblePoint(), poppingIn: true)
+    }
+
+    /// 復活しても、すぐ割れない状態か
+    private var canReviveBubble: Bool {
+        settings.isTripleBubble ? tripleCanRevive : (bubbleUsageWindow?.utilization ?? 0) < 100
     }
 
     /// 破裂音を鳴らす（設定でオフにできる）。連続破裂では鳴らし直す

@@ -176,6 +176,7 @@ final class BubbleBackdropSampler {
         }
         guard let content else { return }
         var capturedAny = false
+        var failedAny = false
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         let pid = ProcessInfo.processInfo.processIdentifier
         let ownApps = content.applications.filter { $0.processID == pid }
@@ -226,9 +227,8 @@ final class BubbleBackdropSampler {
             case .image(let image):
                 captured = image
                 capturedAny = true
-                backoff.recordSuccess()
             case .failed:
-                recordFailure() // 次回は一覧から取り直す
+                failedAny = true
             case .timedOut:
                 self.content = nil
                 suspendedUntil = Date().addingTimeInterval(Self.suspensionAfterTimeout)
@@ -253,7 +253,12 @@ final class BubbleBackdropSampler {
                 Self.fadeAppearance(of: target.view, to: name)
             }
         }
+        // 失敗は球ごとでなく1回の測定につき1回数える（3つ表示で一瞬の失敗を連続失敗と誤認しない）
+        if failedAny {
+            if capturedAny { self.content = nil } else { recordFailure() } // 次回は一覧から取り直す
+        }
         if capturedAny {
+            backoff.recordSuccess()
             let current = targets()
             isLive = !current.isEmpty && current.allSatisfy { tones[$0.id]?.tone != nil }
         }

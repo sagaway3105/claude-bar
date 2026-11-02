@@ -118,6 +118,8 @@ final class UsageService {
         // 主経路: API直叩き（トークンはsecurity CLI経由＝ダイアログなし）。
         // サーバーの現在値がそのまま来るので、設定した更新間隔どおりの鮮度になる
         if await refreshViaKeychainAPI() { return }
+        // 呼び出し元の取り消しなら、claude を起動するフォールバックへ進まない
+        if Task.isCancelled { return }
 
         // フォールバック: Claude Codeのローカルキャッシュ+claude起動
         // （オフライン・レート制限クールダウン中・トークン不在などのケース）
@@ -129,6 +131,15 @@ final class UsageService {
             // キャッシュは古いことがある。リセット時刻を過ぎた枠の値は信用しない
             apply(parsed.snapshot.clearingExpiredWindows(), fableLabel: parsed.fableLabel, asOf: usage.fetchedAt)
         }
+        clearExpiredWindowsInDisplayedUsage()
+    }
+
+    /// 取得できない間にリセット時刻を過ぎた枠を、表示からも消す。キャッシュが無い時や、
+    /// 表示中より古いキャッシュを apply が弾いた時も、古い使用率を出し続けない
+    private func clearExpiredWindowsInDisplayedUsage() {
+        guard let usage = state.usage, usage.hasExpiredWindows() else { return }
+        state.usage = usage.clearingExpiredWindows()
+        onUsageApplied?() // バブルのリセット検知と復活へ伝える
     }
 
     /// API直叩き（主経路）。成功して適用できたらtrue。
