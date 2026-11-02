@@ -99,6 +99,10 @@ final class DebugBridge {
             panelController.hide()
         case "settings":
             settingsController.show()
+        case "offscreen":
+            // ディスプレイを外した時の再現: 画面外へ動かして構成変更の通知を出す
+            panelController.bubblePanel?.setFrameOrigin(NSPoint(x: 100_000, y: 100_000))
+            NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
         case "quit":
             NSApp.terminate(nil)
         case "state":
@@ -158,6 +162,10 @@ final class DebugBridge {
         info["followBackground"] = panelController.settings.followBackground
         info["backdropStage"] = panelController.backdropSampler.debugStage
         info["backdropLive"] = state.backdropLive
+        if let f = panelController.bubblePanel?.frame {
+            info["bubbleFrame"] = [f.origin.x, f.origin.y, f.width, f.height]
+            info["screens"] = NSScreen.screens.map { [$0.frame.origin.x, $0.frame.origin.y, $0.frame.width, $0.frame.height] }
+        }
         info["backdropLuminance"] = panelController.backdropSampler.debugLastLuminance
             .map { "\($0.key):\(String(format: "%.2f", $0.value))" }.joined(separator: ",")
         info["bubbleHostAppearance"] = panelController.bubbleHosting?.appearance?.name.rawValue ?? "nil"

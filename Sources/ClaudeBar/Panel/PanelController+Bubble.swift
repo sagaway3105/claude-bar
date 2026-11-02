@@ -393,6 +393,17 @@ extension PanelController {
         )
     }
 
+    /// 画面構成が変わった時、可動域を取り直してバブルを画面内へ戻す。
+    /// 中心がどの画面にも無ければ、updateFloatBounds が主画面を選ぶのでその端へ寄る
+    func keepBubbleOnScreen() {
+        guard state.bubbleActive, let p = bubblePanel, p.isVisible else { return }
+        updateFloatBounds(around: NSPoint(x: p.frame.midX, y: p.frame.midY))
+        var origin = p.frame.origin
+        origin.x = min(max(origin.x, floatBounds.minX), floatBounds.maxX)
+        origin.y = min(max(origin.y, floatBounds.minY), floatBounds.maxY)
+        if origin != p.frame.origin { p.setFrameOrigin(origin) }
+    }
+
     // MARK: - カーソル追跡（ホバーのポヨン）
 
     func startMouseTracking() {

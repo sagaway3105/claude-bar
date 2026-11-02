@@ -128,6 +128,12 @@ final class PanelController: NSObject, NSWindowDelegate {
         self.usageService = usageService
         self.settings = settings
         super.init()
+        // ディスプレイの取り外しや解像度の変更で、バブルが画面外へ残らないようにする
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.keepBubbleOnScreen() }
+        }
     }
 
     // MARK: - 共有ヘルパー
