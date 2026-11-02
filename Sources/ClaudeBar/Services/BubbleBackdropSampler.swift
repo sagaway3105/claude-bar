@@ -1,6 +1,25 @@
 import AppKit
 import ScreenCaptureKit
 
+/// 撮影の連続失敗に対する待ち時間。失敗のたびに毎秒やり直すと replayd の負荷になる
+struct BackdropFailureBackoff: Equatable {
+    static let threshold = 3
+    static let firstWait: TimeInterval = 60
+    static let maxWait: TimeInterval = 300
+
+    private var failures = 0
+
+    mutating func recordSuccess() { failures = 0 }
+
+    /// 休む秒数を返す。一時的な失敗として流してよい間は nil
+    mutating func recordFailure() -> TimeInterval? {
+        failures += 1
+        guard failures >= Self.threshold else { return nil }
+        let doublings = min(failures - Self.threshold, 8)
+        return min(Self.firstWait * pow(2, Double(doublings)), Self.maxWait)
+    }
+}
+
 /// 背景の明暗の判定（テスト可能な純粋関数）。
 /// 中間の明るさで外観が往復しないよう、切り替え点に幅を持たせ、同じ判定が続いてから切り替える
 struct BackdropTone: Equatable {
@@ -56,12 +75,22 @@ final class BubbleBackdropSampler {
     var targets: () -> [Target] = { [] }
     /// バブルが見えている間だけ true を返す
     var shouldRun: () -> Bool = { false }
+    /// 実際に測れていて全部の球の明暗が決まっている間だけ true。可読性の膜の有無に使う
+    var onLiveChanged: (Bool) -> Void = { _ in }
 
     private var task: Task<Void, Never>?
+    /// stop → start の直後に古いループが終わっても、新しいループの task を消さないための世代
+    private var generation = 0
     private var tones: [Int: BackdropTone] = [:]
     private var content: SCShareableContent?
     private var suspendedUntil: Date = .distantPast
+    private var backoff = BackdropFailureBackoff()
     private var screenObserver: NSObjectProtocol?
+    /// 許可の問い合わせは1回約5ms掛かるので、許可がある間は聞き直さない（撮影の失敗で聞き直す）
+    private var permitted = false
+    private var isLive = false {
+        didSet { if isLive != oldValue { onLiveChanged(isLive) } }
+    }
     #if DEBUG
     var debugLastLuminance: [Int: Double] = [:]
     var debugStage = "idle"
@@ -84,29 +113,50 @@ final class BubbleBackdropSampler {
                 MainActor.assumeIsolated { self?.content = nil }
             }
         }
+        generation += 1
+        let run = generation
         task = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, self.shouldRun() else { break }
+                if !self.permitted { self.permitted = Self.hasPermission }
                 #if DEBUG
-                self.debugStage = Self.hasPermission ? "sampling" : "noPermission"
+                self.debugStage = self.permitted ? "sampling" : "noPermission"
                 #endif
-                let permitted = Self.hasPermission
-                if permitted { await self.sampleOnce() }
+                if self.permitted {
+                    await self.sampleOnce()
+                } else {
+                    self.isLive = false
+                }
                 // 許可を断った人でも既定でこのループに入るので、許可が無い間は間隔を空ける
-                try? await Task.sleep(for: .seconds(permitted ? Self.interval : Self.intervalWithoutPermission))
+                try? await Task.sleep(for: .seconds(self.permitted ? Self.interval : Self.intervalWithoutPermission))
             }
-            self?.task = nil
+            if let self, self.generation == run { self.task = nil }
         }
     }
 
     /// 測定をやめ、外観をアプリ全体の設定へ戻す
     func stop(resetting views: [NSView]) {
         task?.cancel()
+        generation += 1
         suspendedUntil = .distantPast
+        backoff = BackdropFailureBackoff()
         task = nil
         tones = [:]
         content = nil
+        permitted = false
+        isLive = false
         for view in views { view.appearance = nil }
+    }
+
+    /// 撮影の失敗を記録する。続くようなら休み、測れていない扱いにして膜を戻す。
+    /// 許可が取り消された場合もここに来るので、次の回で聞き直す
+    private func recordFailure() {
+        content = nil
+        permitted = false
+        if let wait = backoff.recordFailure() {
+            suspendedUntil = Date().addingTimeInterval(wait)
+            isLive = false
+        }
     }
 
     private func sampleOnce() async {
@@ -121,9 +171,11 @@ final class BubbleBackdropSampler {
                 #if DEBUG
                 debugStage = "contentError: \(error)"
                 #endif
+                recordFailure()
             }
         }
         guard let content else { return }
+        var capturedAny = false
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         let pid = ProcessInfo.processInfo.processIdentifier
         let ownApps = content.applications.filter { $0.processID == pid }
@@ -173,11 +225,14 @@ final class BubbleBackdropSampler {
             switch result {
             case .image(let image):
                 captured = image
+                capturedAny = true
+                backoff.recordSuccess()
             case .failed:
-                self.content = nil // 次回は一覧から取り直す
+                recordFailure() // 次回は一覧から取り直す
             case .timedOut:
                 self.content = nil
                 suspendedUntil = Date().addingTimeInterval(Self.suspensionAfterTimeout)
+                isLive = false
                 return
             }
             #if DEBUG
@@ -197,6 +252,10 @@ final class BubbleBackdropSampler {
             if let name, target.view.appearance?.name != name {
                 Self.fadeAppearance(of: target.view, to: name)
             }
+        }
+        if capturedAny {
+            let current = targets()
+            isLive = !current.isEmpty && current.allSatisfy { tones[$0.id]?.tone != nil }
         }
     }
 

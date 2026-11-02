@@ -272,6 +272,7 @@ extension PanelController {
     /// バブルを非表示（OFFにする）。アクティブな🫧ボタン押下時
     func dismissBubble() {
         state.bubbleActive = false
+        settings.reshowBubbleOnNextLaunch = false // 自分で閉じたものを次の起動で勝手に出さない
         pendingRevival = false
         revivalTask?.cancel()
         resetPopRetry?.cancel()

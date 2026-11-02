@@ -147,6 +147,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             return self.settings.followBackground && self.state.bubbleActive
         }
         sampler.targets = { [weak self] in self?.backdropTargets() ?? [] }
+        sampler.onLiveChanged = { [weak self] live in self?.state.backdropLive = live }
         return sampler
     }()
 

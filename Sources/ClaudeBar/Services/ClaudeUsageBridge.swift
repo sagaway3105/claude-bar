@@ -12,19 +12,29 @@ import Foundation
 /// 既存の `UsageParser` でそのまま解釈できる。
 enum ClaudeUsageBridge {
 
-    /// 取得できたら utilization JSON（UsageParserが読める形）と実際の取得時刻を返す。取得不能なら nil。
+    struct FetchResult {
+        /// utilization JSON（UsageParserが読める形）と実際の取得時刻。取得不能なら nil
+        var usage: (data: Data, fetchedAt: Date)?
+        /// claude を起動したか。キャッシュが取れなくても起動していれば true（起動の間隔制限に使う）
+        var ranCLI: Bool
+    }
+
     /// キャッシュが maxAge より古ければ claude を起動して更新を試みてから読み直す。
     /// allowCLIRefresh が false なら claude を起動せず、手元のキャッシュだけを返す。
     static func fetchUtilizationJSON(
-        maxAge: TimeInterval, allowCLIRefresh: Bool = true
-    ) async -> (data: Data, fetchedAt: Date, ranCLI: Bool)? {
+        maxAge: TimeInterval,
+        allowCLIRefresh: Bool = true,
+        readCache: () -> (data: Data, age: TimeInterval)? = { ClaudeUsageBridge.readCache() },
+        runCLI: () async -> Bool = { await ClaudeUsageBridge.refreshViaClaude() }
+    ) async -> FetchResult {
         if let cached = readCache(), cached.age <= maxAge {
-            return (cached.data, Date().addingTimeInterval(-cached.age), false) // 十分新しい → 起動不要
+            // 十分新しい → 起動不要
+            return FetchResult(usage: (cached.data, Date().addingTimeInterval(-cached.age)), ranCLI: false)
         }
-        if allowCLIRefresh { await refreshViaClaude() }
+        let ranCLI = allowCLIRefresh ? await runCLI() : false
         // 更新に失敗しても古いキャッシュがあれば使う（取得時刻は正直に返し、UIの「更新」表示に反映させる）
-        guard let cached = readCache() else { return nil }
-        return (cached.data, Date().addingTimeInterval(-cached.age), allowCLIRefresh)
+        let usage = readCache().map { (data: $0.data, fetchedAt: Date().addingTimeInterval(-$0.age)) }
+        return FetchResult(usage: usage, ranCLI: ranCLI)
     }
 
     /// claude バイナリの実体パス（既知の配置場所を直接探す。ログインシェルは使わない）。
@@ -69,8 +79,9 @@ enum ClaudeUsageBridge {
     /// claude バイナリを直接実行して `/usage` を走らせ cachedUsageUtilization を更新させる。
     /// ハングに備えて最長15秒で打ち切る。作業ディレクトリはホーム直下（保護対象外）にして
     /// Desktop/Documents/リムーバブルディスク等のTCC確認を誘発しないようにする。
-    private static func refreshViaClaude() async {
-        guard let claudePath = claudeBinaryPath() else { return } // 未検出→キーチェーン経路へ
+    /// claude が見つからず起動しなかった時だけ false を返す。
+    private static func refreshViaClaude() async -> Bool {
+        guard let claudePath = claudeBinaryPath() else { return false } // 未検出→キーチェーン経路へ
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             DispatchQueue.global(qos: .utility).async {
                 let process = Process()
@@ -100,5 +111,6 @@ enum ClaudeUsageBridge {
                 continuation.resume()
             }
         }
+        return true
     }
 }

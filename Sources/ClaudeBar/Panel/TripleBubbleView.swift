@@ -111,7 +111,7 @@ struct BubbleFace: View {
                 BubbleDepthUnderlay(s: s)
                     .bubbleClarity()
                 // 27だけ、球全体を外観側の色へ寄せる膜（システムの Tinted 相当）
-                BubbleAppearanceFilm(s: s, followsBackground: settings.followBackground)
+                BubbleAppearanceFilm(s: s, backdropIsLive: state.backdropLive)
                 // 旧OSだけ、文字の裏にぼかしグレーを敷く（26は自動反転で足りる・27は上の膜）
                 BubbleTextPlate(s: s)
                 // 中身のゆらぎ（WobbleHost）は廃止（2026-08-28ユーザー判断）。

@@ -123,12 +123,11 @@ final class UsageService {
         // （オフライン・レート制限クールダウン中・トークン不在などのケース）
         let maxAge: TimeInterval = force ? 15 : TimeInterval(max(1, settings.pollIntervalMinutes) * 60)
         let allowCLI = force || Date().timeIntervalSince(lastCLIRefreshAt) >= cliRefreshMinInterval
-        if let fetched = await ClaudeUsageBridge.fetchUtilizationJSON(maxAge: maxAge, allowCLIRefresh: allowCLI) {
-            if fetched.ranCLI { lastCLIRefreshAt = Date() }
-            if let parsed = try? UsageParser.parse(fetched.data) {
-                // キャッシュは古いことがある。リセット時刻を過ぎた枠の値は信用しない
-                apply(parsed.snapshot.clearingExpiredWindows(), fableLabel: parsed.fableLabel, asOf: fetched.fetchedAt)
-            }
+        let fetched = await ClaudeUsageBridge.fetchUtilizationJSON(maxAge: maxAge, allowCLIRefresh: allowCLI)
+        if fetched.ranCLI { lastCLIRefreshAt = Date() }
+        if let usage = fetched.usage, let parsed = try? UsageParser.parse(usage.data) {
+            // キャッシュは古いことがある。リセット時刻を過ぎた枠の値は信用しない
+            apply(parsed.snapshot.clearingExpiredWindows(), fableLabel: parsed.fableLabel, asOf: usage.fetchedAt)
         }
     }
 

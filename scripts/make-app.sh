@@ -24,8 +24,10 @@ cp .build/release/ClaudeBar "$APP/Contents/MacOS/ClaudeBar"
 
 # 記録された SDK が古いとシステムUIが互換モードになる。ビルド方式の変更で黙って退行しないよう検証する
 SDK_VERSION=$(vtool -show-build "$APP/Contents/MacOS/ClaudeBar" | awk '$1 == "sdk" { print $2; exit }')
-if (( ${SDK_VERSION%%.*} < 26 )); then
-  echo "❌ 実行ファイルの SDK が古すぎます: ${SDK_VERSION}（26 以上が必要）" >&2
+SDK_MAJOR="${SDK_VERSION%%.*}"
+# 読み取れない値は (( )) が「偽」と評価して素通りするので、先に数値か確かめる
+if [[ "$SDK_MAJOR" != <-> ]] || (( SDK_MAJOR < 26 )); then
+  echo "❌ 実行ファイルの SDK を確認できないか古すぎます: '${SDK_VERSION}'（26 以上が必要）" >&2
   exit 1
 fi
 echo "✅ 実行ファイルの SDK: ${SDK_VERSION}"

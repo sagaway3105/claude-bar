@@ -137,14 +137,18 @@ struct SettingsView: View {
             Toggle(L("settings.reviveBubble"), isOn: $settings.reviveBubble)
             Toggle(L("settings.popSound"), isOn: $settings.popSound)
             if BubbleBackdropSampler.isSupported {
-                Toggle(L("settings.followBackground"), isOn: $settings.followBackground)
-                    .onChange(of: settings.followBackground) { _, on in
-                        // 設定画面からの確認は、本人がオンにした時だけ出す
+                // onChange だとバブル初回表示でのオンにも反応して二重に確認が出るので、本人の操作だけを拾う
+                Toggle(L("settings.followBackground"), isOn: Binding(
+                    get: { settings.followBackground },
+                    set: { on in
+                        settings.followBackgroundOffered = true // 本人の選択をバブルの初回表示で上書きしない
+                        settings.followBackground = on
                         if on, !BubbleBackdropSampler.hasPermission {
                             _ = CGRequestScreenCaptureAccess()
                         }
                         screenCapturePermitted = BubbleBackdropSampler.hasPermission
                     }
+                ))
                 Text(L("settings.followBackgroundNote"))
                     .font(.caption)
                     .foregroundStyle(.secondary)

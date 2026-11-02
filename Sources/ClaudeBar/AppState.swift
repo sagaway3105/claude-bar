@@ -71,6 +71,9 @@ final class AppState {
     /// バブル（浮遊モード）が表示中か。パネルとは独立に共存できる
     var bubbleActive = false
 
+    /// 背景追従が実際に測れていて、球の外観が背景に合っているか
+    var backdropLive = false
+
     /// limits[] の scope.model.display_name から動的に決まる（"Fable" / "Opus"）
     var fableLabel = "Fable"
 

@@ -245,6 +245,65 @@ final class PlanAndSessionTests: XCTestCase {
     }
 }
 
+/// コードレビューで見つかった不具合の再発防止
+final class ReviewRegressionTests: XCTestCase {
+    // 期間枠が無く追加利用だけのアカウントはエラーにしない
+    func testExtraUsageOnlyIsValid() throws {
+        let json = #"{"five_hour":null,"seven_day":null,"extra_usage":{"is_enabled":true,"utilization":12.0}}"#
+        let snapshot = try UsageParser.parse(Data(json.utf8)).snapshot
+        XCTAssertNil(snapshot.session)
+        XCTAssertEqual(snapshot.extra?.isEnabled, true)
+    }
+
+    // 無効な追加利用だけの応答は、正常値を上書きしないよう従来どおりエラー
+    func testDisabledExtraUsageOnlyThrows() {
+        let json = #"{"five_hour":null,"seven_day":null,"extra_usage":{"is_enabled":false}}"#
+        XCTAssertThrowsError(try UsageParser.parse(Data(json.utf8)))
+    }
+
+    // claude を起動してもキャッシュが無いとき、起動の間隔制限が効くよう ranCLI を返す
+    func testRanCLIIsReportedWithoutCache() async {
+        var launches = 0
+        let result = await ClaudeUsageBridge.fetchUtilizationJSON(
+            maxAge: 60, readCache: { nil }, runCLI: { launches += 1; return true }
+        )
+        XCTAssertEqual(launches, 1)
+        XCTAssertTrue(result.ranCLI)
+        XCTAssertNil(result.usage)
+    }
+
+    func testCLINotLaunchedWhenThrottledOrFresh() async {
+        var launches = 0
+        let throttled = await ClaudeUsageBridge.fetchUtilizationJSON(
+            maxAge: 60, allowCLIRefresh: false, readCache: { nil }, runCLI: { launches += 1; return true }
+        )
+        XCTAssertFalse(throttled.ranCLI)
+        let fresh = await ClaudeUsageBridge.fetchUtilizationJSON(
+            maxAge: 60, readCache: { (Data("{}".utf8), 1) }, runCLI: { launches += 1; return true }
+        )
+        XCTAssertFalse(fresh.ranCLI)
+        XCTAssertEqual(launches, 0)
+    }
+
+    // claude が見つからないときは起動扱いにしない
+    func testMissingCLIIsNotCountedAsLaunch() async {
+        let result = await ClaudeUsageBridge.fetchUtilizationJSON(maxAge: 60, readCache: { nil }, runCLI: { false })
+        XCTAssertFalse(result.ranCLI)
+    }
+
+    func testBackoffWaitsAfterRepeatedFailures() {
+        var backoff = BackdropFailureBackoff()
+        XCTAssertNil(backoff.recordFailure())
+        XCTAssertNil(backoff.recordFailure())
+        XCTAssertEqual(backoff.recordFailure(), 60)
+        XCTAssertEqual(backoff.recordFailure(), 120)
+        XCTAssertEqual(backoff.recordFailure(), 240)
+        XCTAssertEqual(backoff.recordFailure(), 300)
+        backoff.recordSuccess()
+        XCTAssertNil(backoff.recordFailure())
+    }
+}
+
 final class BackdropToneTests: XCTestCase {
     func testFirstSampleDecidesImmediately() {
         var tone = BackdropTone()

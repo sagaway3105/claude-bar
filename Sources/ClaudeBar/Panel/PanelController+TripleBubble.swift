@@ -270,7 +270,9 @@ extension PanelController {
 
     /// 割れた時点から使用量ウィンドウが新しい期間へ進んだか。
     /// 手動で割った球（100%未満）が次のポーリングで即復活しないよう、期間の進みで判定する。
-    /// 割れた時点のリセット時刻が控えられていない（使用量未取得で割れた）場合は復活を許す
+    /// 割れた時点のリセット時刻が控えられていない場合は、時刻が付いた時点で新しい期間とみなす
+    /// （未使用のセッションを手動で割った球が、次のポーリングで即復活しないように）。
+    /// 時刻が付くまでの間も、バブルの再表示では `reviveTripleBallsBelowLimit` が生まれ直させる
     private func hasResetSincePop(_ slot: TripleBubbleCluster.Slot, window: UsageWindow?) -> Bool {
         // 控えが無い（未使用のセッションを手動で割った等）なら、使い始めて時刻が付いたら新しい期間
         guard let poppedResets = tripleCluster.poppedResetsAt[slot.index] else { return window?.resetsAt != nil }

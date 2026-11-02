@@ -157,6 +157,7 @@ final class DebugBridge {
         info["appAppearance"] = NSApp.effectiveAppearance.name.rawValue
         info["followBackground"] = panelController.settings.followBackground
         info["backdropStage"] = panelController.backdropSampler.debugStage
+        info["backdropLive"] = state.backdropLive
         info["backdropLuminance"] = panelController.backdropSampler.debugLastLuminance
             .map { "\($0.key):\(String(format: "%.2f", $0.value))" }.joined(separator: ",")
         info["bubbleHostAppearance"] = panelController.bubbleHosting?.appearance?.name.rawValue ?? "nil"

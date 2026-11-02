@@ -79,8 +79,9 @@ struct BubbleAppearanceFilm: View {
     @Environment(\.colorScheme) private var colorScheme
 
     /// 背景追従が動いている間は描かない。外観が背景側へ切り替わるので膜なしでも読め、
-    /// 透け感を優先できる（2026-11-01 ユーザー判断）。許可が無く測定できない間は膜を残す
-    var followsBackground: Bool
+    /// 透け感を優先できる（2026-11-01 ユーザー判断）。許可が無い間、最初の判定の前、
+    /// 撮影が失敗している間は外観が背景に合っていないので膜を残す
+    var backdropIsLive: Bool
 
     static let dark: Double = envPercent("CLAUDEBAR_FILM_D", default: 60, range: 0...100)
     static let light: Double = envPercent("CLAUDEBAR_FILM_L", default: 60, range: 0...100)
@@ -96,7 +97,7 @@ struct BubbleAppearanceFilm: View {
     }
 
     var body: some View {
-        if Self.isActive, !(followsBackground && BubbleBackdropSampler.hasPermission) {
+        if Self.isActive, !backdropIsLive {
             let dark = colorScheme == .dark
             let color = Color(white: dark ? 0.18 : 0.93)
             // 球の ZStack は 3pt の余白の内側にあるので、負のパディングでガラスの円（外周）まで広げる。
