@@ -85,6 +85,8 @@ final class BubbleBackdropSampler {
     private var content: SCShareableContent?
     private var suspendedUntil: Date = .distantPast
     private var backoff = BackdropFailureBackoff()
+    private var ownWindowWaits = 0
+    private static let maxOwnWindowWaits = 15
     private var screenObserver: NSObjectProtocol?
     /// 許可の問い合わせは1回約5ms掛かるので、許可がある間は聞き直さない（撮影の失敗で聞き直す）
     private var permitted = false
@@ -190,7 +192,13 @@ final class BubbleBackdropSampler {
                 #if DEBUG
                 debugStage = "waitingForOwnWindow"
                 #endif
-                recordFailure() // 載らないままなら一覧の取り直しを休む
+                // 表示の直後は載っていないのが正常なので失敗とは数えない。載らないままなら取り直しを休む
+                self.content = nil
+                ownWindowWaits += 1
+                if ownWindowWaits >= Self.maxOwnWindowWaits {
+                    ownWindowWaits = 0
+                    suspendedUntil = Date().addingTimeInterval(BackdropFailureBackoff.firstWait)
+                }
                 return
             }
             // AppKit（左下原点）→ ScreenCaptureKit（左上原点のグローバル座標）
@@ -258,6 +266,7 @@ final class BubbleBackdropSampler {
         if failedAny, !capturedAny { recordFailure() }
         if capturedAny {
             backoff.recordSuccess()
+            ownWindowWaits = 0
             let current = targets()
             isLive = !current.isEmpty && current.allSatisfy { tones[$0.id]?.tone != nil }
         }
